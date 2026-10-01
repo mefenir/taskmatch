@@ -466,8 +466,21 @@ document.addEventListener('keydown', e => {
 (function boot() {
   try {
     captureInvite();
+    if (!Backend.sdkLoaded()) {
+      S.phase = 'error';
+      S.fatal = "Couldn't reach the sign-in service. A content blocker, VPN or DNS filter may be blocking Google's Firebase (gstatic.com, googleapis.com). Allow those sites, or try another network, then reload.";
+      render(true);
+      return;
+    }
     if (!Backend.init()) { S.phase = 'setup'; render(true); return; }
     render(true);
+    setTimeout(() => {
+      if (S.phase === 'loading') {
+        S.phase = 'error';
+        S.fatal = "This is taking too long. Check your connection. A content blocker, VPN or DNS filter blocking Google's Firebase can also cause this.";
+        render(true);
+      }
+    }, 15000);
     Backend.Auth.redirectResult().catch(e => {
       if (!SILENT_AUTH_ERRORS.includes(e && e.code)) { S.auth.error = authMessage(e); if (S.phase === 'signedOut') rerender(); }
     });

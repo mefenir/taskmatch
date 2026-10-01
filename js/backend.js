@@ -23,6 +23,8 @@ const Backend = (() => {
     typeof FIREBASE_CONFIG !== 'undefined' && !!FIREBASE_CONFIG.apiKey &&
     !String(FIREBASE_CONFIG.apiKey).startsWith('REPLACE');
 
+  const sdkLoaded = () => typeof firebase !== 'undefined' && typeof firebase.firestore === 'function';
+
   function init() {
     if (!isConfigured()) return false;
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
@@ -171,5 +173,5 @@ const Backend = (() => {
     },
   };
 
-  return { init, isConfigured, Auth, Repo };
+  return { init, isConfigured, sdkLoaded, Auth, Repo };
 })();
