@@ -15,8 +15,8 @@
    UI code never checks `plan === 'premium'` directly.
    ========================================================= */
 const PLANS = Object.freeze({
-  free:    Object.freeze({ detailed_tasks: false, custom_tasks: false, custom_responsibilities: false }),
-  premium: Object.freeze({ detailed_tasks: true,  custom_tasks: true,  custom_responsibilities: true  }),
+  free:    Object.freeze({ detailed_tasks: false, custom_tasks: false, custom_responsibilities: false, suggest_changes: false }),
+  premium: Object.freeze({ detailed_tasks: true,  custom_tasks: true,  custom_responsibilities: true,  suggest_changes: true  }),
 });
 
 const Entitlements = {
@@ -31,4 +31,5 @@ const Entitlements = {
   canViewDetailedTasks:          sub => Entitlements.of(sub).detailed_tasks,
   canCreateCustomTask:           sub => Entitlements.of(sub).custom_tasks,
   canCreateCustomResponsibility: sub => Entitlements.of(sub).custom_responsibilities,
+  canSuggestChanges:             sub => Entitlements.of(sub).suggest_changes,
 };

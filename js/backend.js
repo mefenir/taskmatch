@@ -98,8 +98,11 @@ const Backend = (() => {
       users().doc(userId).onSnapshot(s => onData(s.exists ? s.data() : null), onError),
     setHouseholdRef: (userId, householdId) => users().doc(userId).update({ householdId }),
 
+    /** onData(household|null, { fromCache }) — "missing" from the local cache isn't final. */
     watchHousehold: (hid, onData, onError) =>
-      households().doc(hid).onSnapshot(s => onData(s.exists ? { id: s.id, ...s.data() } : null), onError),
+      households().doc(hid).onSnapshot({ includeMetadataChanges: false },
+        s => onData(s.exists ? { id: s.id, ...s.data() } : null, { fromCache: s.metadata.fromCache }),
+        onError),
 
     /** Premium status of the household owner. Missing or unreadable → treated as Free. */
     watchSubscription: (ownerId, onData) =>

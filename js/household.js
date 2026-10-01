@@ -11,6 +11,11 @@
    memberIds[] the account ids, used by the security rules
    ownerId     the account that created the household; Premium
                follows this account (see entitlements.js)
+   agreements  { [uid]: { at, signature } } — a member agreeing to the
+               owner's list; it goes stale when the list changes
+   suggestions [{ id, by, type: 'add'|'remove', libraryId?, responsibilityId?,
+               name, category, at }] — Premium: members propose edits,
+               the owner accepts or declines
    ========================================================= */
 const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], children: [0, 8] };
 
@@ -32,6 +37,8 @@ const Household = {
       pets: [],
       circumstances: { garden: false, car: false },
       responsibilities: [],
+      agreements: {},
+      suggestions: [],
       settings: { step: 'members', onboarded: false, libraryVersion: LIBRARY.version },
     };
   },
@@ -44,6 +51,61 @@ const Household = {
     return n || (m && m.role === 'owner' ? 'Household owner' : 'Household member');
   },
   renameMember(h, userId, name) { const m = this.member(h, userId); if (m) m.name = name.slice(0, 40); },
+
+  /* ---------- Agreement (members confirm the owner's list) ---------- */
+
+  /** Fingerprint of the current list; an agreement only counts for the list it was given on. */
+  signature(h) { return h.responsibilities.map(r => r.id).sort().join(','); },
+  agreementState(h, userId) {
+    if (this.isOwner(h, userId)) return 'owner';
+    const a = (h.agreements || {})[userId];
+    if (!a) return 'pending';
+    return a.signature === this.signature(h) ? 'agreed' : 'changed';
+  },
+  agree(h, userId) {
+    h.agreements = { ...(h.agreements || {}), [userId]: { at: new Date().toISOString(), signature: this.signature(h) } };
+  },
+
+  /* ---------- Suggestions (Premium) ---------- */
+
+  suggestions: h => h.suggestions || [],
+  suggestionFor(h, userId, type, key) {
+    return this.suggestions(h).find(x => x.by === userId && x.type === type &&
+      (type === 'add' ? x.libraryId === key : x.responsibilityId === key)) || null;
+  },
+  /** Add the suggestion, or withdraw it if this person already made it. */
+  toggleSuggestion(h, userId, type, key) {
+    const existing = this.suggestionFor(h, userId, type, key);
+    if (existing) { h.suggestions = this.suggestions(h).filter(x => x.id !== existing.id); return; }
+    let name, category;
+    if (type === 'add') {
+      const lib = Library.get(key); if (!lib) return;
+      name = lib.name; category = lib.category;
+    } else {
+      const r = h.responsibilities.find(x => x.id === key); if (!r) return;
+      name = r.name; category = r.category;
+    }
+    h.suggestions = [...this.suggestions(h), {
+      id: uid(), by: userId, type, name, category, at: new Date().toISOString(),
+      ...(type === 'add' ? { libraryId: key } : { responsibilityId: key }),
+    }];
+  },
+  acceptSuggestion(h, id) {
+    const sug = this.suggestions(h).find(x => x.id === id);
+    if (!sug) return;
+    if (sug.type === 'add') this.select(h, sug.libraryId);
+    else h.responsibilities = h.responsibilities.filter(r => r.id !== sug.responsibilityId);
+    h.suggestions = this.suggestions(h).filter(x => x.id !== id);
+  },
+  declineSuggestion(h, id) { h.suggestions = this.suggestions(h).filter(x => x.id !== id); },
+  /** Drop suggestions that no longer make sense (already added / already removed). */
+  tidySuggestions(h) {
+    const selected = this.selectedLibraryIds(h);
+    const ids = new Set(h.responsibilities.map(r => r.id));
+    const before = this.suggestions(h).length;
+    h.suggestions = this.suggestions(h).filter(x => x.type === 'add' ? !selected.has(x.libraryId) : ids.has(x.responsibilityId));
+    return h.suggestions.length !== before;
+  },
 
   setRoom(h, type, count) {
     const r = h.rooms.find(x => x.type === type);

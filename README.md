@@ -13,6 +13,8 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 - Pick what needs to happen from the predefined responsibility library.
 - See the shared household inventory, synced live between everyone in the household.
 - Invite your partner with a one-time link. They sign up and join straight away.
+- Partners never set up anything themselves. While the owner is still setting up, they see a waiting screen. Then they look through the owner's list and **agree** to it. If the owner changes the list later, they're asked to look again. The owner sees who has agreed.
+- With Premium, partners can **suggest changes** (add or remove a responsibility). The owner accepts or declines each one.
 - Leave a household (members) or delete it (owner).
 - Free/Premium gating, with Premium tied to the household owner (see below).
 
@@ -24,6 +26,7 @@ Next phases from the brief: Premium customisation → who does what → preferen
 - Everyone in the owner's household gets Premium while the owner's subscription is active.
 - When the owner's subscription ends, **everyone** drops back to Free at the same moment. Anything created with Premium is kept and becomes read-only.
 - Members who aren't the owner see "Ask {owner} to upgrade" instead of an upgrade button.
+- Suggesting changes is a Premium feature for members; the security rules refuse suggestions while the owner isn't Premium.
 - The app can never grant Premium. It's stored in `subscriptions/{ownerUid}`, which only the Firebase console (and later a payment webhook) can write.
 
 There's no checkout yet. To test Premium, give an owner a subscription by hand (step 5 below).
@@ -48,8 +51,11 @@ There's no checkout yet. To test Premium, give an owner a subscription by hand (
 
 **Firestore Database → Rules** → paste the contents of [`firestore.rules`](firestore.rules) → **Publish**.
 
+**Publish them again whenever `firestore.rules` changes in this repo** — the app expects the latest version.
+
 The rules make sure that:
-- only members can read or change a household, and nobody can change its owner,
+- only members can read a household, and nobody can change its owner,
+- only the owner edits the household and its list; other members can only agree to it, and suggest changes while the owner has Premium,
 - people can only join with a valid, unused, unexpired invite,
 - members can leave; only the owner can delete,
 - nobody can give themselves Premium.
@@ -100,7 +106,7 @@ docs/PRODUCT_BRIEF.md Product spec
 | Path | What | Who can write |
 |---|---|---|
 | `users/{uid}` | email, display name, which household | that user |
-| `households/{hid}` | owner, members, rooms, children, pets, responsibilities, setup progress | members (owner fixed) |
+| `households/{hid}` | owner, members, rooms, children, pets, responsibilities, agreements, suggestions, setup progress | owner; members only agree / suggest |
 | `invites/{code}` | household, expiry, who used it | members create; invitee redeems once |
 | `subscriptions/{uid}` | `plan`, `active`, optional `expiresAt` | server / console only |
 

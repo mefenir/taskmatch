@@ -31,13 +31,16 @@ service cloud.firestore {
 
     // ---------------------------------------------------------------
     // households/{hid}
-    //   - members can read and edit the household's content
+    //   - only the owner sets up and edits the household and its list
+    //   - other members can agree to the list, and (with the owner's
+    //     Premium) suggest changes the owner then accepts or declines
     //   - nobody can change who owns it
     //   - joining is only possible together with a valid invite
     //   - a non-owner can remove themselves; only the owner can delete
     // ---------------------------------------------------------------
     match /households/{hid} {
-      allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
+      // A missing household reads as "doesn't exist" rather than "denied".
+      allow read: if signedIn() && (resource == null || request.auth.uid in resource.data.memberIds);
 
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid
@@ -46,21 +49,44 @@ service cloud.firestore {
         && withinLimits();
 
       allow update: if signedIn() && withinLimits()
-        && (memberEdit() || joining(hid) || leaving());
+        && (ownerEdit() || memberEdit() || joining(hid) || leaving());
 
       allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
 
       function withinLimits() {
         return request.resource.data.responsibilities.size() <= 500
           && request.resource.data.members.size() <= 12
-          && request.resource.data.memberIds.size() <= 12;
+          && request.resource.data.memberIds.size() <= 12
+          && request.resource.data.get('suggestions', []).size() <= 200;
       }
 
-      // Normal edits by an existing member. Membership and ownership are fixed here.
-      function memberEdit() {
-        return request.auth.uid in resource.data.memberIds
+      // The owner can change anything except who owns it and who's in it.
+      function ownerEdit() {
+        return request.auth.uid == resource.data.ownerId
           && request.resource.data.ownerId == resource.data.ownerId
           && request.resource.data.memberIds == resource.data.memberIds;
+      }
+
+      // Other members: agree for themselves; suggest changes only with the owner's Premium.
+      function memberEdit() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let agreementsChanged = request.resource.data.get('agreements', {})
+          .diff(resource.data.get('agreements', {})).affectedKeys();
+        return request.auth.uid in resource.data.memberIds
+          && request.auth.uid != resource.data.ownerId
+          && changed.hasOnly(['agreements', 'suggestions', 'updatedAt'])
+          && agreementsChanged.hasOnly([request.auth.uid])
+          && (!changed.hasAny(['suggestions']) || ownerIsPremium(resource.data.ownerId));
+      }
+
+      function ownerIsPremium(ownerUid) {
+        return exists(/databases/$(database)/documents/subscriptions/$(ownerUid))
+          && premiumActive(get(/databases/$(database)/documents/subscriptions/$(ownerUid)).data);
+      }
+
+      function premiumActive(sub) {
+        return sub.plan == 'premium' && sub.active == true
+          && (!('expiresAt' in sub) || sub.expiresAt > request.time);
       }
 
       // A new person adds exactly themselves, in the same batch that marks a

@@ -4,7 +4,7 @@
    APP — state, auth flow, live sync, actions, routing
    ========================================================= */
 const INVITE_KEY = 'household-app/pending-invite';
-const HOUSEHOLD_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'inventory'];
+const HOUSEHOLD_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'inventory', 'review', 'waiting'];
 
 const S = {
   phase: 'loading',          // loading | setup | signedOut | ready | error
@@ -16,6 +16,7 @@ const S = {
   householdLoading: false,
   joining: false,
   busy: false,
+  suggestMode: false,
   pendingInvite: null,
   auth: { mode: 'signup', busy: false, error: '', note: '', values: {} },
 };
@@ -97,15 +98,25 @@ function flushName() { if (nameTimer) { clearTimeout(nameTimer); nameTimer = nul
 
 /** After rooms/children/pets change, drop responsibilities that no longer apply. */
 function saveSetup(field) {
-  const pruned = Household.prune(S.household);
-  pruned ? save(field, 'responsibilities') : save(field);
+  const h = S.household;
+  const fields = [field];
+  if (Household.prune(h)) fields.push('responsibilities');
+  if (Household.tidySuggestions(h)) fields.push('suggestions');
+  save(...fields);
   rerender();
 }
+function saveResponsibilities() {
+  const fields = ['responsibilities'];
+  if (Household.tidySuggestions(S.household)) fields.push('suggestions');
+  save(...fields);
+  rerender();
+}
+const isOwner = () => !!S.household && Household.isOwner(S.household, S.user.uid);
 
 /* ---------- live data ---------- */
 function stop(key) { if (watchers[key]) { watchers[key](); watchers[key] = null; } }
 function teardown() {
-  stop('user'); stop('household'); stop('sub');
+  stop('user'); stop('household'); stop('sub'); clearTimeout(watchers.retryTimer);
   watchers.householdId = undefined; watchers.ownerId = null;
 }
 
@@ -140,15 +151,23 @@ function onProfile(profile) {
   render(false);
 }
 
-function watchHousehold(hid) {
-  stop('household'); stop('sub');
-  watchers.householdId = hid; watchers.ownerId = null;
-  S.household = null; S.subscription = null;
+function watchHousehold(hid, attempt = 0) {
+  stop('household');
+  if (attempt === 0) { stop('sub'); watchers.ownerId = null; S.household = null; S.subscription = null; }
+  watchers.householdId = hid;
+  clearTimeout(watchers.retryTimer);
   if (!hid) { S.householdLoading = false; return; }
-  S.householdLoading = true;
-  watchers.household = Backend.Repo.watchHousehold(hid, h => {
+  if (!S.household) S.householdLoading = true;
+  watchers.household = Backend.Repo.watchHousehold(hid, (h, meta) => {
+    if (watchers.householdId !== hid) return;
+    if (!h) {
+      // The local cache may simply not have it yet (e.g. just joined) — wait for the server.
+      if (meta && meta.fromCache) return;
+      forgetHousehold(); // really gone (deleted)
+      return;
+    }
+    if (!(h.memberIds || []).includes(S.user.uid)) { forgetHousehold(); return; }
     S.householdLoading = false;
-    if (!h || !(h.memberIds || []).includes(S.user.uid)) { forgetHousehold(); return; }
     S.household = h;
     if (h.ownerId !== watchers.ownerId) watchSubscription(h.ownerId);
     if (S.joining) {
@@ -156,13 +175,18 @@ function watchHousehold(hid) {
       S.joining = false;
       clearInvite();
       render(true);
-      Sheets.joined();
       return;
     }
     rerender();
   }, err => {
+    if (watchers.householdId !== hid) return;
+    // Straight after creating or joining, the server can refuse for a moment because the
+    // save hasn't landed yet. Retry instead of treating it as "removed".
+    if (err && err.code === 'permission-denied' && attempt < 6) {
+      watchers.retryTimer = setTimeout(() => watchHousehold(hid, attempt + 1), 400 * Math.pow(2, attempt));
+      return;
+    }
     S.householdLoading = false;
-    // Household deleted, or this account was removed from it.
     if (err && err.code === 'permission-denied') forgetHousehold(); else fail(err);
   });
 }
@@ -170,6 +194,7 @@ function watchHousehold(hid) {
 function forgetHousehold() {
   S.household = null; S.subscription = null;
   stop('household'); stop('sub');
+  watchers.householdId = null;
   Backend.Repo.setHouseholdRef(S.user.uid, null).catch(() => {});
   render(true);
 }
@@ -340,14 +365,15 @@ const Actions = {
   clearPets() { S.household.pets = []; saveSetup('pets'); },
 
   /* responsibilities */
-  toggleResp(d) { Household.toggle(S.household, d.id); save('responsibilities'); rerender(); },
+  toggleResp(d) { if (!isOwner()) return; Household.toggle(S.household, d.id); saveResponsibilities(); },
   toggleCategory(d) {
+    if (!isOwner()) return;
     const h = S.household;
     const items = Library.relevant(h).filter(r => r.category === d.cat);
     const sel = Household.selectedLibraryIds(h);
     const all = items.every(i => sel.has(i.id));
     items.forEach(i => (all ? Household.deselect(h, i.id) : Household.select(h, i.id)));
-    save('responsibilities'); rerender();
+    saveResponsibilities();
   },
   confirmSelection() { if (S.household.responsibilities.length) Sheets.confirm(); },
   finishSetup() {
@@ -377,6 +403,59 @@ const Actions = {
     });
   },
   upgrade() { Sheet.close(); toast("Checkout isn't part of this version yet."); },
+
+  /* members: agree to the owner's list */
+  agree() {
+    Household.agree(S.household, S.user.uid);
+    save('agreements');
+    S.suggestMode = false;
+    go('inventory');
+    toast("You've agreed to the list.");
+  },
+
+  /* Premium: members suggest edits, the owner decides */
+  suggestChanges() {
+    if (!Entitlements.canSuggestChanges(S.subscription)) {
+      Sheets.premium({
+        title: 'Suggest changes',
+        body: 'With Premium you can suggest adding or removing responsibilities, and the person who set up the household decides.',
+      });
+      return;
+    }
+    S.suggestMode = true;
+    currentRoute === 'review' ? rerender() : go('review');
+  },
+  doneSuggesting() {
+    S.suggestMode = false;
+    const h = S.household;
+    Household.agreementState(h, S.user.uid) === 'agreed' ? go('inventory') : rerender();
+  },
+  suggest(d) {
+    if (!Entitlements.canSuggestChanges(S.subscription)) { Actions.suggestChanges(); return; }
+    Household.toggleSuggestion(S.household, S.user.uid, d.type, d.id);
+    save('suggestions');
+    rerender();
+  },
+  withdrawSuggestion(d) {
+    const h = S.household;
+    h.suggestions = Household.suggestions(h).filter(x => !(x.id === d.id && x.by === S.user.uid));
+    save('suggestions');
+    rerender();
+  },
+  acceptSuggestion(d) {
+    if (!isOwner()) return;
+    const sug = Household.suggestions(S.household).find(x => x.id === d.id);
+    Household.acceptSuggestion(S.household, d.id);
+    save('responsibilities', 'suggestions');
+    rerender();
+    if (sug) toast(sug.type === 'add' ? `Added ${sug.name}` : `Removed ${sug.name}`);
+  },
+  declineSuggestion(d) {
+    if (!isOwner()) return;
+    Household.declineSuggestion(S.household, d.id);
+    save('suggestions');
+    rerender();
+  },
 };
 
 const Inputs = {
@@ -402,8 +481,16 @@ function resolveRoute() {
   if (!S.profile || S.householdLoading) return 'loading';
   const h = S.household;
   if (!h) return 'start';
+
+  // Members never set up the household: they wait, then look through and agree.
+  if (!Household.isOwner(h, S.user.uid)) {
+    if (!h.settings.onboarded) return 'waiting';
+    if (Household.agreementState(h, S.user.uid) !== 'agreed') return 'review';
+    return name === 'review' ? 'review' : 'inventory';
+  }
+
   const fallback = h.settings.onboarded ? 'inventory' : (h.settings.step || 'members');
-  if (!HOUSEHOLD_SCREENS.includes(name)) return fallback;
+  if (!HOUSEHOLD_SCREENS.includes(name) || name === 'review' || name === 'waiting') return fallback;
   if (name === 'inventory' && !h.settings.onboarded) return fallback;
   return name;
 }
@@ -413,6 +500,7 @@ function render(routeChanged) {
   const routable = name === 'auth' || name === 'welcome' || name === 'start' || HOUSEHOLD_SCREENS.includes(name);
   if (routable && location.hash !== '#/' + name) history.replaceState(null, '', '#/' + name);
   const changed = routeChanged || name !== currentRoute;
+  if (name !== currentRoute && name !== 'review') S.suggestMode = false;
   currentRoute = name;
   watchLoading(name);
   $app.innerHTML = Screens[name]();
@@ -449,7 +537,7 @@ function rerender() {
     typing = { id: a.id, value: a.value, start: a.selectionStart, end: a.selectionEnd };
   } else if (a && a.dataset && a.dataset.action) {
     sel = `[data-action="${a.dataset.action}"]`;
-    ['id', 'key', 'delta', 'cat', 'to', 'mode'].forEach(k => { if (a.dataset[k] != null) sel += `[data-${k}="${CSS.escape(a.dataset[k])}"]`; });
+    ['id', 'key', 'delta', 'cat', 'to', 'mode', 'type'].forEach(k => { if (a.dataset[k] != null) sel += `[data-${k}="${CSS.escape(a.dataset[k])}"]`; });
   }
   render(false);
   if (typing) {
