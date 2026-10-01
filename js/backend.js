@@ -15,6 +15,7 @@
      subscriptions/{uid}    { plan: 'free'|'premium', active, expiresAt? }   ← server-only writes
    ========================================================= */
 const Backend = (() => {
+  const REDIRECT_KEY = 'household-app/google-redirect';
   let auth = null;
   let db = null;
 
@@ -58,17 +59,23 @@ const Backend = (() => {
       const provider = new firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       // Pop-ups don't work in an installed iOS web app; use a full-page redirect there.
-      if (isStandalone()) return auth.signInWithRedirect(provider);
+      const redirect = () => { SafeStorage.set(REDIRECT_KEY, '1'); return auth.signInWithRedirect(provider); };
+      if (isStandalone()) return redirect();
       try {
         return await auth.signInWithPopup(provider);
       } catch (e) {
         if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) {
-          return auth.signInWithRedirect(provider);
+          return redirect();
         }
         throw e;
       }
     },
-    redirectResult: () => auth.getRedirectResult(),
+    /** Only check for a returning Google redirect when one was started; the check can stall otherwise. */
+    redirectResult() {
+      if (!SafeStorage.get(REDIRECT_KEY)) return Promise.resolve(null);
+      SafeStorage.remove(REDIRECT_KEY);
+      return auth.getRedirectResult();
+    },
     resetPassword: email => auth.sendPasswordResetEmail(email),
     signOut: () => auth.signOut(),
   };

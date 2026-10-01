@@ -14,7 +14,8 @@ const houseArt = `<div class="welcome-art" aria-hidden="true">
 
 const Screens = {
   loading() {
-    return `<main class="screen center-screen" aria-busy="true"><div class="spinner" role="img" aria-label="Loading"></div></main>`;
+    return `<main class="screen center-screen" aria-busy="true"><div class="spinner" aria-hidden="true"></div>
+      <p class="lead" style="margin-top:16px">Loading…</p></main>`;
   },
 
   setup() {

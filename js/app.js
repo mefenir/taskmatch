@@ -399,12 +399,30 @@ function render(routeChanged) {
   if (routable && location.hash !== '#/' + name) history.replaceState(null, '', '#/' + name);
   const changed = routeChanged || name !== currentRoute;
   currentRoute = name;
+  watchLoading(name);
   $app.innerHTML = Screens[name]();
   if (changed) {
     window.scrollTo(0, 0);
     const heading = $app.querySelector('h1');
     if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus({ preventScroll: true }); }
   }
+}
+
+/** If any loading state lasts too long, say so instead of spinning forever. */
+let loadingTimer = null;
+function watchLoading(name) {
+  const waiting = name === 'loading' || name === 'joining';
+  if (!waiting) { clearTimeout(loadingTimer); loadingTimer = null; return; }
+  if (loadingTimer) return;
+  loadingTimer = setTimeout(() => {
+    loadingTimer = null;
+    if (currentRoute === 'loading' || currentRoute === 'joining') {
+      S.phase = 'error';
+      S.joining = false;
+      S.fatal = "This is taking too long. Check your connection. A content blocker, VPN or DNS filter blocking Google's Firebase (gstatic.com, googleapis.com, firebaseapp.com) can also cause this.";
+      render(true);
+    }
+  }, 15000);
 }
 
 /** Re-render in place, keeping scroll position, focus, and anything half-typed. */
@@ -474,13 +492,7 @@ document.addEventListener('keydown', e => {
     }
     if (!Backend.init()) { S.phase = 'setup'; render(true); return; }
     render(true);
-    setTimeout(() => {
-      if (S.phase === 'loading') {
-        S.phase = 'error';
-        S.fatal = "This is taking too long. Check your connection. A content blocker, VPN or DNS filter blocking Google's Firebase can also cause this.";
-        render(true);
-      }
-    }, 15000);
+
     Backend.Auth.redirectResult().catch(e => {
       if (!SILENT_AUTH_ERRORS.includes(e && e.code)) { S.auth.error = authMessage(e); if (S.phase === 'signedOut') rerender(); }
     });
