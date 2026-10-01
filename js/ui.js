@@ -124,8 +124,12 @@ function toast(msg) {
 }
 
 /** Bottom navigation once the plan is running. */
-function bottomNav(current) {
-  const item = (to, label, icon) => `<button data-action="nav" data-to="${to}" ${current === to ? 'aria-current="page"' : ''}>${icon}<span>${label}</span></button>`;
+function bottomNav(current, dots = {}) {
+  const item = (to, label, icon) => {
+    const dot = dots[to] && current !== to;
+    return `<button data-action="nav" data-to="${to}" ${current === to ? 'aria-current="page"' : ''}${dot ? ` aria-label="${label}, needs your attention"` : ''}>
+      <span class="nav-icon">${icon}${dot ? '<span class="nav-dot" aria-hidden="true"></span>' : ''}</span><span>${label}</span></button>`;
+  };
   return `<nav class="bottom-nav" aria-label="Main"><div class="inner">
     ${item('today', 'Today', svg('<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>'))}
     ${item('plan', 'Plan', svg('<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>'))}

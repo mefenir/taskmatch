@@ -587,8 +587,7 @@ const Screens = {
     const waiting = h.members.filter(m => !Household.hasAccepted(h, m.uid)).map(m => esc(Household.memberName(m)));
 
     const newParts = Household.newParts(h);
-    const uneven = active && Household.premium && h.responsibilities.some(r => Household.isSplit(r)) && !Split.isEven(loads);
-    const reshareOffer = active && !h.reshare && Household.isOwner(h, me) && (newParts.length || uneven)
+    const reshareOffer = reshareOfferFor(h, me)
       ? `<div class="nudge" style="background:var(--accent-soft)"><p>${newParts.length
           ? `${plural(newParts.length, 'new part')} ${newParts.length === 1 ? 'is' : 'are'} waiting to be shared out. For now they stay with whoever had the whole task.`
           : 'Things look a little uneven since the parts came back.'}</p>
@@ -622,7 +621,7 @@ const Screens = {
           <span class="row-sub">${esc(Timing.label(r))}</span></button><button class="mini" data-action="claim" data-id="${r.id}">I'll take it</button></div>`).join('')}</div>` : ''}
       ${reshuffleLink}
       ${bottom}
-      ${active ? bottomNav('plan') : ''}
+      ${active ? bottomNav('plan', navDots(h)) : ''}
     </main>`;
   },
 
@@ -699,7 +698,7 @@ const Screens = {
       </div>
       ${body}
       ${premiumNudge(h)}
-      ${bottomNav('today')}
+      ${bottomNav('today', navDots(h))}
     </main>`;
   },
 
@@ -833,10 +832,32 @@ const Screens = {
       </div>` : ''}
       ${Household.isOwner(h, me) && Household.stage(h) !== 'active' && h.settings.onboarded ? `<button class="btn ghost" data-action="nav" data-to="frequency">Edit times & frequency</button>` : ''}
       <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
-      ${Household.stage(h) === 'active' ? bottomNav('inventory') : ''}
+      ${Household.stage(h) === 'active' ? bottomNav('inventory', navDots(h)) : ''}
     </main>`;
   },
 };
+
+/** The organiser has new parts to share out, or things got uneven after parts came back. */
+function reshareOfferFor(h, me) {
+  const active = h.plan && h.plan.status === 'active';
+  if (!active || h.reshare || !Household.isOwner(h, me)) return false;
+  if (Household.newParts(h).length) return true;
+  return Household.premium && h.responsibilities.some(r => Household.isSplit(r)) && !Split.isEven(Household.loads(h));
+}
+
+/** Something on the Plan tab is waiting for me to act. */
+function planNeedsMe(h) {
+  const me = S.user.uid;
+  if (reshareOfferFor(h, me) || Household.incomingSwap(h, me)) return true;
+  const rs = Household.reshuffle(h);
+  if (rs && rs.status === 'pending' && rs.by !== me) return true;
+  const rsh = h.reshare;
+  if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) return true;
+  if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) return true;
+  return false;
+}
+
+function navDots(h) { return { plan: planNeedsMe(h) }; }
 
 /** Incoming swap requests and results of my own requests (on Plan and Today). */
 function swapCards(h) {

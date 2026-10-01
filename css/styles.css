@@ -223,6 +223,8 @@ button.row:active{background:var(--surface-2)}
 .bottom-nav .inner{max-width:520px;margin:0 auto;display:flex}
 .bottom-nav button{flex:1;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;min-height:52px}
 .bottom-nav button[aria-current="page"]{color:var(--accent)}
+.bottom-nav .nav-icon{position:relative;display:inline-grid}
+.nav-dot{position:absolute;top:-2px;right:-5px;width:9px;height:9px;border-radius:50%;background:#E5484D;box-shadow:0 0 0 2px var(--bg)}
 .celebrate{text-align:center;padding:20px 16px;font-size:15px;color:var(--muted)}
 
 .row.locked .row-title{color:var(--muted)}
