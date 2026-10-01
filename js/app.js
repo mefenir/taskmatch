@@ -87,7 +87,9 @@ function save(...fields) {
   fields.forEach(f => { data[f] = h[f]; });
   Backend.Repo.saveHousehold(h.id, data).catch(e => {
     console.error(e);
-    toast("Couldn't save that change. Check your connection and try again.");
+    toast(e && e.code === 'permission-denied'
+      ? "Couldn't save: the database refused access (permission-denied). Check firestore.rules is published."
+      : "Couldn't save that change. Check your connection and try again.");
   });
 }
 let nameTimer = null;
@@ -267,7 +269,12 @@ const Actions = {
       history.replaceState(null, '', '#/members');
     } catch (e) {
       console.error(e);
-      toast("Couldn't create your household. Check your connection and try again.");
+      S.busy = false;
+      history.replaceState(null, '', '#/start');
+      render(true);
+      const why = DATA_ERRORS[e && e.code] || 'Check your connection and try again.';
+      Sheets.notice("Couldn't create your household", `${why} (Error code: ${(e && (e.code || e.message)) || 'unknown'})`);
+      return;
     }
     S.busy = false; rerender();
   },
