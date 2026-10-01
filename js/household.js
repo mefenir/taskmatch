@@ -16,6 +16,13 @@
    suggestions [{ id, by, type: 'add'|'remove', libraryId?, responsibilityId?,
                name, category, at }] — Premium: members propose edits,
                the owner accepts or declines
+   preferences { [uid]: { values: { [respId]: 'love'|'ok'|'rather_not' }, submittedAt } }
+               never shown to the other person
+   plan        { status: 'proposed'|'active', assignments: { [respId]: uid },
+               signature, accepted: { [uid]: at }, createdAt, startedAt }
+   swaps       [{ id, from, to, respId, status: 'pending'|'done'|'declined',
+               gave?, at, resolvedAt?, seen? }]
+   completions { [respId]: { last, prev, by } }
    ========================================================= */
 const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], children: [0, 8] };
 
@@ -107,6 +114,130 @@ const Household = {
     return h.suggestions.length !== before;
   },
 
+  /* ---------- Times & frequency ---------- */
+  setTiming(h, respId, changes) {
+    const r = h.responsibilities.find(x => x.id === respId);
+    if (!r) return;
+    const t = Timing.of(r);
+    r.minutes = changes.minutes != null ? Number(changes.minutes) : t.minutes;
+    r.frequency = changes.frequency || t.frequency;
+  },
+
+  /* ---------- Where the household is ---------- */
+  /**
+   * setup → (alone) → agreeing → preferences → plan → active
+   * 'plan' means a proposed plan both still have to say yes to.
+   */
+  stage(h) {
+    if (!h.settings.onboarded) return 'setup';
+    if ((h.memberIds || []).length < 2) return 'alone';
+    // Once the plan runs, later list changes don't stop daily use: new tasks just need a home.
+    if (h.plan && h.plan.status === 'active') return 'active';
+    if (h.memberIds.some(m => this.agreementState(h, m) === 'pending' || this.agreementState(h, m) === 'changed')) return 'agreeing';
+    if (h.memberIds.some(m => !this.prefsComplete(h, m))) return 'preferences';
+    return 'plan';
+  },
+
+  /* ---------- Preferences (private to each person) ---------- */
+  prefs(h, userId) { return ((h.preferences || {})[userId]) || { values: {} }; },
+  setPref(h, userId, respId, value) {
+    const mine = this.prefs(h, userId);
+    h.preferences = { ...(h.preferences || {}), [userId]: { ...mine, values: { ...(mine.values || {}), [respId]: value } } };
+  },
+  allRated(h, userId) { const v = this.prefs(h, userId).values || {}; return h.responsibilities.every(r => v[r.id]); },
+  prefsComplete(h, userId) { return !!this.prefs(h, userId).submittedAt && this.allRated(h, userId); },
+  submitPrefs(h, userId) {
+    const mine = this.prefs(h, userId);
+    h.preferences = { ...(h.preferences || {}), [userId]: { ...mine, submittedAt: new Date().toISOString() } };
+  },
+
+  /* ---------- Plan ---------- */
+  /** Changes to the list, times, people or preferences make a proposed plan out of date. */
+  planSignature(h) {
+    const parts = h.responsibilities.slice().sort((a, b) => (a.id < b.id ? -1 : 1))
+      .map(r => { const t = Timing.of(r); return `${r.id}:${t.minutes}:${t.frequency}`; });
+    const prefs = h.memberIds.slice().sort().map(m => {
+      const v = this.prefs(h, m).values || {};
+      return m + '=' + h.responsibilities.map(r => r.id).sort().map(id => v[id] || '-').join('');
+    });
+    return parts.join('|') + '#' + prefs.join('|');
+  },
+  needsNewPlan(h) {
+    return this.stage(h) === 'plan' && (!h.plan || h.plan.status !== 'proposed' || h.plan.signature !== this.planSignature(h));
+  },
+  buildPlan(h) {
+    const prefs = Object.fromEntries(h.memberIds.map(m => [m, this.prefs(h, m).values || {}]));
+    const { assignments } = Split.run(h.responsibilities, h.memberIds, prefs);
+    h.plan = { status: 'proposed', assignments, signature: this.planSignature(h), accepted: {}, createdAt: new Date().toISOString() };
+    h.swaps = [];
+  },
+  assignee(h, respId) { return h.plan && h.plan.assignments ? h.plan.assignments[respId] || null : null; },
+  tasksOf(h, userId) { return h.responsibilities.filter(r => this.assignee(h, r.id) === userId); },
+  /** Added after the plan started: nobody's yet. */
+  unassigned(h) { return h.plan ? h.responsibilities.filter(r => !this.assignee(h, r.id) || !h.memberIds.includes(this.assignee(h, r.id))) : []; },
+  claim(h, respId, userId) { h.plan = { ...h.plan, assignments: { ...h.plan.assignments, [respId]: userId } }; },
+  loads(h) { return Split.loads(h.responsibilities, (h.plan && h.plan.assignments) || {}, h.memberIds); },
+  hasAccepted(h, userId) { return !!(h.plan && h.plan.accepted && h.plan.accepted[userId]); },
+  acceptPlan(h, userId) {
+    const accepted = { ...(h.plan.accepted || {}), [userId]: new Date().toISOString() };
+    const everyone = h.memberIds.every(m => accepted[m]);
+    h.plan = { ...h.plan, accepted, ...(everyone ? { status: 'active', startedAt: new Date().toISOString() } : {}) };
+  },
+
+  /* ---------- Swaps ---------- */
+  swaps: h => h.swaps || [],
+  requestSwap(h, from, to, respId) {
+    if (this.swaps(h).some(x => x.status === 'pending' && x.respId === respId)) return null;
+    const swap = { id: uid(), from, to, respId, status: 'pending', at: new Date().toISOString() };
+    h.swaps = [...this.swaps(h), swap];
+    return swap;
+  },
+  incomingSwap(h, userId) { return this.swaps(h).find(x => x.status === 'pending' && x.to === userId) || null; },
+  pendingFor(h, respId) { return this.swaps(h).find(x => x.status === 'pending' && x.respId === respId) || null; },
+  /** Accept: the task moves to them, and the task they pick moves back. */
+  acceptSwap(h, swapId, giveRespId) {
+    const x = this.swaps(h).find(s => s.id === swapId);
+    if (!x || x.status !== 'pending') return;
+    const a = { ...h.plan.assignments, [x.respId]: x.to };
+    if (giveRespId) a[giveRespId] = x.from;
+    h.plan = { ...h.plan, assignments: a };
+    h.swaps = this.swaps(h).map(s => s.id === swapId ? { ...s, status: 'done', gave: giveRespId || null, resolvedAt: new Date().toISOString() } : s);
+  },
+  declineSwap(h, swapId) {
+    h.swaps = this.swaps(h).map(s => s.id === swapId ? { ...s, status: 'declined', resolvedAt: new Date().toISOString() } : s);
+  },
+  /** Results the person who asked hasn't seen yet. */
+  swapResults(h, userId) { return this.swaps(h).filter(x => x.from === userId && x.status !== 'pending' && !x.seen); },
+  markSwapSeen(h, swapId) { h.swaps = this.swaps(h).map(s => s.id === swapId ? { ...s, seen: true } : s); },
+
+  /* ---------- Schedule ---------- */
+  /** Spread each person's first round evenly over the period (weekly over 7 days, monthly over 30). */
+  firstOffset(h, r) {
+    const freq = Timing.of(r).frequency;
+    const f = Timing.frequency(freq);
+    const period = Schedule.periodDays(f);
+    if (period <= 1) return 0;
+    const owner = this.assignee(h, r.id);
+    const same = h.responsibilities
+      .filter(x => this.assignee(h, x.id) === owner && Timing.of(x).frequency === freq)
+      .map(x => x.id).sort();
+    const i = same.indexOf(r.id);
+    return i < 0 ? 0 : Math.floor(i * period / same.length);
+  },
+  dueDate(h, r) {
+    return Schedule.nextDue(r, this.completion(h, r.id), h.plan && h.plan.startedAt, this.firstOffset(h, r));
+  },
+
+  /* ---------- Ticking things off ---------- */
+  completion: (h, respId) => (h.completions || {})[respId] || null,
+  toggleDone(h, respId, userId, now = new Date()) {
+    const c = this.completion(h, respId);
+    const all = { ...(h.completions || {}) };
+    if (c && Schedule.doneOn(c, now)) all[respId] = { last: c.prev || null, prev: null, by: userId };   // undo today's tick
+    else all[respId] = { last: now.toISOString(), prev: c ? c.last : null, by: userId };
+    h.completions = all;
+  },
+
   setRoom(h, type, count) {
     const r = h.rooms.find(x => x.type === type);
     if (r) r.count = count; else h.rooms.push({ type, count });
@@ -134,7 +265,9 @@ const Household = {
       predefined: true,
       premium: false,
       mentalLoad: !!lib.mentalLoad,
-      tasks: [], // filled in later phases (Premium breakdowns / scheduling)
+      minutes: Timing.defaultsFor(lib.id).minutes,
+      frequency: Timing.defaultsFor(lib.id).frequency,
+      tasks: [], // Premium later: detailed tasks, each with its own effort and owner
       createdAt: new Date().toISOString(),
     });
   },

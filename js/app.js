@@ -4,7 +4,9 @@
    APP — state, auth flow, live sync, actions, routing
    ========================================================= */
 const INVITE_KEY = 'household-app/pending-invite';
-const HOUSEHOLD_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'inventory', 'review', 'waiting'];
+const HOUSEHOLD_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'frequency', 'inventory', 'review', 'waiting',
+  'preferences', 'prefsDone', 'plan', 'today'];
+const SETUP_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'frequency'];
 
 const S = {
   phase: 'loading',          // loading | setup | signedOut | ready | error
@@ -17,6 +19,8 @@ const S = {
   joining: false,
   busy: false,
   suggestMode: false,
+  view: 'today',
+  everyone: false,
   pendingInvite: null,
   auth: { mode: 'signup', busy: false, error: '', note: '', values: {} },
 };
@@ -113,6 +117,17 @@ function saveResponsibilities() {
 }
 const isOwner = () => !!S.household && Household.isOwner(S.household, S.user.uid);
 
+/** Once everyone has answered (or the inputs changed before starting), work out the split. */
+function maybeBuildPlan() {
+  const h = S.household;
+  if (!h || !Household.needsNewPlan(h)) return false;
+  const hadPlan = !!h.plan && h.plan.status === 'proposed';
+  Household.buildPlan(h);
+  save('plan', 'swaps');
+  if (hadPlan) toast('Plan re-balanced.');
+  return true;
+}
+
 /* ---------- live data ---------- */
 function stop(key) { if (watchers[key]) { watchers[key](); watchers[key] = null; } }
 function teardown() {
@@ -124,7 +139,7 @@ async function onAuth(user) {
   teardown();
   Sheet.close();
   S.user = user; S.profile = null; S.household = null; S.subscription = null;
-  S.householdLoading = false; S.joining = false;
+  S.householdLoading = false; S.joining = false; S.lastStage = undefined;
   if (!user) { S.phase = 'signedOut'; render(true); return; }
   // On sign-up this fires before the display name is saved, so use what was typed.
   const nameHint = user.displayName || (S.auth.values.name || '').trim();
@@ -170,6 +185,7 @@ function watchHousehold(hid, attempt = 0) {
     S.householdLoading = false;
     S.household = h;
     if (h.ownerId !== watchers.ownerId) watchSubscription(h.ownerId);
+    maybeBuildPlan();
     if (S.joining) {
       // The household can arrive before the join call itself resolves, so it finishes the join.
       S.joining = false;
@@ -404,12 +420,85 @@ const Actions = {
   },
   upgrade() { Sheet.close(); toast("Checkout isn't part of this version yet."); },
 
+  /* preferences */
+  setPref(d) {
+    Household.setPref(S.household, S.user.uid, d.id, d.key);
+    save('preferences');
+    rerender();
+  },
+  fillPrefs() {
+    const h = S.household;
+    const v = Household.prefs(h, S.user.uid).values || {};
+    h.responsibilities.forEach(r => { if (!v[r.id]) Household.setPref(h, S.user.uid, r.id, 'ok'); });
+    save('preferences');
+    rerender();
+  },
+  submitPrefs() {
+    const h = S.household;
+    if (!Household.allRated(h, S.user.uid)) return;
+    Household.submitPrefs(h, S.user.uid);
+    save('preferences');
+    maybeBuildPlan();
+    goHome();
+  },
+  editPrefs() {
+    Sheet.close();
+    const h = S.household;
+    const mine = Household.prefs(h, S.user.uid);
+    h.preferences = { ...(h.preferences || {}), [S.user.uid]: { ...mine, submittedAt: null } };
+    save('preferences');
+    go('preferences');
+  },
+
+  /* plan */
+  acceptPlan() {
+    const h = S.household;
+    Household.acceptPlan(h, S.user.uid);
+    save('plan');
+    if (h.plan.status === 'active') { toast("You're all set. Let's go!"); go('today'); } else rerender();
+  },
+  timeTotals() {
+    Sheets.premium({ title: 'See the time behind the split', body: 'Premium shows roughly how much time each of you spends on the household every week.' });
+  },
+  claim(d) { Household.claim(S.household, d.id, S.user.uid); save('plan'); rerender(); },
+
+  /* swaps */
+  askSwap(d) { Sheets.askSwap(d.id); },
+  sendSwap(d) {
+    Sheet.close();
+    const swap = Household.requestSwap(S.household, S.user.uid, d.to, d.id);
+    if (swap) { save('swaps'); toast('Swap offered. Fingers crossed! 🤞'); }
+    rerender();
+  },
+  takeSwap(d) {
+    const swap = Household.swaps(S.household).find(x => x.id === d.id);
+    if (swap) Sheets.swapPrice(swap);
+  },
+  completeSwap(d) {
+    const h = S.household;
+    const swap = Household.swaps(h).find(x => x.id === d.id);
+    Sheet.close();
+    if (!swap || swap.status !== 'pending') return;
+    Household.acceptSwap(h, d.id, d.key || null);
+    save('plan', 'swaps');
+    const task = (h.responsibilities.find(r => r.id === swap.respId) || {}).name;
+    toast(`Deal! ${task} is yours now.`);
+    rerender();
+  },
+  declineSwap(d) { Household.declineSwap(S.household, d.id); save('swaps'); rerender(); },
+  dismissSwap(d) { Household.markSwapSeen(S.household, d.id); save('swaps'); rerender(); },
+
+  /* daily use */
+  setView(d) { S.view = d.key; rerender(); },
+  toggleEveryone() { S.everyone = !S.everyone; rerender(); },
+  toggleDone(d) { Household.toggleDone(S.household, d.id, S.user.uid); save('completions'); rerender(); },
+
   /* members: agree to the owner's list */
   agree() {
     Household.agree(S.household, S.user.uid);
     save('agreements');
     S.suggestMode = false;
-    go('inventory');
+    goHome();
     toast("You've agreed to the list.");
   },
 
@@ -458,6 +547,11 @@ const Actions = {
   },
 };
 
+const Changes = {
+  frequency(value, d) { Household.setTiming(S.household, d.id, { frequency: value }); save('responsibilities'); maybeBuildPlan(); },
+  minutes(value, d) { Household.setTiming(S.household, d.id, { minutes: Number(value) }); save('responsibilities'); maybeBuildPlan(); },
+};
+
 const Inputs = {
   myName(value) {
     Household.renameMember(S.household, S.user.uid, value);
@@ -482,17 +576,30 @@ function resolveRoute() {
   const h = S.household;
   if (!h) return 'start';
 
-  // Members never set up the household: they wait, then look through and agree.
-  if (!Household.isOwner(h, S.user.uid)) {
-    if (!h.settings.onboarded) return 'waiting';
-    if (Household.agreementState(h, S.user.uid) !== 'agreed') return 'review';
-    return name === 'review' ? 'review' : 'inventory';
-  }
+  const me = S.user.uid;
+  const owner = Household.isOwner(h, me);
+  const stage = Household.stage(h);
 
-  const fallback = h.settings.onboarded ? 'inventory' : (h.settings.step || 'members');
-  if (!HOUSEHOLD_SCREENS.includes(name) || name === 'review' || name === 'waiting') return fallback;
-  if (name === 'inventory' && !h.settings.onboarded) return fallback;
-  return name;
+  // Setting up: the owner walks through the steps, everyone else waits.
+  if (stage === 'setup') {
+    if (!owner) return 'waiting';
+    return SETUP_SCREENS.includes(name) ? name : (h.settings.step || 'members');
+  }
+  // Members look through the owner's list and agree before anything else.
+  if (!owner && stage !== 'active' && Household.agreementState(h, me) !== 'agreed') return 'review';
+
+  let home, allowed;
+  if (stage === 'alone' || stage === 'agreeing') { home = 'inventory'; allowed = ['inventory']; }
+  else if (stage === 'preferences') { home = Household.prefsComplete(h, me) ? 'prefsDone' : 'preferences'; allowed = [home, 'inventory']; }
+  else if (stage === 'plan') { home = 'plan'; allowed = ['plan', 'inventory']; }
+  else { home = 'today'; allowed = ['today', 'plan', 'inventory']; }
+  if (owner) allowed = allowed.concat(SETUP_SCREENS);
+  else allowed = allowed.concat(['review']);
+  // When the household moves on to a new stage, everyone goes to that stage's main screen.
+  const moved = S.lastStage !== undefined && S.lastStage !== stage;
+  S.lastStage = stage;
+  if (moved) return home;
+  return name === home || allowed.includes(name) ? name : home;
 }
 
 function render(routeChanged) {
@@ -537,7 +644,7 @@ function rerender() {
     typing = { id: a.id, value: a.value, start: a.selectionStart, end: a.selectionEnd };
   } else if (a && a.dataset && a.dataset.action) {
     sel = `[data-action="${a.dataset.action}"]`;
-    ['id', 'key', 'delta', 'cat', 'to', 'mode', 'type'].forEach(k => { if (a.dataset[k] != null) sel += `[data-${k}="${CSS.escape(a.dataset[k])}"]`; });
+    ['id', 'key', 'delta', 'cat', 'to', 'mode', 'type', 'change'].forEach(k => { if (a.dataset[k] != null) sel += `[data-${k}="${CSS.escape(a.dataset[k])}"]`; });
   }
   render(false);
   if (typing) {
@@ -552,6 +659,9 @@ function rerender() {
     if (el && !el.disabled) el.focus({ preventScroll: true });
   }
 }
+
+/** Go to the main screen for wherever the household is now. */
+function goHome() { history.replaceState(null, '', '#/'); render(true); }
 
 function go(name) {
   if (location.hash === '#/' + name) render(true);
@@ -571,6 +681,10 @@ document.addEventListener('input', e => {
   if (authField) { S.auth.values[authField.dataset.authField] = authField.value; return; }
   const el = e.target.closest('[data-input]');
   if (el && Inputs[el.dataset.input]) Inputs[el.dataset.input](el.value, { ...el.dataset }, el);
+});
+document.addEventListener('change', e => {
+  const el = e.target.closest('[data-change]');
+  if (el && Changes[el.dataset.change]) Changes[el.dataset.change](el.value, { ...el.dataset }, el);
 });
 document.addEventListener('submit', e => {
   if (!e.target.closest('[data-form="auth"]')) return;

@@ -17,7 +17,7 @@ const Icon = {
   sparkSm: svg('<path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/>', 12, 2.4),
 };
 
-const ONBOARDING = ['members', 'home', 'circumstances', 'responsibilities'];
+const ONBOARDING = ['members', 'home', 'circumstances', 'responsibilities', 'frequency'];
 
 function topbar({ back, step }) {
   const backBtn = back
@@ -87,4 +87,14 @@ function toast(msg) {
   t.classList.add('show');
   clearTimeout(toast._t);
   toast._t = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+/** Bottom navigation once the plan is running. */
+function bottomNav(current) {
+  const item = (to, label, icon) => `<button data-action="nav" data-to="${to}" ${current === to ? 'aria-current="page"' : ''}>${icon}<span>${label}</span></button>`;
+  return `<nav class="bottom-nav" aria-label="Main"><div class="inner">
+    ${item('today', 'Today', svg('<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>'))}
+    ${item('plan', 'Plan', svg('<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>'))}
+    ${item('inventory', 'Household', svg('<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M10 20v-6h4v6"/>'))}
+  </div></nav>`;
 }

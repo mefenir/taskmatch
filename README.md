@@ -18,7 +18,12 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 - Leave a household (members) or delete it (owner).
 - Free/Premium gating, with Premium tied to the household owner (see below).
 
-Next phases from the brief: Premium customisation → who does what → preferences → frequency → daily tasks.
+- **How often, and how long?** Every responsibility comes with a typical frequency and time per go. The owner can change them until the plan starts; the partner sees them when reviewing the list.
+- **Preferences.** Once everyone has agreed to the list, each person marks every task ❤️ Happy to do it · 🙂 Don't mind · 🙃 Would rather not. Nobody sees anyone else's answers.
+- **The fair split** (`js/plan.js`). Shares tasks by *weekly effort* (time × how often), not by count. A clear opposition (❤️ vs 🙃) always goes to the person who loves it; everything else is balanced, leaning towards what people like. The same answers always give the same plan.
+- **The plan.** Both see who does what and "Evenly split". To hand something over, tap **Swap**: the other person takes it and picks one of their tasks to give back — or declines. Both say **Start this plan** to begin.
+- **Daily use.** Today / This week / This month, with a toggle for everyone's tasks. Tap to tick off (tap again the same day to undo); recurring tasks come back on schedule, and each person's first round is spread out so day one isn't overloaded. "As needed" tasks are ticked whenever they happen.
+- Tasks added after the plan starts show up under **Needs a home** for someone to claim.
 
 ## How Premium works
 
@@ -27,6 +32,9 @@ Next phases from the brief: Premium customisation → who does what → preferen
 - When the owner's subscription ends, **everyone** drops back to Free at the same moment. Anything created with Premium is kept and becomes read-only.
 - Members who aren't the owner see "Ask {owner} to upgrade" instead of an upgrade button.
 - Suggesting changes is a Premium feature for members; the security rules refuse suggestions while the owner isn't Premium.
+- Seeing the **total time per person** on the plan is Premium. Per-task times are free.
+
+Planned for Premium later: detailed tasks (the split would then work per task), custom responsibilities with your own time estimates, and adjusting estimates.
 - The app can never grant Premium. It's stored in `subscriptions/{ownerUid}`, which only the Firebase console (and later a payment webhook) can write.
 
 There's no checkout yet. To test Premium, give an owner a subscription by hand (step 5 below).
@@ -55,7 +63,7 @@ There's no checkout yet. To test Premium, give an owner a subscription by hand (
 
 The rules make sure that:
 - only members can read a household, and nobody can change its owner,
-- only the owner edits the household and its list; other members can only agree to it, and suggest changes while the owner has Premium,
+- only the owner edits the household, its list and the times; other members can agree, answer their *own* preferences, say yes to the plan, swap and tick tasks off, and suggest list changes while the owner has Premium,
 - people can only join with a valid, unused, unexpired invite,
 - members can leave; only the owner can delete,
 - nobody can give themselves Premium.
@@ -92,6 +100,7 @@ js/config.js          Firebase web config + app settings
 js/util.js            Small helpers
 js/library.js         Predefined responsibility library (read-only, versioned)
 js/entitlements.js    Free/Premium rules — the only place plans are checked
+js/plan.js            The fair split, recurring schedule, swap messages (no DOM, no Firebase)
 js/household.js       Household domain logic (no DOM, no Firebase)
 js/backend.js         All Firebase Auth + Firestore calls
 js/ui.js              Shared UI pieces: rows, steppers, sheets, toast
@@ -106,7 +115,7 @@ docs/PRODUCT_BRIEF.md Product spec
 | Path | What | Who can write |
 |---|---|---|
 | `users/{uid}` | email, display name, which household | that user |
-| `households/{hid}` | owner, members, rooms, children, pets, responsibilities, agreements, suggestions, setup progress | owner; members only agree / suggest |
+| `households/{hid}` | owner, members, rooms, children, pets, responsibilities (with times), agreements, suggestions, preferences, plan, swaps, completions | owner; members only their own agreement/preferences plus plan, swaps and ticks |
 | `invites/{code}` | household, expiry, who used it | members create; invitee redeems once |
 | `subscriptions/{uid}` | `plan`, `active`, optional `expiresAt` | server / console only |
 
@@ -115,5 +124,6 @@ A responsibility is **not** an assignment: selected responsibilities carry no ow
 ## Known limits of this version
 
 - One household per person.
+- Preferences are hidden in the app but stored in the shared household data (the split runs on your phones). Making them truly private needs a server function (Firebase Blaze plan).
 - If two people change the *same* list at the *same* second, the last save wins.
 - No checkout; Premium is set by hand.

@@ -32,8 +32,9 @@ service cloud.firestore {
     // ---------------------------------------------------------------
     // households/{hid}
     //   - only the owner sets up and edits the household and its list
-    //   - other members can agree to the list, and (with the owner's
-    //     Premium) suggest changes the owner then accepts or declines
+    //   - other members can agree to the list, answer their own preferences,
+    //     take part in the plan, and (with the owner's Premium) suggest
+    //     changes the owner then accepts or declines
     //   - nobody can change who owns it
     //   - joining is only possible together with a valid invite
     //   - a non-owner can remove themselves; only the owner can delete
@@ -57,7 +58,8 @@ service cloud.firestore {
         return request.resource.data.responsibilities.size() <= 500
           && request.resource.data.members.size() <= 12
           && request.resource.data.memberIds.size() <= 12
-          && request.resource.data.get('suggestions', []).size() <= 200;
+          && request.resource.data.get('suggestions', []).size() <= 200
+          && request.resource.data.get('swaps', []).size() <= 300;
       }
 
       // The owner can change anything except who owns it and who's in it.
@@ -67,15 +69,19 @@ service cloud.firestore {
           && request.resource.data.memberIds == resource.data.memberIds;
       }
 
-      // Other members: agree for themselves; suggest changes only with the owner's Premium.
+      // Other members: agree and answer preferences for themselves only; take part in the
+      // plan (say yes, swap, claim, tick off); suggest list changes only with the owner's Premium.
       function memberEdit() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
         let agreementsChanged = request.resource.data.get('agreements', {})
           .diff(resource.data.get('agreements', {})).affectedKeys();
+        let preferencesChanged = request.resource.data.get('preferences', {})
+          .diff(resource.data.get('preferences', {})).affectedKeys();
         return request.auth.uid in resource.data.memberIds
           && request.auth.uid != resource.data.ownerId
-          && changed.hasOnly(['agreements', 'suggestions', 'updatedAt'])
+          && changed.hasOnly(['agreements', 'suggestions', 'preferences', 'plan', 'swaps', 'completions', 'updatedAt'])
           && agreementsChanged.hasOnly([request.auth.uid])
+          && preferencesChanged.hasOnly([request.auth.uid])
           && (!changed.hasAny(['suggestions']) || ownerIsPremium(resource.data.ownerId));
       }
 
