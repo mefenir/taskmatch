@@ -49,10 +49,18 @@ const INVITE_ERRORS = {
   'permission-denied': ["This invite couldn't be used", 'It may have expired or already been used. Ask for a new link.'],
 };
 
+const DATA_ERRORS = {
+  'permission-denied': "The database refused access. In Firebase, open Firestore Database → Rules, paste in the contents of firestore.rules and press Publish.",
+  'not-found': "The Firestore database doesn't exist yet. In Firebase, open Firestore Database and create it.",
+  'failed-precondition': "The Firestore database isn't ready. In Firebase, check Firestore Database has been created.",
+  'unavailable': "You're offline and this household isn't saved on this device yet.",
+};
+
 function fail(e) {
   console.error(e);
   S.phase = 'error';
-  S.fatal = e && e.code === 'unavailable' ? "You're offline and this household isn't saved on this device yet." : null;
+  S.fatal = DATA_ERRORS[e && e.code] || null;
+  S.fatalCode = (e && (e.code || e.message)) || 'unknown';
   render(true);
 }
 

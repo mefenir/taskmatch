@@ -31,6 +31,7 @@ const Screens = {
       ${houseArt}
       <h1>Something went wrong</h1>
       <p class="lead">${esc(S.fatal || "We couldn't load your household.")}</p>
+      ${S.fatalCode ? `<p class="fine" style="text-align:left">Error code: ${esc(S.fatalCode)}</p>` : ''}
       <div class="bottom-bar"><button class="btn primary" data-action="reload">Try again</button>
       <button class="btn ghost" data-action="signOut">Sign out</button></div>
     </main>`;
