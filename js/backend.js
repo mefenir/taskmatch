@@ -20,7 +20,8 @@ const Backend = (() => {
 
   const isConfigured = () =>
     typeof firebase !== 'undefined' &&
-    FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && !String(FIREBASE_CONFIG.apiKey).startsWith('REPLACE');
+    typeof FIREBASE_CONFIG !== 'undefined' && !!FIREBASE_CONFIG.apiKey &&
+    !String(FIREBASE_CONFIG.apiKey).startsWith('REPLACE');
 
   function init() {
     if (!isConfigured()) return false;

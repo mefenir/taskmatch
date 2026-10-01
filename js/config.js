@@ -7,7 +7,7 @@
    the values from Firebase console → Project settings →
    General → Your apps → Web app.
    ========================================================= */
-const firebaseConfig = {
+const FIREBASE_CONFIG = {
   apiKey: "AIzaSyCnldFi_1IBvI7nzcV5gGt3L58Gm9bEgag",
   authDomain: "taskmatch-c51d2.firebaseapp.com",
   projectId: "taskmatch-c51d2",

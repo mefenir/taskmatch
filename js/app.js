@@ -464,11 +464,21 @@ document.addEventListener('keydown', e => {
 
 /* ---------- boot ---------- */
 (function boot() {
-  captureInvite();
-  if (!Backend.init()) { S.phase = 'setup'; render(true); return; }
-  render(true);
-  Backend.Auth.redirectResult().catch(e => {
-    if (!SILENT_AUTH_ERRORS.includes(e && e.code)) { S.auth.error = authMessage(e); if (S.phase === 'signedOut') rerender(); }
-  });
-  Backend.Auth.onChange(onAuth);
+  try {
+    captureInvite();
+    if (!Backend.init()) { S.phase = 'setup'; render(true); return; }
+    render(true);
+    Backend.Auth.redirectResult().catch(e => {
+      if (!SILENT_AUTH_ERRORS.includes(e && e.code)) { S.auth.error = authMessage(e); if (S.phase === 'signedOut') rerender(); }
+    });
+    Backend.Auth.onChange(onAuth);
+  } catch (e) {
+    // Never leave a blank page: show what went wrong instead.
+    console.error(e);
+    S.phase = 'error';
+    S.fatal = "The app couldn't start. Check js/config.js matches the Firebase setup in the README.";
+    try { render(true); } catch (e2) {
+      document.getElementById('app').innerHTML = '<main class="screen"><h1>Something went wrong</h1><p class="lead">' + esc(S.fatal) + '</p></main>';
+    }
+  }
 })();
