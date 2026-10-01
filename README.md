@@ -58,7 +58,7 @@ The rules make sure that:
 
 On GitHub: **Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: `main` / `(root)`**.
 
-The app is live at `https://mefenir.github.io/<repo-name>/` a minute or two later. Every push to `main` redeploys it.
+The app is live at `https://mefenir.github.io/taskmatch/` a minute or two later. Every push to `main` redeploys it.
 
 ### 5. Test Premium (optional)
 
