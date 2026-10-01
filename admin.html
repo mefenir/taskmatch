@@ -6,14 +6,17 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Admin · Our Household</title>
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="css/styles.css?v=15">
+<link rel="stylesheet" href="css/styles.css?v=16">
 <style>
 .req{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .req + .req{border-top:1px solid var(--line)}
 .req .top{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
 .req .who{font-weight:600}
 .req .meta{font-size:13px;color:var(--muted)}
-.req .btns{display:flex;gap:8px}
+.req .btns{display:flex;flex-wrap:wrap;gap:8px}
+.req .btns .btn{flex:1 1 auto;width:auto}
+.seg{flex-wrap:wrap}
+.seg button{flex:1 1 auto}
 .req .btns .btn{min-height:42px;margin-top:0}
 .status{font-size:12px;font-weight:650;padding:3px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted);flex:none}
 .status.pending{background:var(--premium-soft);color:var(--premium)}
@@ -27,9 +30,9 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="js/config.js?v=15"></script>
-<script src="js/util.js?v=15"></script>
-<script src="js/backend.js?v=15"></script>
-<script src="js/admin.js?v=15"></script>
+<script src="js/config.js?v=16"></script>
+<script src="js/util.js?v=16"></script>
+<script src="js/backend.js?v=16"></script>
+<script src="js/admin.js?v=16"></script>
 </body>
 </html>

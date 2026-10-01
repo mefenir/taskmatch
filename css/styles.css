@@ -34,6 +34,11 @@ html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
 button,input{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Headings get focus on each new screen (for screen readers) — never show a ring for that. */
+h1[tabindex="-1"]:focus,h1[tabindex="-1"]:focus-visible,h2[tabindex="-1"]:focus{outline:none}
+/* Button labels always stay on one line; fitButtons() shrinks the text if a label doesn't fit. */
+.btn,.mini,.link-btn,.chip,.seg button,.badge,.bottom-nav button span{white-space:nowrap}
+.btn,.mini,.chip,.seg button{min-width:0;overflow:hidden;text-overflow:clip}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 .screen{max-width:520px;margin:0 auto;padding:max(16px,env(safe-area-inset-top)) 16px 0;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
@@ -143,13 +148,14 @@ button.row:active{background:var(--surface-2)}
 #sheet-root{position:fixed;inset:0;z-index:20;display:none}
 #sheet-root.open{display:block}
 .sheet-backdrop{position:absolute;inset:0;background:rgba(10,14,12,.4);opacity:0;transition:opacity .2s}
-.sheet{position:absolute;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:var(--bg);border-radius:24px 24px 0 0;padding:12px 20px calc(20px + env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .25s cubic-bezier(.2,.8,.2,1);max-height:88vh;overflow:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:var(--bg);border-radius:24px 24px 0 0;padding:12px 20px calc(20px + env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .25s cubic-bezier(.2,.8,.2,1);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto}
 .sheet-handle{display:flex;justify-content:center;padding:6px 0 18px;margin:-12px -20px 0;cursor:grab;touch-action:none}
 .sheet-handle span{display:block;width:40px;height:5px;border-radius:3px;background:var(--line)}
 .sheet{touch-action:pan-y}
 #sheet-root.show .sheet-backdrop{opacity:1}
 #sheet-root.show .sheet{transform:none}
 .sheet p{color:var(--muted);margin:0 0 20px}
+.sheet .btn{min-height:48px}
 .sheet .summary{list-style:none;padding:0;margin:0 0 16px}
 .sheet .summary li{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
 .sheet .summary li:last-child{border-bottom:0}
@@ -207,7 +213,8 @@ button.row:active{background:var(--surface-2)}
 .swap-card{background:var(--premium-soft);border-radius:var(--radius);padding:16px;margin-bottom:16px}
 .swap-card .joke{font-size:17px;line-height:1.35;margin:0 0 6px}
 .swap-card .plain{font-size:14px;color:var(--muted);margin:0 0 14px}
-.swap-card .btns{display:flex;gap:8px}
+.swap-card .btns{display:flex;flex-wrap:wrap;gap:8px}
+.swap-card .btns .btn{flex:1 1 auto;width:auto}
 .swap-card .btns .btn{min-height:46px;margin-top:0}
 .result-card{background:var(--accent-soft);border-radius:var(--radius);padding:16px;margin-bottom:16px}
 .result-card .joke{font-size:17px;line-height:1.35;margin:0 0 6px}
@@ -236,3 +243,8 @@ button.row:active{background:var(--surface-2)}
 .member.premium{box-shadow:0 0 0 1.5px var(--premium) inset,var(--shadow)}
 .member.premium .avatar{background:var(--premium-soft);color:var(--premium)}
 .member .gold{color:var(--premium);display:inline-grid;margin-left:2px}
+
+.part-chips{list-style:none;padding:0;margin:0 0 14px;display:flex;flex-wrap:wrap;gap:6px}
+.part-chips li{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:var(--surface);box-shadow:var(--shadow);font-size:13.5px;white-space:nowrap}
+.part-chips.locked li{color:var(--muted);background:var(--surface-2);box-shadow:none}
+.part-chips svg{width:13px;height:13px;flex:none}

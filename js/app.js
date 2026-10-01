@@ -763,6 +763,7 @@ function render(routeChanged) {
   currentRoute = name;
   watchLoading(name);
   $app.innerHTML = Screens[name]();
+  fitButtons($app);
   if (changed) {
     window.scrollTo(0, 0);
     const heading = $app.querySelector('h1');

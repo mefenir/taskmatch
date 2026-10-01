@@ -79,7 +79,7 @@ function view() {
   </main>`;
 }
 
-function render() { $root.innerHTML = view(); }
+function render() { $root.innerHTML = view(); fitButtons($root); }
 
 async function act(kind, userId) {
   A.busy = userId; render();

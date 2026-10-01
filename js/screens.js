@@ -774,9 +774,9 @@ const Screens = {
           return `<div class="row static col">
             <div class="row-text"><span class="row-title">${x.type === 'breakdown' ? `Break down: ${esc(x.name)}` : `${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}`}</span>
               <span class="row-sub">${x.type === 'breakdown' ? `Into ${esc((x.parts || []).map(p => p.name).join(', '))} · ` : ''}Suggested by ${by}</span></div>
-            <div style="display:flex;gap:8px">
-              <button class="btn primary" style="min-height:44px" data-action="acceptSuggestion" data-id="${x.id}">${x.type === 'add' ? 'Add it' : x.type === 'breakdown' ? 'Use these parts' : 'Remove it'}</button>
-              <button class="btn secondary" style="min-height:44px;margin-top:0" data-action="declineSuggestion" data-id="${x.id}">Keep as is</button>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <button class="btn primary" style="min-height:44px;flex:1 1 auto;width:auto" data-action="acceptSuggestion" data-id="${x.id}">${x.type === 'add' ? 'Add it' : x.type === 'breakdown' ? 'Use these parts' : 'Remove it'}</button>
+              <button class="btn secondary" style="min-height:44px;margin-top:0;flex:1 1 auto;width:auto" data-action="declineSuggestion" data-id="${x.id}">Keep as is</button>
             </div></div>`;
         }).join('')}</div>`;
     } else if (!isOwner) {
@@ -976,16 +976,15 @@ const Sheets = {
     const who = assignee ? (assignee === S.user.uid ? 'Yours' : `${Household.memberName(Household.member(S.household, assignee))}'s`) : '';
     Sheet.open(`<h2>${esc(r.name)}</h2>
       <p style="margin-bottom:12px">${who ? esc(who) + ' · ' : ''}${esc(Timing.label(r))}${r.mentalLoad ? ' · Mental load' : ''}</p>
-      ${parts.length ? `<div class="section-head" style="margin-top:0"><h3 class="section-title">${unlocked && Household.parts(r).length ? 'Broken into' : 'Includes'}</h3></div>
-        <div class="card">${parts.map(p => `<div class="row static ${unlocked ? '' : 'locked'}">
-          <div class="row-text"><span class="row-title">${esc(p)}</span></div>${unlocked ? '' : `<span class="chev">${Icon.lock}</span>`}</div>`).join('')}</div>` : ''}
+      ${parts.length ? `<h3 class="section-title" style="margin:0 0 8px">${unlocked && Household.parts(r).length ? 'Broken into' : 'Includes'}</h3>
+        <ul class="part-chips ${unlocked ? '' : 'locked'}">${parts.map(p => `<li>${unlocked ? '' : Icon.lock}${esc(p)}</li>`).join('')}</ul>` : ''}
       ${unlocked
         ? (Household.isOwner(S.household, S.user.uid)
             ? `<button class="btn premium" data-action="openBreakdown" data-id="${r.id}">${Household.parts(r).length ? 'Edit the parts' : 'Break into parts'}</button>
                <button class="btn ghost" data-action="closeSheet">Close</button>`
             : `<button class="btn premium" data-action="openBreakdown" data-id="${r.id}">Suggest a breakdown</button>
                <button class="btn ghost" data-action="closeSheet">Close</button>`)
-        : `<p>With Premium, split these into separate tasks with their own timing, and share them between you.</p>
+        : `<p style="margin-bottom:16px">With Premium, each part becomes its own task, with its own timing and person.</p>
            <button class="btn premium" data-action="sheetNav" data-to="premium">See Premium</button>
            <button class="btn ghost" data-action="closeSheet">Not now</button>`}`, r.name);
   },

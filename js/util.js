@@ -27,3 +27,17 @@ const isStandalone = () => {
   try { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
   catch (e) { return false; }
 };
+
+/** Keep every button label on one line: if it doesn't fit, shrink its text a little (down to 12px). */
+function fitButtons(scope = document) {
+  scope.querySelectorAll('.btn, .mini, .chip, .seg button, .link-btn').forEach(b => {
+    b.style.fontSize = ''; b.style.paddingLeft = b.style.paddingRight = '';
+    if (!b.offsetParent || b.scrollWidth <= b.clientWidth + 1) return;
+    b.style.paddingLeft = b.style.paddingRight = '';
+    const pad = parseFloat(getComputedStyle(b).paddingLeft);
+    if (pad > 12) b.style.paddingLeft = b.style.paddingRight = '12px';
+    let size = parseFloat(getComputedStyle(b).fontSize);
+    while (b.scrollWidth > b.clientWidth + 1 && size > 12) { size -= 0.5; b.style.fontSize = size + 'px'; }
+  });
+}
+window.addEventListener('resize', () => fitButtons());

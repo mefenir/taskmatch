@@ -103,6 +103,7 @@ const Sheet = (() => {
       r.classList.add('open');
       enableDrag(r.querySelector('.sheet'));
       requestAnimationFrame(() => requestAnimationFrame(() => r.classList.add('show')));
+      fitButtons(r);
       const first = r.querySelector('.sheet button');
       if (first) first.focus({ preventScroll: true });
     },
@@ -136,3 +137,4 @@ function bottomNav(current, dots = {}) {
     ${item('inventory', 'Household', svg('<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M10 20v-6h4v6"/>'))}
   </div></nav>`;
 }
+
