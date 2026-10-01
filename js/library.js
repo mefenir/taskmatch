@@ -38,94 +38,56 @@ const LIBRARY = Object.freeze({
     { id: 'car',          name: 'Car' },
   ]),
   responsibilities: Object.freeze([
+    // Each Free responsibility bundles its parts; Premium (later) splits them into
+    // separate tasks with their own timing and owner. `tasks` lists those parts.
     // Cleaning
-    R('cleaning', 'vacuum', 'Vacuum'),
-    R('cleaning', 'mop', 'Mop'),
-    R('cleaning', 'dust', 'Dust'),
-    R('cleaning', 'clean_bathroom', 'Clean bathroom', When.room('bathroom'), { tasks: ['Clean toilet', 'Clean sink', 'Clean shower', 'Clean bathtub', 'Clean mirror', 'Clean floor', 'Replace towels', 'Refill toilet paper', 'Refill soap'] }),
-    R('cleaning', 'clean_toilet', 'Clean toilet', When.room('bathroom')),
-    R('cleaning', 'clean_shower', 'Clean shower/bath', When.room('bathroom')),
-    R('cleaning', 'clean_kitchen', 'Clean kitchen', When.room('kitchen')),
-    R('cleaning', 'clean_windows', 'Clean windows'),
-    R('cleaning', 'clean_mirrors', 'Clean mirrors'),
-    R('cleaning', 'tidying', 'General tidying'),
-    R('cleaning', 'tidy_office', 'Tidy home office', When.room('office')),
+    R('cleaning', 'clean_bathroom', 'Clean bathroom', When.room('bathroom'), { tasks: ['Clean toilet', 'Clean sink', 'Clean shower & bath', 'Clean mirror', 'Clean floor', 'Fresh towels', 'Refill toilet paper & soap'] }),
+    R('cleaning', 'clean_floors', 'Clean floors', When.always, { tasks: ['Vacuum', 'Mop'] }),
+    R('cleaning', 'tidying', 'General tidying', When.always, { tasks: ['Tidy up', 'Dusting', 'Change bed linen'] }),
+    R('cleaning', 'clean_windows', 'Clean windows', When.always, { tasks: ['Clean windows', 'Wipe frames & sills'] }),
+    R('cleaning', 'tidy_office', 'Tidy home office', When.room('office'), { tasks: ['Clear the desk', 'Sort papers'] }),
     // Kitchen & dishes
-    R('kitchen', 'load_dishwasher', 'Load dishwasher', When.room('kitchen')),
-    R('kitchen', 'unload_dishwasher', 'Unload dishwasher', When.room('kitchen')),
-    R('kitchen', 'wash_dishes', 'Wash dishes', When.room('kitchen')),
-    R('kitchen', 'kitchen_surfaces', 'Clean kitchen surfaces', When.room('kitchen')),
-    R('kitchen', 'clean_sink', 'Clean sink', When.room('kitchen')),
-    R('kitchen', 'put_food_away', 'Put food away', When.room('kitchen')),
-    R('kitchen', 'clean_appliances', 'Clean appliances', When.room('kitchen')),
+    R('kitchen', 'dishes', 'Dishes', When.room('kitchen'), { tasks: ['Load dishwasher', 'Unload dishwasher', 'Wash up by hand'] }),
+    R('kitchen', 'clean_kitchen', 'Clean kitchen', When.room('kitchen'), { tasks: ['Wipe surfaces', 'Clean sink', 'Clean appliances'] }),
     // Laundry
-    R('laundry', 'laundry', 'Laundry', When.always, { tasks: ['Wash clothes', 'Dry clothes', 'Fold clothes', 'Put clothes away', 'Wash towels', 'Wash bed linen'] }),
-    R('laundry', 'bed_linen', 'Change bed linen', When.room('bedroom')),
-    R('laundry', 'towels', 'Wash towels'),
+    R('laundry', 'laundry', 'Laundry', When.always, { tasks: ['Wash clothes', 'Dry & hang up', 'Fold', 'Put away', 'Wash towels'] }),
     // Food
-    R('food', 'meal_planning', 'Meal planning', When.always, { mentalLoad: true }),
-    R('food', 'groceries', 'Grocery shopping', When.always, { tasks: [
-      { name: 'Notice what is missing', mentalLoad: true }, { name: 'Check supplies', mentalLoad: true },
-      { name: 'Create shopping list', mentalLoad: true }, { name: 'Go shopping' },
-      { name: 'Carry groceries' }, { name: 'Put groceries away' } ] }),
-    R('food', 'cooking', 'Cooking', When.always, { tasks: ['Plan meals', 'Check ingredients', 'Grocery shop', 'Prepare ingredients', 'Cook', 'Store leftovers', 'Clean kitchen afterwards'] }),
-    R('food', 'lunches', 'Preparing lunches'),
-    R('food', 'leftovers', 'Managing leftovers'),
+    R('food', 'groceries', 'Grocery', When.always, { mentalLoad: true, tasks: [
+      { name: 'Meal planning', mentalLoad: true }, { name: "Check what's missing", mentalLoad: true },
+      { name: 'Make the shopping list', mentalLoad: true }, { name: 'Shopping' }, { name: 'Put groceries away' } ] }),
+    R('food', 'cooking', 'Cooking', When.always, { tasks: ['Prepare ingredients', 'Cook', 'Pack lunches', 'Store leftovers'] }),
     // Waste
-    R('waste', 'rubbish', 'Take rubbish out'),
-    R('waste', 'recycling', 'Recycling'),
-    R('waste', 'glass', 'Glass'),
-    R('waste', 'paper', 'Paper'),
-    R('waste', 'bottles', 'Bottles'),
-    R('waste', 'bins_back', 'Bring bins back in'),
+    R('waste', 'rubbish', 'Take rubbish out', When.always, { tasks: ['Take the bins out', 'Bring bins back in', 'Replace bin bags'] }),
+    R('waste', 'recycling', 'Recycling', When.always, { tasks: ['Paper', 'Glass', 'Bottles & deposit', 'Packaging'] }),
     // Supplies
-    R('supplies', 'buy_cleaning', 'Buy cleaning products'),
-    R('supplies', 'buy_toilet_paper', 'Buy toilet paper'),
-    R('supplies', 'buy_detergent', 'Buy laundry detergent'),
-    R('supplies', 'buy_household', 'Buy household supplies'),
+    R('supplies', 'supplies', 'Household supplies', When.always, { mentalLoad: true, tasks: ['Cleaning products', 'Toilet paper', 'Laundry detergent', 'Other household supplies'] }),
     // Maintenance
-    R('maintenance', 'small_repairs', 'Small repairs'),
-    R('maintenance', 'light_bulbs', 'Light bulbs'),
-    R('maintenance', 'appliances', 'Appliances'),
-    R('maintenance', 'heating', 'Heating'),
-    R('maintenance', 'plumbing', 'Plumbing'),
-    R('maintenance', 'furniture', 'Furniture assembly'),
-    R('maintenance', 'tradespeople', 'Contact tradespeople'),
+    R('maintenance', 'small_repairs', 'Small repairs & DIY', When.always, { tasks: ['Light bulbs', 'Furniture assembly', 'Small fixes'] }),
+    R('maintenance', 'tradespeople', 'Repairs & tradespeople', When.always, { mentalLoad: true, tasks: ['Appliances', 'Heating', 'Plumbing', 'Book repairs', 'Contact tradespeople'] }),
     // Organisation / mental load
-    R('organisation', 'appointments', 'Organise appointments', When.always, { mentalLoad: true }),
-    R('organisation', 'book_repairs', 'Book repairs', When.always, { mentalLoad: true }),
-    R('organisation', 'documents', 'Manage household documents', When.always, { mentalLoad: true }),
-    R('organisation', 'track_todos', 'Track things that need doing', When.always, { mentalLoad: true }),
-    R('organisation', 'dates', 'Remember important dates', When.always, { mentalLoad: true }),
+    R('organisation', 'appointments', 'Appointments', When.always, { mentalLoad: true, tasks: ['Book appointments', 'Keep the shared calendar'] }),
+    R('organisation', 'documents', 'Household paperwork', When.always, { mentalLoad: true, tasks: ['Bills & contracts', 'Insurance', 'Filing'] }),
+    R('organisation', 'track_todos', 'Keep track of to-dos & dates', When.always, { mentalLoad: true, tasks: ['Track what needs doing', 'Remember birthdays & dates', 'Gifts & cards'] }),
     // Children
-    R('children', 'kids_clothes', "Prepare children's clothes", When.kids),
-    R('children', 'kids_bags', 'Prepare school/Kita bags', When.kids),
-    R('children', 'dropoff', 'School/Kita drop-off', When.kids),
-    R('children', 'pickup', 'School/Kita pickup', When.kids),
-    R('children', 'kids_meals', "Children's meals", When.kids),
-    R('children', 'bathing', 'Bathing', When.kids),
-    R('children', 'bedtime', 'Bedtime', When.kids),
-    R('children', 'toys', 'Toys', When.kids),
-    R('children', 'kids_admin', 'School/Kita administration', When.kids, { mentalLoad: true }),
-    R('children', 'activities', 'Activities', When.kids),
-    R('children', 'kids_appointments', 'Appointments', When.kids, { mentalLoad: true }),
+    R('children', 'kids_ready', 'Getting the kids ready', When.kids, { tasks: ["Prepare children's clothes", 'Pack school/Kita bags'] }),
+    R('children', 'school_runs', 'School/Kita runs', When.kids, { tasks: ['Drop-off', 'Pickup'] }),
+    R('children', 'kids_meals', "Children's meals", When.kids, { tasks: ['Breakfast', 'Snacks', 'Dinner'] }),
+    R('children', 'bath_bedtime', 'Bath & bedtime', When.kids, { tasks: ['Bathing', 'Bedtime'] }),
+    R('children', 'toys', "Toys & kids' tidying", When.kids, { tasks: ['Tidy toys', "Sort kids' clothes"] }),
+    R('children', 'kids_admin', 'School/Kita admin & appointments', When.kids, { mentalLoad: true, tasks: ['Forms & admin', 'Doctor appointments', 'Parent evenings'] }),
+    R('children', 'activities', 'Activities', When.kids, { tasks: ['Drive to activities', 'Organise playdates'] }),
     // Pets
-    R('pets', 'feed_pet', 'Feed pet', When.pets),
-    R('pets', 'walk_pet', 'Walk pet', When.pet('dog')),
-    R('pets', 'litter', 'Clean litter', When.pet('cat')),
-    R('pets', 'vet', 'Vet appointments', When.pets, { mentalLoad: true }),
-    R('pets', 'pet_supplies', 'Buy pet supplies', When.pets),
+    R('pets', 'feed_pet', 'Feed pet', When.pets, { tasks: ['Food', 'Fresh water'] }),
+    R('pets', 'walk_pet', 'Walk pet', When.pet('dog'), { tasks: ['Morning walk', 'Evening walk'] }),
+    R('pets', 'litter', 'Clean litter', When.pet('cat'), { tasks: ['Scoop litter', 'Change litter'] }),
+    R('pets', 'pet_care', 'Vet & pet supplies', When.pets, { mentalLoad: true, tasks: ['Vet appointments', 'Buy food & supplies'] }),
     // Garden
-    R('garden', 'mow', 'Mow the lawn', When.flag('garden')),
-    R('garden', 'water_garden', 'Water the garden', When.flag('garden')),
-    R('garden', 'weeding', 'Weeding', When.flag('garden')),
-    R('garden', 'leaves', 'Rake leaves', When.flag('garden')),
-    R('garden', 'outdoor_tidy', 'Tidy outdoor space', When.flag('garden')),
+    R('garden', 'mow', 'Mow the lawn', When.flag('garden'), { tasks: ['Mow', 'Edges & clippings'] }),
+    R('garden', 'water_garden', 'Water the garden', When.flag('garden'), { tasks: ['Water beds', 'Water pots'] }),
+    R('garden', 'garden_tidy', 'Weeding & garden tidying', When.flag('garden'), { tasks: ['Weeding', 'Rake leaves', 'Tidy outdoor space'] }),
     // Car
-    R('car', 'fuel', 'Refuel / charge car', When.flag('car')),
-    R('car', 'clean_car', 'Clean car', When.flag('car')),
-    R('car', 'car_service', 'Car service & inspection', When.flag('car'), { mentalLoad: true }),
-    R('car', 'tyres', 'Seasonal tyre change', When.flag('car')),
+    R('car', 'car_care', 'Car care', When.flag('car'), { tasks: ['Refuel / charge', 'Clean the car'] }),
+    R('car', 'car_service', 'Service & tyres', When.flag('car'), { mentalLoad: true, tasks: ['Service & inspection', 'Seasonal tyre change'] }),
   ]),
 });
 
@@ -138,6 +100,8 @@ const Library = (() => {
     category: id => LIBRARY.categories.find(c => c.id === id) || { id, name: id },
     categoryOrder: id => (catOrder.has(id) ? catOrder.get(id) : Infinity),
     relevant: h => LIBRARY.responsibilities.filter(r => r.when(h)),
+    /** Names of the parts inside a responsibility (shown as the Premium sneak peek). */
+    parts: libId => ((index.get(libId) || {}).item || {}).tasks ? index.get(libId).item.tasks.map(t => (typeof t === 'string' ? t : t.name)) : [],
   };
 })();
 
@@ -159,37 +123,20 @@ const FREQUENCIES = Object.freeze([
 const MINUTE_OPTIONS = Object.freeze([5, 10, 15, 20, 25, 30, 45, 60, 90, 120, 180, 240]);
 
 const TIMING_DEFAULTS = Object.freeze({
-  // Cleaning
-  vacuum: [30, 'weekly'], mop: [25, 'weekly'], dust: [20, 'weekly'], clean_bathroom: [40, 'weekly'],
-  clean_toilet: [10, 'weekly'], clean_shower: [20, 'weekly'], clean_kitchen: [30, 'weekly'],
-  clean_windows: [60, 'monthly'], clean_mirrors: [10, 'fortnightly'], tidying: [15, 'daily'], tidy_office: [15, 'weekly'],
-  // Kitchen & dishes
-  load_dishwasher: [10, 'daily'], unload_dishwasher: [10, 'daily'], wash_dishes: [20, 'daily'],
-  kitchen_surfaces: [10, 'daily'], clean_sink: [5, 'several'], put_food_away: [10, 'several'], clean_appliances: [30, 'monthly'],
-  // Laundry
-  laundry: [45, 'several'], bed_linen: [30, 'fortnightly'], towels: [20, 'weekly'],
-  // Food
-  meal_planning: [20, 'weekly'], groceries: [60, 'weekly'], cooking: [45, 'daily'], lunches: [15, 'several'], leftovers: [10, 'several'],
-  // Waste
-  rubbish: [5, 'several'], recycling: [10, 'weekly'], glass: [10, 'monthly'], paper: [10, 'fortnightly'],
-  bottles: [15, 'monthly'], bins_back: [5, 'weekly'],
-  // Supplies
-  buy_cleaning: [20, 'monthly'], buy_toilet_paper: [10, 'monthly'], buy_detergent: [10, 'monthly'], buy_household: [30, 'monthly'],
-  // Maintenance
-  small_repairs: [45, 'monthly'], light_bulbs: [10, 'asneeded'], appliances: [30, 'asneeded'], heating: [20, 'occasionally'],
-  plumbing: [30, 'asneeded'], furniture: [90, 'occasionally'], tradespeople: [20, 'asneeded'],
-  // Organisation / mental load
-  appointments: [15, 'weekly'], book_repairs: [15, 'asneeded'], documents: [30, 'monthly'], track_todos: [10, 'weekly'], dates: [10, 'monthly'],
-  // Children
-  kids_clothes: [10, 'daily'], kids_bags: [10, 'daily'], dropoff: [20, 'daily'], pickup: [20, 'daily'], kids_meals: [30, 'daily'],
-  bathing: [20, 'several'], bedtime: [30, 'daily'], toys: [10, 'daily'], kids_admin: [20, 'weekly'], activities: [60, 'weekly'],
-  kids_appointments: [30, 'monthly'],
-  // Pets
-  feed_pet: [5, 'daily'], walk_pet: [30, 'daily'], litter: [10, 'daily'], vet: [60, 'occasionally'], pet_supplies: [20, 'fortnightly'],
-  // Garden
-  mow: [45, 'fortnightly'], water_garden: [15, 'several'], weeding: [30, 'fortnightly'], leaves: [45, 'occasionally'], outdoor_tidy: [30, 'monthly'],
-  // Car
-  fuel: [15, 'weekly'], clean_car: [45, 'monthly'], car_service: [60, 'occasionally'], tyres: [60, 'occasionally'],
+  // Times cover all the parts of a task together (e.g. the whole bathroom).
+  clean_bathroom: [60, 'weekly'], clean_floors: [50, 'weekly'], tidying: [25, 'daily'], clean_windows: [60, 'monthly'], tidy_office: [15, 'weekly'],
+  dishes: [25, 'daily'], clean_kitchen: [15, 'daily'],
+  laundry: [60, 'several'],
+  groceries: [75, 'weekly'], cooking: [50, 'daily'],
+  rubbish: [10, 'several'], recycling: [15, 'weekly'],
+  supplies: [30, 'monthly'],
+  small_repairs: [45, 'monthly'], tradespeople: [30, 'occasionally'],
+  appointments: [15, 'weekly'], documents: [30, 'monthly'], track_todos: [15, 'weekly'],
+  kids_ready: [20, 'daily'], school_runs: [40, 'daily'], kids_meals: [30, 'daily'], bath_bedtime: [40, 'daily'],
+  toys: [10, 'daily'], kids_admin: [30, 'weekly'], activities: [60, 'weekly'],
+  feed_pet: [5, 'daily'], walk_pet: [30, 'daily'], litter: [10, 'daily'], pet_care: [30, 'monthly'],
+  mow: [45, 'fortnightly'], water_garden: [15, 'several'], garden_tidy: [45, 'fortnightly'],
+  car_care: [20, 'weekly'], car_service: [60, 'occasionally'],
 });
 
 const Timing = {

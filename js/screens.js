@@ -49,7 +49,7 @@ const Screens = {
       ${invited ? '' : `<ol class="how">
         <li>Tell us a little about your home</li>
         <li>Pick what needs to happen</li>
-        <li>Invite your partner and see it all in one place</li>
+        <li>Invite your partner, and the app splits it fairly between you</li>
       </ol>`}
       <div class="bottom-bar">
         <button class="btn primary" data-action="authMode" data-mode="signup">${invited ? 'Create account and join' : 'Get started'}</button>
@@ -115,7 +115,7 @@ const Screens = {
       <ol class="how">
         <li>Tell us a little about your home</li>
         <li>Pick what needs to happen</li>
-        <li>Invite your partner and see it all in one place</li>
+        <li>Invite your partner, and the app splits it fairly between you</li>
       </ol>
       <div class="bottom-bar">
         <button class="btn primary" data-action="createHousehold" ${S.busy ? 'disabled' : ''}>Set up our household</button>
@@ -137,7 +137,7 @@ const Screens = {
     return `<main class="screen">
       ${topbar({ back: h.settings.onboarded ? 'inventory' : null, step: 'members' })}
       <h1>Who lives here?</h1>
-      <p class="lead">Just names for now. Nobody gets any chores at this stage.</p>
+      <p class="lead">${h.settings.onboarded ? 'Change your name, or invite someone to join.' : 'Just names for now. Nobody gets any chores at this stage.'}</p>
       <div class="card">
         <div class="field">
           <label for="my-name">Your name</label>
@@ -219,7 +219,10 @@ const Screens = {
     return `<main class="screen">
       ${topbar({ back: 'circumstances', step: 'responsibilities' })}
       <h1>What needs to happen in your household?</h1>
-      <p class="lead" style="margin-bottom:0">Tick everything that applies. You're not deciding who does it yet.</p>
+      <p class="lead" style="margin-bottom:0">${{
+        setup: "Tick everything that applies. You're not deciding who does it yet.",
+        active: 'Tick anything new. New tasks show up under "Needs a home" on the plan, for one of you to take.',
+      }[Household.stage(h)] || 'Tick everything that applies. If you change the list, your partner gets to look through it again.'}</p>
       ${sections}
       <div class="section-head"><h2 class="section-title">Something missing?</h2></div>
       ${addOwnRow('Add your own responsibility', !Entitlements.canCreateCustomResponsibility(S.subscription))}
@@ -255,16 +258,59 @@ const Screens = {
         }).join('')}</div>
       </section>`).join('');
     return `<main class="screen">
-      ${setup ? topbar({ back: 'responsibilities', step: 'frequency' }) : topbar({ back: stage === 'plan' ? 'plan' : 'inventory' })}
+      ${setup ? topbar({ back: 'responsibilities', step: 'frequency' }) : topbar({ back: stage === 'plan' || stage === 'active' ? 'plan' : 'inventory' })}
       <h1>How often, and how long?</h1>
       <p class="lead" style="margin-bottom:0">We've filled in what's typical for a household. Change anything that's different in yours.</p>
       ${stage === 'plan' ? `<p class="form-note" style="margin-top:16px">Changing these re-balances the plan, and any swaps start over.</p>` : ''}
+      ${stage === 'active' ? `<p class="form-note" style="margin-top:16px">Your plan is running. Changes here only affect when tasks come up, not who does them.</p>` : ''}
       ${sections}
       <div class="bottom-bar">
         ${setup
           ? `<button class="btn primary" data-action="confirmSelection">Continue</button>`
-          : `<button class="btn primary" data-action="nav" data-to="${stage === 'plan' ? 'plan' : 'inventory'}">Done</button>`}
+          : `<button class="btn primary" data-action="nav" data-to="${stage === 'plan' ? 'plan' : stage === 'active' ? 'plan' : 'inventory'}">Done</button>`}
       </div>
+    </main>`;
+  },
+
+  /* ---------- Premium ---------- */
+  premium() {
+    const h = S.household;
+    const me = S.user.uid;
+    const isOwner = Household.isOwner(h, me);
+    const ownerName = esc(Household.memberName(Household.owner(h)));
+    const premium = Entitlements.isPremium(S.subscription);
+    const req = S.premiumRequest;
+    const status = req ? req.status : null;
+    const benefits = [
+      ['Break tasks into parts', 'Split Clean bathroom into toilet, shower, mirror and more, each with its own timing and person.'],
+      ['Add your own tasks', "Anything the list doesn't cover, like Clean the aquarium."],
+      ['Suggest changes', 'Your partner can propose additions or removals, and you decide.'],
+      ['See the time behind the split', 'Roughly how much time each of you spends on the household every week.'],
+    ];
+    let action;
+    if (premium) {
+      action = `<div class="result-card"><p class="joke">${isOwner ? 'You have Premium.' : `You have Premium through ${ownerName}.`}</p>
+        <p class="plain" style="margin:0">It covers everyone in your household.</p></div>`;
+    } else if (!isOwner) {
+      action = `<div class="card next-card"><p style="margin:0">Premium is linked to ${ownerName}'s account and covers you both. Ask ${ownerName} to open this page and tap <b>I'm interested</b>.</p></div>`;
+    } else if (status === 'pending') {
+      action = `<div class="result-card"><p class="joke">Thanks, you're on the list! 🙌</p>
+        <p class="plain" style="margin:0">We'll let you know as soon as Premium is ready for your household.</p></div>`;
+    } else {
+      const lead = status === 'revoked' ? '<p class="fine" style="text-align:left;margin:0 0 12px">Your Premium has ended. Tap below if you would like it back.</p>'
+        : status === 'denied' ? '<p class="fine" style="text-align:left;margin:0 0 12px">Premium isn\'t available for your household just yet. You can ask again any time.</p>' : '';
+      action = `${lead}<button class="btn premium" data-action="requestPremium" ${S.busy ? 'disabled' : ''}>I'm interested</button>
+        <p class="fine">Premium isn't on sale yet. Tap the button and we'll get in touch.</p>`;
+    }
+    return `<main class="screen">
+      ${topbar({ back: Household.stage(h) === 'active' ? 'today' : 'inventory' })}
+      <div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
+      <h1 style="margin-top:0">Premium</h1>
+      <p class="lead">More detail, more say, and the time behind the split. One Premium covers the whole household.</p>
+      <div class="card">${benefits.map(([t, d]) => `<div class="row static">
+          <span class="chev" style="color:var(--premium)">${Icon.check}</span>
+          <div class="row-text"><span class="row-title">${t}</span><span class="row-sub">${d}</span></div></div>`).join('')}</div>
+      <div class="bottom-bar">${action}</div>
     </main>`;
   },
 
@@ -287,14 +333,15 @@ const Screens = {
     const h = S.household;
     const me = S.user.uid;
     const ownerName = Household.memberName(Household.owner(h));
-    const state = Household.agreementState(h, me);
+    const running = Household.stage(h) === 'active';
+    const state = running ? 'agreed' : Household.agreementState(h, me);
     const suggesting = S.suggestMode && Entitlements.canSuggestChanges(S.subscription);
     const groups = Household.inventory(h);
 
     const lead = {
       pending: `${esc(ownerName)} put this list together. If it matches your home, agree to it. Nothing is assigned to anyone yet.`,
       changed: `${esc(ownerName)} has changed the list since you agreed. Have another look.`,
-      agreed: `You've agreed to this list. ${esc(ownerName)} can still change it.`,
+      agreed: running ? `This is your household's full list. Tap a task to see what it includes.` : `You've agreed to this list. ${esc(ownerName)} can still change it.`,
     }[state];
 
     const sections = groups.map(({ category, items }) => `<section aria-labelledby="rv-${category.id}">
@@ -307,7 +354,7 @@ const Screens = {
                 <div class="row-text"><span class="row-title" ${sug ? 'style="text-decoration:line-through;color:var(--muted)"' : ''}>${esc(r.name)}</span></div>
                 <span class="${sug ? 'badge' : 'tag'}">${sug ? 'Suggested: remove' : 'Suggest removing'}</span>
               </button>`
-            : `<div class="row static"><div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${esc(Timing.label(r))}</span></div>
+            : `<div class="row static"><button class="name-btn" data-action="peek" data-id="${r.id}"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${esc(Timing.label(r))}</span></button>
                 ${sug ? '<span class="badge">Suggested: remove</span>' : (r.mentalLoad ? '<span class="tag">Mental load</span>' : '')}</div>`;
         }).join('')}</div>
       </section>`).join('');
@@ -363,7 +410,7 @@ const Screens = {
     const sections = groups.map(({ category, items }) => `<section aria-labelledby="pf-${category.id}">
         <div class="section-head"><h2 class="section-title" id="pf-${category.id}">${esc(category.name)}</h2></div>
         <div class="card">${items.map(r => `<div class="pref-row" role="group" aria-labelledby="pn-${r.id}">
-            <div class="row-text"><span class="row-title" id="pn-${r.id}">${esc(r.name)}</span><span class="row-sub">${esc(Timing.label(r))}</span></div>
+            <button class="name-btn" data-action="peek" data-id="${r.id}"><span class="row-title" id="pn-${r.id}">${esc(r.name)}</span><span class="row-sub">${esc(Timing.label(r))}</span></button>
             <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn" data-action="setPref" data-id="${r.id}" data-key="${p.id}" aria-pressed="${values[r.id] === p.id}" aria-label="${p.label}" title="${p.label}">${p.emoji}</button>`).join('')}</div>
           </div>`).join('')}</div>
       </section>`).join('');
@@ -414,8 +461,8 @@ const Screens = {
       const right = own && others.length
         ? (pending ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${r.id}">Swap</button>`)
         : '';
-      return `<div class="row static"><div class="row-text"><span class="row-title">${esc(r.name)}</span>
-        <span class="row-sub">${esc(Timing.label(r))}</span></div>${right}</div>`;
+      return `<div class="row static"><button class="name-btn" data-action="peek" data-id="${r.id}"><span class="row-title">${esc(r.name)}</span>
+        <span class="row-sub">${esc(Timing.label(r))}</span></button>${right}</div>`;
     };
     const list = (title, items, own) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
       <div class="card">${items.length ? items.map(r => row(r, own)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
@@ -453,8 +500,8 @@ const Screens = {
       ${list('Your tasks', mine, true)}
       ${others.map(m => list(`${esc(Household.memberName(m))}'s tasks`, Household.tasksOf(h, m.uid), false)).join('')}
       ${unassigned.length ? `<div class="section-head"><h2 class="section-title">Needs a home</h2></div>
-        <div class="card">${unassigned.map(r => `<div class="row static"><div class="row-text"><span class="row-title">${esc(r.name)}</span>
-          <span class="row-sub">${esc(Timing.label(r))}</span></div><button class="mini" data-action="claim" data-id="${r.id}">I'll take it</button></div>`).join('')}</div>` : ''}
+        <div class="card">${unassigned.map(r => `<div class="row static"><button class="name-btn" data-action="peek" data-id="${r.id}"><span class="row-title">${esc(r.name)}</span>
+          <span class="row-sub">${esc(Timing.label(r))}</span></button><button class="mini" data-action="claim" data-id="${r.id}">I'll take it</button></div>`).join('')}</div>` : ''}
       ${bottom}
       ${active ? bottomNav('plan') : ''}
     </main>`;
@@ -532,6 +579,7 @@ const Screens = {
         <button class="chip small" data-action="toggleEveryone" aria-pressed="${everyone}">Show everyone</button>
       </div>
       ${body}
+      ${premiumNudge(h)}
       ${bottomNav('today')}
     </main>`;
   },
@@ -545,35 +593,54 @@ const Screens = {
     const groups = Household.inventory(h);
     const total = h.responsibilities.length;
     const others = h.members.filter(m => m.uid !== me);
+    const stage = Household.stage(h);
+    const hasPlan = stage === 'plan' || stage === 'active';
+    const whose = r => {
+      if (!hasPlan) return '';
+      const a = Household.assignee(h, r.id);
+      if (!a || !h.memberIds.includes(a)) return 'Needs a home · ';
+      return a === me ? 'Yours · ' : `${esc(Household.memberName(Household.member(h, a)))}'s · `;
+    };
 
     const sections = groups.map(({ category, items }) => `<section aria-labelledby="inv-${category.id}">
         <div class="section-head">
           <h2 class="section-title" id="inv-${category.id}">${esc(category.name)}</h2>
           <span class="section-meta">${items.length}</span>
         </div>
-        <div class="card">${items.map(r => `<button class="row" data-action="openResponsibility" data-id="${r.id}">
-            <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${esc(Timing.label(r))}</span></div>
+        <div class="card">${items.map(r => `<button class="row" data-action="peek" data-id="${r.id}">
+            <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${whose(r)}${esc(Timing.label(r))}</span></div>
             ${r.mentalLoad ? '<span class="tag">Mental load</span>' : ''}
             <span class="chev">${Icon.chev}</span>
           </button>`).join('')}</div>
       </section>`).join('');
 
-    // Who has agreed (owner's view), or my own status (member's view).
+    // Where everyone is, in this stage. Nothing once the plan runs.
+    const statusRow = (m, text, ok) => `<div class="row static"><span class="avatar" aria-hidden="true">${esc(Household.memberName(m).charAt(0).toUpperCase())}</span>
+      <div class="row-text"><span class="row-title">${text}</span></div>${ok ? `<span class="chev" style="color:var(--accent)">${Icon.check}</span>` : ''}</div>`;
     let status = '';
-    if (isOwner && others.length) {
+    if ((stage === 'alone' || stage === 'agreeing') && isOwner && others.length) {
       status = `<div class="card">${others.map(m => {
         const st = Household.agreementState(h, m.uid);
         const n = esc(Household.memberName(m));
-        const text = { agreed: `${n} agreed to the list`, pending: `${n} hasn't looked at the list yet`, changed: `You've changed the list since ${n} agreed` }[st];
-        return `<div class="row static"><span class="avatar" aria-hidden="true">${n.charAt(0).toUpperCase()}</span>
-          <div class="row-text"><span class="row-title">${text}</span></div>
-          ${st === 'agreed' ? `<span class="chev" style="color:var(--accent)">${Icon.check}</span>` : ''}</div>`;
+        return statusRow(m, { agreed: `${n} agreed to the list`, pending: `${n} hasn't looked at the list yet`, changed: `You've changed the list since ${n} agreed` }[st], st === 'agreed');
       }).join('')}</div>`;
-    } else if (!isOwner) {
+    } else if ((stage === 'alone' || stage === 'agreeing') && !isOwner) {
       status = `<div class="card"><div class="row static">
           <div class="row-text"><span class="row-title">You agreed to ${esc(ownerName)}'s list</span>
           <span class="row-sub">If anything's missing, suggest a change.</span></div>
           <span class="chev" style="color:var(--accent)">${Icon.check}</span></div></div>`;
+    } else if (stage === 'preferences') {
+      status = `<div class="card">${h.members.map(m => {
+        const done = Household.prefsComplete(h, m.uid);
+        const n = m.uid === me ? 'You' : esc(Household.memberName(m));
+        return statusRow(m, done ? `${n} ${m.uid === me ? 'have' : 'has'} answered` : `${n} ${m.uid === me ? "haven't" : "hasn't"} finished answering yet`, done);
+      }).join('')}</div>`;
+    } else if (stage === 'plan') {
+      status = `<div class="card">${h.members.map(m => {
+        const yes = Household.hasAccepted(h, m.uid);
+        const n = m.uid === me ? 'You' : esc(Household.memberName(m));
+        return statusRow(m, yes ? `${n} said yes to the plan` : `${n} ${m.uid === me ? "haven't" : "hasn't"} said yes to the plan yet`, yes);
+      }).join('')}</div>`;
     }
 
     // Suggestions: the owner decides; members see their own pending ones.
@@ -626,7 +693,15 @@ const Screens = {
           <div class="stat"><b>${total}</b><span>${total === 1 ? 'Responsibility' : 'Responsibilities'}</span></div>
           <div class="stat"><b>${groups.length}</b><span>${groups.length === 1 ? 'Area' : 'Areas'}</span></div>
         </div>
-        <div class="note">This is everything your home involves. Nothing is assigned to anyone yet.</div>
+        <div class="note">${{
+          alone: 'This is everything your home involves. Nothing is assigned to anyone yet.',
+          agreeing: 'This is everything your home involves. Nothing is assigned to anyone yet.',
+          preferences: "Next, you each say how you feel about every task, and the app splits them fairly.",
+          plan: 'The plan is ready. Look at who does what and say yes in the plan.',
+          active: 'Everyone has their share. Tap a task to see what it includes.',
+        }[stage] || ''}
+        ${stage === 'preferences' && !Household.prefsComplete(h, me) ? `<button class="btn primary" style="margin-top:12px" data-action="nav" data-to="preferences">Answer now</button>` : ''}
+        ${stage === 'plan' ? `<button class="btn primary" style="margin-top:12px" data-action="nav" data-to="plan">See the plan</button>` : ''}</div>
       </div>
       ${sections || `<div class="card"><div class="note" style="border:0">No responsibilities yet.</div></div>`}
       <div class="section-head"><h2 class="section-title">Something missing?</h2></div>
@@ -672,6 +747,16 @@ function swapCards(h) {
   return html;
 }
 
+/** One soft Premium moment after a week on the plan. Shows until dismissed on this device. */
+function premiumNudge(h) {
+  if (Entitlements.isPremium(S.subscription) || !h.plan || !h.plan.startedAt) return '';
+  if (Date.now() - new Date(h.plan.startedAt).getTime() < 7 * 864e5) return '';
+  if (SafeStorage.get('household-app/nudge-dismissed/' + h.id)) return '';
+  return `<div class="nudge"><p>A week in! 🎉 Want to split big tasks like Clean bathroom into smaller ones?</p>
+    <button class="mini" data-action="nav" data-to="premium">See Premium</button>
+    <button class="icon-btn" style="width:36px;height:36px" data-action="dismissNudge" aria-label="Not now">${svg('<path d="M6 6l12 12M18 6L6 18"/>', 16)}</button></div>`;
+}
+
 function memberChips(h) {
   return h.members.map(m => {
     const n = Household.memberName(m);
@@ -690,14 +775,34 @@ const Sheets = {
     const isOwner = Household.isOwner(h, S.user.uid);
     const ownerName = Household.memberName(Household.owner(h));
     const cta = isOwner
-      ? `<button class="btn premium" data-action="upgrade">Unlock Premium</button>
+      ? `<button class="btn premium" data-action="sheetNav" data-to="premium">See Premium</button>
          <button class="btn ghost" data-action="closeSheet">Not now</button>`
       : `<p style="margin-top:-8px">Premium is linked to ${esc(ownerName)}'s account and covers everyone in your household. Ask ${esc(ownerName)} to upgrade.</p>
-         <button class="btn secondary" data-action="closeSheet">Got it</button>`;
+         <button class="btn secondary" data-action="closeSheet">Got it</button>
+         <button class="btn ghost" data-action="sheetNav" data-to="premium">What's in Premium?</button>`;
     Sheet.open(`<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
       <h2>${esc(title)}</h2>
       <p>${esc(body)}</p>
       ${cta}`, title);
+  },
+
+  /** What a task includes. On Free the parts are a locked preview of Premium. */
+  taskPeek(r) {
+    const parts = Library.parts(r.libraryId);
+    const unlocked = Entitlements.canViewDetailedTasks(S.subscription);
+    const assignee = Household.assignee(S.household, r.id);
+    const who = assignee ? (assignee === S.user.uid ? 'Yours' : `${Household.memberName(Household.member(S.household, assignee))}'s`) : '';
+    Sheet.open(`<h2>${esc(r.name)}</h2>
+      <p style="margin-bottom:12px">${who ? esc(who) + ' · ' : ''}${esc(Timing.label(r))}${r.mentalLoad ? ' · Mental load' : ''}</p>
+      ${parts.length ? `<div class="section-head" style="margin-top:0"><h3 class="section-title">Includes</h3></div>
+        <div class="card">${parts.map(p => `<div class="row static ${unlocked ? '' : 'locked'}">
+          <div class="row-text"><span class="row-title">${esc(p)}</span></div>${unlocked ? '' : `<span class="chev">${Icon.lock}</span>`}</div>`).join('')}</div>` : ''}
+      ${unlocked
+        ? `<p>Splitting these into separate tasks with their own timing and owner is coming soon.</p>
+           <button class="btn secondary" data-action="closeSheet">Close</button>`
+        : `<p>With Premium, split these into separate tasks with their own timing, and share them between you.</p>
+           <button class="btn premium" data-action="sheetNav" data-to="premium">See Premium</button>
+           <button class="btn ghost" data-action="closeSheet">Not now</button>`}`, r.name);
   },
 
   confirm() {
@@ -767,12 +872,12 @@ const Sheets = {
       <button class="btn secondary" data-action="sheetNav" data-to="members">Edit household setup</button>
       <button class="btn secondary" data-action="sheetNav" data-to="responsibilities">Edit responsibilities</button>`;
     const stage = Household.stage(h);
-    const memberItems = h.settings.onboarded
+    const memberItems = h.settings.onboarded && stage !== 'active'
       ? `<button class="btn secondary" data-action="sheetNav" data-to="review">Look through the list</button>` : '';
     const stageItems = (stage === 'plan' || (stage === 'preferences' && Household.prefsComplete(h, S.user.uid)))
       ? `<button class="btn secondary" data-action="editPrefs">Change my answers</button>` : '';
     Sheet.open(`<h2>Household</h2>
-      <div class="plan-line"><span>Plan</span><span>${esc(plan)}</span></div>
+      <div class="plan-line"><span>Plan</span><span>${esc(plan)} · <button class="link-btn" style="margin:0;padding:0" data-action="sheetNav" data-to="premium">${premium ? 'Details' : 'See Premium'}</button></span></div>
       <div class="plan-line"><span>Signed in as</span><span>${esc(S.user.email || '')}</span></div>
       ${isOwner ? ownerItems : memberItems}
       ${isOwner && h.settings.onboarded && stage !== 'active' ? `<button class="btn secondary" data-action="sheetNav" data-to="frequency">Edit times & frequency</button>` : ''}

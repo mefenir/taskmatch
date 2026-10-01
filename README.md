@@ -37,7 +37,9 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 Planned for Premium later: detailed tasks (the split would then work per task), custom responsibilities with your own time estimates, and adjusting estimates.
 - The app can never grant Premium. It's stored in `subscriptions/{ownerUid}`, which only the Firebase console (and later a payment webhook) can write.
 
-There's no checkout yet. To test Premium, give an owner a subscription by hand (step 5 below).
+There's no checkout yet. The **Premium page** (⋯ menu → See Premium, or any Premium prompt) has an **I'm interested** button. Requests show up in the **admin panel**, where you unlock, deny or later revoke Premium (step 5 below).
+
+Free tasks bundle their parts (e.g. *Clean bathroom* includes toilet, sink, shower & bath, mirror, floor, towels, refills). Tapping a task shows those parts, locked on Free: that's the Premium preview.
 
 ## Setup
 
@@ -74,13 +76,21 @@ On GitHub: **Settings → Pages → Build and deployment → Source: Deploy from
 
 The app is live at `https://mefenir.github.io/taskmatch/` a minute or two later. Every push to `main` redeploys it.
 
-### 5. Test Premium (optional)
+### 5. Admin panel (Premium requests)
 
-1. Sign up in the app and create a household. Copy your **User UID** from **Authentication → Users**.
-2. **Firestore → Start collection** `subscriptions` → Document ID = that UID → fields:
-   - `plan` (string): `premium`
-   - `active` (boolean): `true`
-3. Everyone in your household now has Premium. Set `active` to `false` and they all lose it again.
+The panel is at **`https://mefenir.github.io/taskmatch/admin.html`**. It isn't linked from the app.
+
+One-time setup:
+1. **Firebase → Authentication → Users → Add user.** Pick a username in email form (it doesn't need a real inbox), e.g. `admin@taskmatch.app`, and a strong password. Copy the new **User UID**.
+2. **Firestore → Data → Start collection** `admins` → Document ID = that UID → field `role` (string) = `admin` → Save.
+3. Make sure the latest `firestore.rules` are published.
+
+Then sign in on `admin.html` with that username and password. You'll see every request, filtered by **Waiting / Premium / Closed / All**:
+- **Unlock Premium** gives the requester's whole household Premium (writes `subscriptions/{uid}`).
+- **Deny** turns the request down; they can ask again later.
+- **Revoke Premium** ends it; everyone in the household drops back to Free at once.
+
+Only accounts listed in `admins` can see requests or change Premium; the rules enforce it, not just the page.
 
 ## Running locally
 
@@ -106,6 +116,7 @@ js/backend.js         All Firebase Auth + Firestore calls
 js/ui.js              Shared UI pieces: rows, steppers, sheets, toast
 js/screens.js         Screens and sheets (HTML from state)
 js/app.js             State, auth flow, live sync, actions, router
+admin.html, js/admin.js  Admin panel for Premium requests
 firestore.rules       Security rules
 docs/PRODUCT_BRIEF.md Product spec
 ```
@@ -117,7 +128,9 @@ docs/PRODUCT_BRIEF.md Product spec
 | `users/{uid}` | email, display name, which household | that user |
 | `households/{hid}` | owner, members, rooms, children, pets, responsibilities (with times), agreements, suggestions, preferences, plan, swaps, completions | owner; members only their own agreement/preferences plus plan, swaps and ticks |
 | `invites/{code}` | household, expiry, who used it | members create; invitee redeems once |
-| `subscriptions/{uid}` | `plan`, `active`, optional `expiresAt` | server / console only |
+| `subscriptions/{uid}` | `plan`, `active`, optional `expiresAt` | admin only |
+| `premiumRequests/{uid}` | name, email, household size, status (`pending` / `approved` / `denied` / `revoked`) | the person asks; admin decides |
+| `admins/{uid}` | `role: admin` | Firebase console only |
 
 A responsibility is **not** an assignment: selected responsibilities carry no owner, frequency or preference yet.
 

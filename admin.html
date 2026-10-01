@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin · Our Household</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/styles.css?v=12">
+<style>
+.req{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.req + .req{border-top:1px solid var(--line)}
+.req .top{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.req .who{font-weight:600}
+.req .meta{font-size:13px;color:var(--muted)}
+.req .btns{display:flex;gap:8px}
+.req .btns .btn{min-height:42px;margin-top:0}
+.status{font-size:12px;font-weight:650;padding:3px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted);flex:none}
+.status.pending{background:var(--premium-soft);color:var(--premium)}
+.status.approved{background:var(--accent-soft);color:var(--accent)}
+</style>
+</head>
+<body>
+<div id="app"><main class="screen center-screen"><p class="lead">Loading…</p></main></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js?v=12"></script>
+<script src="js/util.js?v=12"></script>
+<script src="js/backend.js?v=12"></script>
+<script src="js/admin.js?v=12"></script>
+</body>
+</html>

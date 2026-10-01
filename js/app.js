@@ -5,7 +5,7 @@
    ========================================================= */
 const INVITE_KEY = 'household-app/pending-invite';
 const HOUSEHOLD_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'frequency', 'inventory', 'review', 'waiting',
-  'preferences', 'prefsDone', 'plan', 'today'];
+  'preferences', 'prefsDone', 'plan', 'today', 'premium'];
 const SETUP_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'frequency'];
 
 const S = {
@@ -15,6 +15,7 @@ const S = {
   profile: null,             // users/{uid}
   household: null,           // households/{hid} (live)
   subscription: null,        // subscriptions/{household.ownerId} (live)
+  premiumRequest: null,      // premiumRequests/{uid} — my own "I'm interested" (live)
   householdLoading: false,
   joining: false,
   busy: false,
@@ -118,20 +119,22 @@ function saveResponsibilities() {
 const isOwner = () => !!S.household && Household.isOwner(S.household, S.user.uid);
 
 /** Once everyone has answered (or the inputs changed before starting), work out the split. */
-function maybeBuildPlan() {
+function maybeBuildPlan(byMe = false) {
   const h = S.household;
   if (!h || !Household.needsNewPlan(h)) return false;
   const hadPlan = !!h.plan && h.plan.status === 'proposed';
   Household.buildPlan(h);
   save('plan', 'swaps');
-  if (hadPlan) toast('Plan re-balanced.');
+  if (hadPlan) toast(byMe
+    ? 'Plan re-balanced. You both need to say yes again.'
+    : 'Something changed, so the plan was re-balanced. Have another look.');
   return true;
 }
 
 /* ---------- live data ---------- */
 function stop(key) { if (watchers[key]) { watchers[key](); watchers[key] = null; } }
 function teardown() {
-  stop('user'); stop('household'); stop('sub'); clearTimeout(watchers.retryTimer);
+  stop('user'); stop('household'); stop('sub'); stop('request'); S.premiumRequest = null; clearTimeout(watchers.retryTimer);
   watchers.householdId = undefined; watchers.ownerId = null;
 }
 
@@ -150,6 +153,7 @@ async function onAuth(user) {
   } catch (e) { fail(e); return; }
   S.phase = 'ready';
   watchers.user = Backend.Repo.watchUser(user.uid, onProfile, fail);
+  watchers.request = Backend.Repo.watchPremiumRequest(user.uid, req => { S.premiumRequest = req; if (currentRoute === 'premium') rerender(); });
 }
 
 function onProfile(profile) {
@@ -409,16 +413,30 @@ const Actions = {
       body: 'Premium lets you add your own responsibilities and break everyday chores into detailed tasks.',
     });
   },
-  openResponsibility(d) {
+  openResponsibility(d) { Actions.peek(d); },
+  peek(d) {
     const r = S.household.responsibilities.find(x => x.id === d.id);
-    if (!r) return;
-    if (Entitlements.canViewDetailedTasks(S.subscription)) { toast('Detailed tasks arrive in the Premium phase.'); return; }
-    Sheets.premium({
-      title: 'Make it more detailed',
-      body: `Premium lets you break ${r.name} into individual tasks and add your own responsibilities.`,
-    });
+    if (r) Sheets.taskPeek(r);
   },
-  upgrade() { Sheet.close(); toast("Checkout isn't part of this version yet."); },
+  upgrade() { Sheet.close(); go('premium'); },
+  async requestPremium() {
+    if (S.busy) return;
+    const h = S.household;
+    S.busy = true; rerender();
+    try {
+      await Backend.Repo.requestPremium(S.user, {
+        name: Household.memberName(Household.member(h, S.user.uid)),
+        householdId: h.id,
+        members: h.memberIds.length,
+      });
+      toast("Thanks! You're on the list.");
+    } catch (e) {
+      console.error(e);
+      toast("Couldn't send that. Check your connection and try again.");
+    }
+    S.busy = false; rerender();
+  },
+  dismissNudge() { SafeStorage.set('household-app/nudge-dismissed/' + S.household.id, '1'); rerender(); },
 
   /* preferences */
   setPref(d) {
@@ -438,7 +456,7 @@ const Actions = {
     if (!Household.allRated(h, S.user.uid)) return;
     Household.submitPrefs(h, S.user.uid);
     save('preferences');
-    maybeBuildPlan();
+    maybeBuildPlan(true);
     goHome();
   },
   editPrefs() {
@@ -548,8 +566,8 @@ const Actions = {
 };
 
 const Changes = {
-  frequency(value, d) { Household.setTiming(S.household, d.id, { frequency: value }); save('responsibilities'); maybeBuildPlan(); },
-  minutes(value, d) { Household.setTiming(S.household, d.id, { minutes: Number(value) }); save('responsibilities'); maybeBuildPlan(); },
+  frequency(value, d) { Household.setTiming(S.household, d.id, { frequency: value }); save('responsibilities'); maybeBuildPlan(true); },
+  minutes(value, d) { Household.setTiming(S.household, d.id, { minutes: Number(value) }); save('responsibilities'); maybeBuildPlan(true); },
 };
 
 const Inputs = {
@@ -579,6 +597,7 @@ function resolveRoute() {
   const me = S.user.uid;
   const owner = Household.isOwner(h, me);
   const stage = Household.stage(h);
+  if (name === 'premium') return 'premium';
 
   // Setting up: the owner walks through the steps, everyone else waits.
   if (stage === 'setup') {

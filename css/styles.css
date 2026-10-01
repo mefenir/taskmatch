@@ -222,3 +222,9 @@ button.row:active{background:var(--surface-2)}
 .bottom-nav button{flex:1;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;min-height:52px}
 .bottom-nav button[aria-current="page"]{color:var(--accent)}
 .celebrate{text-align:center;padding:20px 16px;font-size:15px;color:var(--muted)}
+
+.row.locked .row-title{color:var(--muted)}
+.name-btn{border:0;background:none;padding:0;margin:0;text-align:left;font:inherit;color:inherit;cursor:pointer;display:flex;flex-direction:column;min-width:0;flex:1}
+.name-btn .row-title{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.nudge{display:flex;gap:12px;align-items:center;background:var(--premium-soft);border-radius:var(--radius);padding:12px 14px;margin:16px 0}
+.nudge p{margin:0;font-size:14px;flex:1}

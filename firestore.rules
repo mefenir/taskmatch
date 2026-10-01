@@ -14,6 +14,11 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/households/$(hid));
     }
 
+    // Admins: accounts with a document in admins/{uid}, created by hand in the console.
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
     function isMemberOf(hid) {
       return signedIn() && request.auth.uid in householdDoc(hid).data.memberIds;
     }
@@ -145,12 +150,12 @@ service cloud.firestore {
     // subscriptions/{uid} — Premium status of a person.
     // Premium is attached to the household owner. Everyone in that
     // owner's household can read it, so they all get (and lose) the
-    // owner's Premium together. The app can NEVER write here: set it
-    // from the Firebase console now, and from a payment webhook later.
+    // owner's Premium together. Only an admin (the admin panel or the
+    // Firebase console) can write here, never the app itself.
     // ---------------------------------------------------------------
     match /subscriptions/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || ownerOfMyHousehold(uid));
-      allow write: if false;
+      allow read: if signedIn() && (request.auth.uid == uid || ownerOfMyHousehold(uid) || isAdmin());
+      allow write: if isAdmin();
 
       function ownerOfMyHousehold(ownerUid) {
         let hid = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId;
@@ -159,6 +164,31 @@ service cloud.firestore {
           && household.ownerId == ownerUid
           && request.auth.uid in household.memberIds;
       }
+    }
+
+    // ---------------------------------------------------------------
+    // premiumRequests/{uid} — "I'm interested". People create or renew
+    // their own request; only an admin approves, denies or revokes.
+    // ---------------------------------------------------------------
+    match /premiumRequests/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid && validRequest();
+      allow update: if isAdmin()
+        || (signedIn() && request.auth.uid == uid && resource.data.status in ['denied', 'revoked'] && validRequest());
+      allow delete: if isAdmin();
+
+      function validRequest() {
+        return request.resource.data.keys().hasOnly(['uid', 'email', 'name', 'householdId', 'members', 'status', 'requestedAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.status == 'pending';
+      }
+    }
+
+    // admins/{uid} — only readable by that admin, never writable from the app.
+    match /admins/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, write: if false;
     }
   }
 }

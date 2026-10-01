@@ -12,7 +12,10 @@
      households/{hid}       { ownerId, memberIds[], members[], rooms[], children[],
                               pets[], circumstances, responsibilities[], settings }
      invites/{code}         { householdId, createdBy, createdAt, expiresAt, usedBy, usedAt }
-     subscriptions/{uid}    { plan: 'free'|'premium', active, expiresAt? }   ← server-only writes
+     subscriptions/{uid}    { plan: 'free'|'premium', active, expiresAt? }   ← admin-only writes
+     premiumRequests/{uid}  { uid, email, name, householdId, members, status, requestedAt, decidedAt? }
+                            status: pending → approved | denied; approved → revoked; denied/revoked → pending
+     admins/{uid}           { role: 'admin' }   ← created by hand in the Firebase console
    ========================================================= */
 const Backend = (() => {
   const REDIRECT_KEY = 'household-app/google-redirect';
@@ -41,6 +44,7 @@ const Backend = (() => {
   const households = () => db.collection('households');
   const invites = () => db.collection('invites');
   const subscriptions = () => db.collection('subscriptions');
+  const premiumRequests = () => db.collection('premiumRequests');
 
   /* ---------- Auth ---------- */
   const Auth = {
@@ -183,5 +187,38 @@ const Backend = (() => {
     },
   };
 
-  return { init, isConfigured, sdkLoaded, Auth, Repo };
+  /* ---------- Premium interest ("I'm interested") ---------- */
+  Repo.watchPremiumRequest = (userId, onData) =>
+    premiumRequests().doc(userId).onSnapshot(s => onData(s.exists ? s.data() : null), () => onData(null));
+  Repo.requestPremium = (user, info) => premiumRequests().doc(user.uid).set({
+    uid: user.uid,
+    email: user.email || '',
+    name: (info.name || '').slice(0, 60),
+    householdId: info.householdId || null,
+    members: info.members || 1,
+    status: 'pending',
+    requestedAt: now(),
+  });
+
+  /* ---------- Admin panel ---------- */
+  const Admin = {
+    isAdmin: async userId => (await db.collection('admins').doc(userId).get()).exists,
+    watchRequests: (onData, onError) =>
+      premiumRequests().orderBy('requestedAt', 'desc').onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, ...d.data() }))), onError),
+    async unlock(userId, adminId) {
+      const batch = db.batch();
+      batch.set(subscriptions().doc(userId), { plan: 'premium', active: true, grantedAt: now(), grantedBy: adminId }, { merge: true });
+      batch.update(premiumRequests().doc(userId), { status: 'approved', decidedAt: now(), decidedBy: adminId });
+      await batch.commit();
+    },
+    deny: (userId, adminId) => premiumRequests().doc(userId).update({ status: 'denied', decidedAt: now(), decidedBy: adminId }),
+    async revoke(userId, adminId) {
+      const batch = db.batch();
+      batch.set(subscriptions().doc(userId), { active: false, revokedAt: now(), revokedBy: adminId }, { merge: true });
+      batch.update(premiumRequests().doc(userId), { status: 'revoked', decidedAt: now(), decidedBy: adminId });
+      await batch.commit();
+    },
+  };
+
+  return { init, isConfigured, sdkLoaded, Auth, Repo, Admin };
 })();
