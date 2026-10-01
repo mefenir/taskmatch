@@ -1,0 +1,132 @@
+rules_version = '2';
+
+// Security rules for the household app.
+// Paste into Firebase console → Firestore Database → Rules → Publish
+// (or deploy with `firebase deploy --only firestore:rules`).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function householdDoc(hid) {
+      return get(/databases/$(database)/documents/households/$(hid));
+    }
+
+    function isMemberOf(hid) {
+      return signedIn() && request.auth.uid in householdDoc(hid).data.memberIds;
+    }
+
+    // ---------------------------------------------------------------
+    // users/{uid} — each person's own profile. Nobody else can read it.
+    // ---------------------------------------------------------------
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'householdId', 'createdAt'])
+        && (request.resource.data.householdId == null || request.resource.data.householdId is string);
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // households/{hid}
+    //   - members can read and edit the household's content
+    //   - nobody can change who owns it
+    //   - joining is only possible together with a valid invite
+    //   - a non-owner can remove themselves; only the owner can delete
+    // ---------------------------------------------------------------
+    match /households/{hid} {
+      allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberIds == [request.auth.uid]
+        && request.resource.data.members.size() == 1
+        && withinLimits();
+
+      allow update: if signedIn() && withinLimits()
+        && (memberEdit() || joining(hid) || leaving());
+
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      function withinLimits() {
+        return request.resource.data.responsibilities.size() <= 500
+          && request.resource.data.members.size() <= 12
+          && request.resource.data.memberIds.size() <= 12;
+      }
+
+      // Normal edits by an existing member. Membership and ownership are fixed here.
+      function memberEdit() {
+        return request.auth.uid in resource.data.memberIds
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.memberIds == resource.data.memberIds;
+      }
+
+      // A new person adds exactly themselves, in the same batch that marks a
+      // valid invite for this household as used by them.
+      function joining(hid) {
+        let invite = getAfter(/databases/$(database)/documents/invites/$(request.resource.data.joinInvite)).data;
+        return !(request.auth.uid in resource.data.memberIds)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberIds', 'joinInvite', 'updatedAt'])
+          && request.resource.data.memberIds == resource.data.memberIds.concat([request.auth.uid])
+          && request.resource.data.members.size() == resource.data.members.size() + 1
+          && invite.householdId == hid
+          && invite.usedBy == request.auth.uid;
+      }
+
+      // A member who isn't the owner removes themselves.
+      function leaving() {
+        return request.auth.uid in resource.data.memberIds
+          && request.auth.uid != resource.data.ownerId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberIds', 'updatedAt'])
+          && request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid]);
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // invites/{code} — one-time join links. The code is the secret, so
+    // single documents can be read but the collection can't be listed.
+    // ---------------------------------------------------------------
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if signedIn()
+        && code.size() >= 12
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.usedBy == null
+        && request.resource.data.expiresAt > request.time
+        && isMemberOf(request.resource.data.householdId);
+
+      // Redeeming: the person joining marks it as used by themselves, once.
+      allow update: if signedIn()
+        && resource.data.usedBy == null
+        && resource.data.expiresAt > request.time
+        && request.resource.data.usedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt']);
+
+      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+    }
+
+    // ---------------------------------------------------------------
+    // subscriptions/{uid} — Premium status of a person.
+    // Premium is attached to the household owner. Everyone in that
+    // owner's household can read it, so they all get (and lose) the
+    // owner's Premium together. The app can NEVER write here: set it
+    // from the Firebase console now, and from a payment webhook later.
+    // ---------------------------------------------------------------
+    match /subscriptions/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || ownerOfMyHousehold(uid));
+      allow write: if false;
+
+      function ownerOfMyHousehold(ownerUid) {
+        let hid = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId;
+        let household = householdDoc(hid).data;
+        return hid is string
+          && household.ownerId == ownerUid
+          && request.auth.uid in household.memberIds;
+      }
+    }
+  }
+}
