@@ -854,10 +854,19 @@ function planNeedsMe(h) {
   const rsh = h.reshare;
   if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) return true;
   if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) return true;
+  if (rs && rs.status === 'declined' && rs.by === me && !rs.seen) return true;   // "They'd rather keep the plan" → OK
+  if (Household.swapResults(h, me).length) return true;                          // my swap was taken or declined → OK
+  if (Household.unassigned(h).length) return true;                               // "Needs a home" → someone claims it
   return false;
 }
 
-function navDots(h) { return { plan: planNeedsMe(h) }; }
+/** Something on the Household tab is waiting for me: suggestions the organiser hasn't answered yet. */
+function householdNeedsMe(h) {
+  return Household.isOwner(h, S.user.uid) && Household.suggestions(h).length > 0;
+}
+
+/** Red dots on the bottom tabs: every tab where an action is waiting for me. */
+function navDots(h) { return { plan: planNeedsMe(h), inventory: householdNeedsMe(h) }; }
 
 /** Incoming swap requests and results of my own requests (on Plan and Today). */
 function swapCards(h) {
