@@ -14,7 +14,7 @@
      invites/{code}         { householdId, createdBy, createdAt, expiresAt, usedBy, usedAt }
      subscriptions/{uid}    { plan: 'free'|'premium', active, expiresAt? }   ← admin-only writes
      premiumRequests/{uid}  { uid, email, name, householdId, members, status, requestedAt, decidedAt? }
-                            status: pending → approved | denied; approved → revoked; denied/revoked → pending
+                            status: pending → approved | denied; approved → revoked | cancelled; denied/revoked/cancelled → pending
      admins/{uid}           { role: 'admin' }   ← created by hand in the Firebase console
    ========================================================= */
 const Backend = (() => {
@@ -199,6 +199,13 @@ const Backend = (() => {
     status: 'pending',
     requestedAt: now(),
   });
+
+  /** The owner ends their own Premium. The household drops back to Free straight away. */
+  Repo.cancelPremium = async userId => {
+    await subscriptions().doc(userId).update({ active: false, cancelledAt: now() });
+    // Premium may have been switched on by hand without a request; then there's nothing to update.
+    await premiumRequests().doc(userId).update({ status: 'cancelled', cancelledAt: now() }).catch(() => {});
+  };
 
   /* ---------- Admin panel ---------- */
   const Admin = {

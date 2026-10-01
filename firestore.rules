@@ -84,7 +84,8 @@ service cloud.firestore {
           .diff(resource.data.get('preferences', {})).affectedKeys();
         return request.auth.uid in resource.data.memberIds
           && request.auth.uid != resource.data.ownerId
-          && changed.hasOnly(['agreements', 'suggestions', 'preferences', 'plan', 'swaps', 'completions', 'updatedAt'])
+          && changed.hasOnly(['agreements', 'suggestions', 'preferences', 'plan', 'swaps', 'completions',
+                              'reshare', 'reshuffle', 'prefRound', 'planSeed', 'previousAssignments', 'updatedAt'])
           && agreementsChanged.hasOnly([request.auth.uid])
           && preferencesChanged.hasOnly([request.auth.uid])
           && (!changed.hasAny(['suggestions']) || ownerIsPremium(resource.data.ownerId));
@@ -156,6 +157,10 @@ service cloud.firestore {
     match /subscriptions/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || ownerOfMyHousehold(uid) || isAdmin());
       allow write: if isAdmin();
+      // The owner may switch their own Premium off (cancel), never on.
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.active == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active', 'cancelledAt']);
 
       function ownerOfMyHousehold(ownerUid) {
         let hid = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId;
@@ -175,7 +180,10 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if signedIn() && request.auth.uid == uid && validRequest();
       allow update: if isAdmin()
-        || (signedIn() && request.auth.uid == uid && resource.data.status in ['denied', 'revoked'] && validRequest());
+        || (signedIn() && request.auth.uid == uid && resource.data.status in ['denied', 'revoked', 'cancelled'] && validRequest())
+        || (signedIn() && request.auth.uid == uid && resource.data.status == 'approved'
+            && request.resource.data.status == 'cancelled'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt']));
       allow delete: if isAdmin();
 
       function validRequest() {

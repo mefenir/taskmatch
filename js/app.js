@@ -5,7 +5,7 @@
    ========================================================= */
 const INVITE_KEY = 'household-app/pending-invite';
 const HOUSEHOLD_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'frequency', 'inventory', 'review', 'waiting',
-  'preferences', 'prefsDone', 'plan', 'today', 'premium'];
+  'preferences', 'prefsDone', 'plan', 'today', 'premium', 'breakdown', 'reshare'];
 const SETUP_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'frequency'];
 
 const S = {
@@ -20,6 +20,7 @@ const S = {
   joining: false,
   busy: false,
   suggestMode: false,
+  breakdown: null,           // { respId, parts: [{ name, minutes, frequency, custom, on }], newName } while editing
   view: 'today',
   everyone: false,
   pendingInvite: null,
@@ -120,11 +121,12 @@ const isOwner = () => !!S.household && Household.isOwner(S.household, S.user.uid
 
 /** Once everyone has answered (or the inputs changed before starting), work out the split. */
 function maybeBuildPlan(byMe = false) {
+  syncPremium();
   const h = S.household;
   if (!h || !Household.needsNewPlan(h)) return false;
   const hadPlan = !!h.plan && h.plan.status === 'proposed';
   Household.buildPlan(h);
-  save('plan', 'swaps');
+  save('plan', 'swaps', 'planSeed');
   if (hadPlan) toast(byMe
     ? 'Plan re-balanced. You both need to say yes again.'
     : 'Something changed, so the plan was re-balanced. Have another look.');
@@ -227,7 +229,15 @@ function watchSubscription(ownerId) {
   watchers.sub = Backend.Repo.watchSubscription(ownerId, sub => {
     const was = Entitlements.isPremium(S.subscription);
     S.subscription = sub;
-    if (was !== Entitlements.isPremium(sub)) rerender();
+    if (was !== Entitlements.isPremium(sub)) { maybeBuildPlan(); rerender(); }
+    if (Entitlements.isPremium(sub)) {
+      const t = sub.grantedAt && typeof sub.grantedAt.toMillis === 'function' ? sub.grantedAt.toMillis() : (sub.grantedAt || 1);
+      const key = `household-app/premium-welcome/${ownerId}/${t}`;
+      if (!SafeStorage.get(key) && S.household && Household.stage(S.household) !== 'setup') {
+        SafeStorage.set(key, '1');
+        setTimeout(() => { if (!Sheet.isOpen()) Sheets.premiumWelcome(); }, 300);
+      }
+    }
   });
 }
 
@@ -415,7 +425,8 @@ const Actions = {
   },
   openResponsibility(d) { Actions.peek(d); },
   peek(d) {
-    const r = S.household.responsibilities.find(x => x.id === d.id);
+    const h = S.household;
+    const r = h.responsibilities.find(x => x.id === d.id) || Household.parentOf(h, d.id);
     if (r) Sheets.taskPeek(r);
   },
   upgrade() { Sheet.close(); go('premium'); },
@@ -436,6 +447,118 @@ const Actions = {
     }
     S.busy = false; rerender();
   },
+  /* reshuffle the whole plan (both have to agree) */
+  askReshuffle() { Sheets.askReshuffle(); },
+  requestReshuffle() {
+    Sheet.close();
+    Household.requestReshuffle(S.household, S.user.uid);
+    save('reshuffle'); rerender();
+    toast('Asked. If they agree, you both answer again.');
+  },
+  acceptReshuffle() {
+    const h = S.household;
+    Household.acceptReshuffle(h);
+    save('prefRound', 'planSeed', 'previousAssignments', 'plan', 'swaps', 'reshare', 'reshuffle');
+    toast("Let's reshuffle! Answer again and you'll get a fresh split.");
+    goHome();
+  },
+  declineReshuffle() { Household.declineReshuffle(S.household); save('reshuffle'); rerender(); },
+  dismissReshuffle() { Household.markReshuffleSeen(S.household); save('reshuffle'); rerender(); },
+
+  /* cancel Premium (owner) */
+  confirmCancelPremium() { Sheets.confirmCancelPremium(); },
+  async cancelPremium() {
+    Sheet.close();
+    try { await Backend.Repo.cancelPremium(S.user.uid); toast('Premium cancelled. Your breakdowns are remembered.'); }
+    catch (e) { console.error(e); toast("Couldn't cancel. Check your connection and try again."); }
+  },
+
+  /* break a task into parts (owner saves, partner suggests) */
+  openBreakdown(d) {
+    const h = S.household;
+    const r = h.responsibilities.find(x => x.id === d.id);
+    if (!r) return;
+    const current = Household.parts(r).map(p => ({ name: p.name, minutes: p.minutes, frequency: p.frequency, custom: !!p.custom, on: true }));
+    const names = new Set(current.map(p => p.name.toLowerCase()));
+    const offered = Household.defaultParts(r).filter(p => !names.has(p.name.toLowerCase())).map(p => ({ ...p, on: false }));
+    S.breakdown = { respId: r.id, parts: [...current, ...offered], newName: '' };
+    Sheet.close();
+    go('breakdown');
+  },
+  toggleBreakPart(d) { const p = S.breakdown.parts[Number(d.key)]; if (p) p.on = !p.on; rerender(); },
+  addBreakPart() {
+    const bd = S.breakdown;
+    const name = (bd.newName || '').trim();
+    if (!name) return;
+    if (bd.parts.some(p => p.name.toLowerCase() === name.toLowerCase())) { toast('That part is already in the list.'); return; }
+    const r = S.household.responsibilities.find(x => x.id === bd.respId);
+    bd.parts.push({ name, minutes: 10, frequency: Timing.of(r).frequency, custom: true, on: true });
+    bd.newName = '';
+    rerender();
+    const input = document.getElementById('bd-new'); if (input) { input.value = ''; input.focus(); }
+  },
+  saveBreakdown() {
+    const h = S.household;
+    const bd = S.breakdown;
+    const r = h.responsibilities.find(x => x.id === bd.respId);
+    const parts = bd.parts.filter(p => p.on);
+    if (!r || parts.length < 2) return;
+    Household.setBreakdown(h, r.id, parts);
+    save(...(h.plan ? ['responsibilities', 'plan'] : ['responsibilities']));
+    maybeBuildPlan(true);
+    S.breakdown = null;
+    go('inventory');
+    toast(Household.stage(h) === 'active'
+      ? `${r.name} is now ${parts.length} parts. Share them out from the plan when you're ready.`
+      : `${r.name} is now ${parts.length} parts.`);
+  },
+  mergeBreakdown() {
+    const h = S.household;
+    const r = h.responsibilities.find(x => x.id === S.breakdown.respId);
+    Household.setBreakdown(h, r.id, []);
+    save(...(h.plan ? ['responsibilities', 'plan'] : ['responsibilities']));
+    maybeBuildPlan(true);
+    S.breakdown = null;
+    go('inventory');
+    toast(`${r.name} is one task again.`);
+  },
+  suggestBreakdown() {
+    const h = S.household;
+    const bd = S.breakdown;
+    const parts = bd.parts.filter(p => p.on);
+    if (parts.length < 2) return;
+    Household.suggestBreakdown(h, S.user.uid, bd.respId, parts);
+    save('suggestions');
+    S.breakdown = null;
+    go('inventory');
+    toast(`Suggestion sent to ${Household.memberName(Household.owner(h))}.`);
+  },
+
+  /* re-share only the new parts */
+  startReshare() {
+    const h = S.household;
+    const fresh = Household.newParts(h).map(u => u.id);
+    const ids = fresh.length ? fresh : Household.units(h).filter(u => u.parentId).map(u => u.id);
+    if (!ids.length) return;
+    Household.startReshare(h, S.user.uid, ids);
+    save('reshare');
+    go('reshare');
+  },
+  setResharePref(d) { Household.setResharePref(S.household, S.user.uid, d.id, d.key); save('reshare'); rerender(); },
+  finishReshare() { Household.finishReshare(S.household, S.user.uid); save('reshare'); rerender(); },
+  acceptReshare() {
+    const h = S.household;
+    const done = Household.acceptReshare(h, S.user.uid);
+    save('plan', 'reshare');
+    if (done) { toast('Done! The new parts are shared out.'); go('plan'); } else rerender();
+  },
+  declineReshare() {
+    Household.declineReshare(S.household);
+    save('plan', 'reshare');
+    toast('No changes. The parts stay where they are.');
+    go('plan');
+  },
+
   dismissNudge() { SafeStorage.set('household-app/nudge-dismissed/' + S.household.id, '1'); rerender(); },
 
   /* preferences */
@@ -554,8 +677,9 @@ const Actions = {
     const sug = Household.suggestions(S.household).find(x => x.id === d.id);
     Household.acceptSuggestion(S.household, d.id);
     save('responsibilities', 'suggestions');
+    maybeBuildPlan(true);
     rerender();
-    if (sug) toast(sug.type === 'add' ? `Added ${sug.name}` : `Removed ${sug.name}`);
+    if (sug) toast(sug.type === 'add' ? `Added ${sug.name}` : sug.type === 'breakdown' ? `${sug.name} is now broken into parts.` : `Removed ${sug.name}`);
   },
   declineSuggestion(d) {
     if (!isOwner()) return;
@@ -566,11 +690,14 @@ const Actions = {
 };
 
 const Changes = {
+  breakFreq(value, d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p) { p.frequency = value; rerender(); } },
+  breakMin(value, d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p) { p.minutes = Number(value); rerender(); } },
   frequency(value, d) { Household.setTiming(S.household, d.id, { frequency: value }); save('responsibilities'); maybeBuildPlan(true); },
   minutes(value, d) { Household.setTiming(S.household, d.id, { minutes: Number(value) }); save('responsibilities'); maybeBuildPlan(true); },
 };
 
 const Inputs = {
+  breakNew(value) { if (S.breakdown) S.breakdown.newName = value; },
   myName(value) {
     Household.renameMember(S.household, S.user.uid, value);
     clearTimeout(nameTimer);
@@ -585,6 +712,9 @@ const $app = document.getElementById('app');
 let currentRoute = null;
 const hashName = () => location.hash.replace(/^#\/?/, '').split('?')[0];
 
+/** Broken-down tasks only count while the household has Premium. */
+function syncPremium() { Household.premium = Entitlements.canViewDetailedTasks(S.subscription); }
+
 function resolveRoute() {
   const name = hashName();
   if (S.phase === 'setup' || S.phase === 'error' || S.phase === 'loading') return S.phase;
@@ -598,6 +728,8 @@ function resolveRoute() {
   const owner = Household.isOwner(h, me);
   const stage = Household.stage(h);
   if (name === 'premium') return 'premium';
+  if (name === 'breakdown' && S.breakdown && Entitlements.canViewDetailedTasks(S.subscription)) return 'breakdown';
+  if (name === 'reshare' && h.reshare) return 'reshare';
 
   // Setting up: the owner walks through the steps, everyone else waits.
   if (stage === 'setup') {
@@ -622,6 +754,7 @@ function resolveRoute() {
 }
 
 function render(routeChanged) {
+  syncPremium();
   const name = resolveRoute();
   const routable = name === 'auth' || name === 'welcome' || name === 'start' || HOUSEHOLD_SCREENS.includes(name);
   if (routable && location.hash !== '#/' + name) history.replaceState(null, '', '#/' + name);

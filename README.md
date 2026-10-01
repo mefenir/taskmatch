@@ -24,6 +24,8 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 - **The plan.** Both see who does what and "Evenly split". To hand something over, tap **Swap**: the other person takes it and picks one of their tasks to give back — or declines. Both say **Start this plan** to begin.
 - **Daily use.** Today / This week / This month, with a toggle for everyone's tasks. Tap to tick off (tap again the same day to undo); recurring tasks come back on schedule, and each person's first round is spread out so day one isn't overloaded. "As needed" tasks are ticked whenever they happen.
 - Tasks added after the plan starts show up under **Needs a home** for someone to claim.
+- **Reshuffle** (low-key button at the bottom of the plan, Free and Premium). Asks the other person first; if they agree, both answer preferences again and get a fresh split that differs from the old one.
+- Bottom sheets can be closed by dragging their top bar down.
 
 ## How Premium works
 
@@ -34,8 +36,13 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 - Suggesting changes is a Premium feature for members; the security rules refuse suggestions while the owner isn't Premium.
 - Seeing the **total time per person** on the plan is Premium. Per-task times are free.
 
-Planned for Premium later: detailed tasks (the split would then work per task), custom responsibilities with your own time estimates, and adjusting estimates.
-- The app can never grant Premium. It's stored in `subscriptions/{ownerUid}`, which only the Firebase console (and later a payment webhook) can write.
+- When Premium switches on, names get a gold badge and everyone sees a one-time **Premium is on** message with a button to the benefits.
+- **Breaking tasks into parts.** Only the owner can break a task down (tap a task → Break into parts). Partners tap **Suggest a breakdown**; the owner accepts or declines. New parts are then rated (❤️/🙂/🙃) and only those parts are re-shared; both say yes. Everything else in the plan stays as it was.
+- **When Premium ends**, parts merge back into their task and whoever had most of it (by effort) keeps it. Nothing is deleted: when Premium comes back, the breakdown returns as before with the same people.
+- The owner can **Cancel Premium subscription** on the Premium page. That switches Premium off for everyone (shown as "Cancelled by user" in the admin panel).
+- The app can never grant Premium. It's stored in `subscriptions/{ownerUid}`, which only an admin (or later a payment webhook) can switch on; the owner may only switch it off.
+
+Planned for Premium later: custom responsibilities with your own time estimates, and reminders.
 
 There's no checkout yet. The **Premium page** (⋯ menu → See Premium, or any Premium prompt) has an **I'm interested** button. Requests show up in the **admin panel**, where you unlock, deny or later revoke Premium (step 5 below).
 

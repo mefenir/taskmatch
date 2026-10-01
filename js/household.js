@@ -80,6 +80,14 @@ const Household = {
     return this.suggestions(h).find(x => x.by === userId && x.type === type &&
       (type === 'add' ? x.libraryId === key : x.responsibilityId === key)) || null;
   },
+  /** Premium: suggest how to break a task into parts (replaces my earlier suggestion for it). */
+  suggestBreakdown(h, userId, respId, parts) {
+    const r = h.responsibilities.find(x => x.id === respId); if (!r) return;
+    h.suggestions = this.suggestions(h).filter(x => !(x.by === userId && x.type === 'breakdown' && x.responsibilityId === respId));
+    h.suggestions.push({ id: uid(), by: userId, type: 'breakdown', responsibilityId: respId, name: r.name, category: r.category,
+      parts: parts.map(p => ({ name: String(p.name).slice(0, 60), minutes: Number(p.minutes) || 10, frequency: p.frequency, ...(p.custom ? { custom: true } : {}) })),
+      at: new Date().toISOString() });
+  },
   /** Add the suggestion, or withdraw it if this person already made it. */
   toggleSuggestion(h, userId, type, key) {
     const existing = this.suggestionFor(h, userId, type, key);
@@ -101,6 +109,7 @@ const Household = {
     const sug = this.suggestions(h).find(x => x.id === id);
     if (!sug) return;
     if (sug.type === 'add') this.select(h, sug.libraryId);
+    else if (sug.type === 'breakdown') this.setBreakdown(h, sug.responsibilityId, sug.parts || []);
     else h.responsibilities = h.responsibilities.filter(r => r.id !== sug.responsibilityId);
     h.suggestions = this.suggestions(h).filter(x => x.id !== id);
   },
@@ -139,49 +148,211 @@ const Household = {
   },
 
   /* ---------- Preferences (private to each person) ---------- */
+  // A reshuffle starts a new answering round: answers from an older round don't count.
   prefs(h, userId) { return ((h.preferences || {})[userId]) || { values: {} }; },
   setPref(h, userId, respId, value) {
     const mine = this.prefs(h, userId);
     h.preferences = { ...(h.preferences || {}), [userId]: { ...mine, values: { ...(mine.values || {}), [respId]: value } } };
   },
   allRated(h, userId) { const v = this.prefs(h, userId).values || {}; return h.responsibilities.every(r => v[r.id]); },
-  prefsComplete(h, userId) { return !!this.prefs(h, userId).submittedAt && this.allRated(h, userId); },
+  prefsComplete(h, userId) {
+    const p = this.prefs(h, userId);
+    return !!p.submittedAt && (p.round || 0) === (h.prefRound || 0) && this.allRated(h, userId);
+  },
   submitPrefs(h, userId) {
     const mine = this.prefs(h, userId);
-    h.preferences = { ...(h.preferences || {}), [userId]: { ...mine, submittedAt: new Date().toISOString() } };
+    h.preferences = { ...(h.preferences || {}), [userId]: { ...mine, submittedAt: new Date().toISOString(), round: h.prefRound || 0 } };
+  },
+  /** How someone feels about a unit: its own answer, else the answer for the whole task. */
+  prefFor(h, userId, unit) {
+    const v = this.prefs(h, userId).values || {};
+    return v[unit.id] || (unit.parentId ? v[unit.parentId] : null) || 'ok';
   },
 
+  /* ---------- Units: what the plan is made of ----------
+   * Without Premium (or for tasks that aren't broken down) a unit is the whole
+   * responsibility. With Premium, a broken-down task contributes its parts instead.
+   * When Premium ends the parts stay stored, so they come back exactly as they
+   * were when Premium returns. */
+  premium: false, // set by the app from the owner's subscription
+  parts: r => r.parts || [],
+  isSplit(r) { return this.premium && this.parts(r).length > 0; },
+  partUnit(r, p) {
+    return { id: p.id, parentId: r.id, parentName: r.name, name: p.name, minutes: p.minutes, frequency: p.frequency,
+      category: r.category, libraryId: null, mentalLoad: !!p.mentalLoad, custom: !!p.custom };
+  },
+  units(h) {
+    const out = [];
+    h.responsibilities.forEach(r => { if (this.isSplit(r)) this.parts(r).forEach(p => out.push(this.partUnit(r, p))); else out.push(r); });
+    return out;
+  },
+  unit(h, id) { return this.units(h).find(u => u.id === id) || null; },
+  parentOf(h, partId) { return h.responsibilities.find(r => this.parts(r).some(p => p.id === partId)) || null; },
+
   /* ---------- Plan ---------- */
-  /** Changes to the list, times, people or preferences make a proposed plan out of date. */
+  /** Changes to the list, times, parts, people or preferences make a proposed plan out of date. */
   planSignature(h) {
-    const parts = h.responsibilities.slice().sort((a, b) => (a.id < b.id ? -1 : 1))
-      .map(r => { const t = Timing.of(r); return `${r.id}:${t.minutes}:${t.frequency}`; });
-    const prefs = h.memberIds.slice().sort().map(m => {
-      const v = this.prefs(h, m).values || {};
-      return m + '=' + h.responsibilities.map(r => r.id).sort().map(id => v[id] || '-').join('');
-    });
-    return parts.join('|') + '#' + prefs.join('|');
+    const units = this.units(h).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
+    const parts = units.map(u => { const t = Timing.of(u); return `${u.id}:${t.minutes}:${t.frequency}`; });
+    const prefs = h.memberIds.slice().sort().map(m => m + '=' + units.map(u => this.prefFor(h, m, u)[0]).join(''));
+    return parts.join('|') + '#' + prefs.join('|') + '#' + (h.planSeed || 0);
   },
   needsNewPlan(h) {
     return this.stage(h) === 'plan' && (!h.plan || h.plan.status !== 'proposed' || h.plan.signature !== this.planSignature(h));
   },
+  prefMap(h, units) {
+    return Object.fromEntries(h.memberIds.map(m => [m, Object.fromEntries(units.map(u => [u.id, this.prefFor(h, m, u)]))]));
+  },
   buildPlan(h) {
-    const prefs = Object.fromEntries(h.memberIds.map(m => [m, this.prefs(h, m).values || {}]));
-    const { assignments } = Split.run(h.responsibilities, h.memberIds, prefs);
+    const units = this.units(h);
+    const prefs = this.prefMap(h, units);
+    let seed = h.planSeed || 0;
+    let { assignments } = Split.run(units, h.memberIds, prefs, { seed });
+    // After a reshuffle, look for a split that's actually different (and still fair).
+    const before = h.previousAssignments;
+    if (before) {
+      const same = a => units.every(u => a[u.id] === before[u.id]);
+      for (let tries = 0; tries < 12 && same(assignments); tries++) {
+        const next = Split.run(units, h.memberIds, prefs, { seed: seed + 1 });
+        seed += 1;
+        if (Split.isEven(Split.loads(units, next.assignments, h.memberIds)) || tries === 11) assignments = next.assignments;
+      }
+      h.planSeed = seed;
+    }
     h.plan = { status: 'proposed', assignments, signature: this.planSignature(h), accepted: {}, createdAt: new Date().toISOString() };
     h.swaps = [];
+    h.reshare = null;
   },
-  assignee(h, respId) { return h.plan && h.plan.assignments ? h.plan.assignments[respId] || null : null; },
-  tasksOf(h, userId) { return h.responsibilities.filter(r => this.assignee(h, r.id) === userId); },
+  /** Who does a unit. A broken-down task seen without Premium belongs to whoever has most of its parts. */
+  assignee(h, id) {
+    const a = (h.plan && h.plan.assignments) || {};
+    const r = h.responsibilities.find(x => x.id === id);
+    if (r) {
+      if (this.parts(r).length && !this.premium) return ((h.plan && h.plan.merged) || {})[id] || this.majority(h, r) || a[id] || null;
+      return a[id] || null;
+    }
+    const parent = this.parentOf(h, id);
+    return parent ? (a[id] || a[parent.id] || null) : null;
+  },
+  majority(h, r) {
+    const a = (h.plan && h.plan.assignments) || {};
+    const load = {};
+    this.parts(r).forEach(p => { const m = a[p.id] || a[r.id]; if (m) load[m] = (load[m] || 0) + Timing.weeklyMinutes(this.partUnit(r, p)); });
+    const people = Object.keys(load);
+    if (!people.length) return null;
+    return people.sort((x, y) => (load[y] - load[x]) || (x === a[r.id] ? -1 : y === a[r.id] ? 1 : (x < y ? -1 : 1)))[0];
+  },
+  setAssignee(h, id, userId) {
+    const r = h.responsibilities.find(x => x.id === id);
+    if (r && this.parts(r).length && !this.premium) h.plan = { ...h.plan, merged: { ...(h.plan.merged || {}), [id]: userId } };
+    else h.plan = { ...h.plan, assignments: { ...(h.plan.assignments || {}), [id]: userId } };
+  },
+  tasksOf(h, userId) { return this.units(h).filter(u => this.assignee(h, u.id) === userId); },
   /** Added after the plan started: nobody's yet. */
-  unassigned(h) { return h.plan ? h.responsibilities.filter(r => !this.assignee(h, r.id) || !h.memberIds.includes(this.assignee(h, r.id))) : []; },
-  claim(h, respId, userId) { h.plan = { ...h.plan, assignments: { ...h.plan.assignments, [respId]: userId } }; },
-  loads(h) { return Split.loads(h.responsibilities, (h.plan && h.plan.assignments) || {}, h.memberIds); },
+  unassigned(h) { return h.plan ? this.units(h).filter(u => !h.memberIds.includes(this.assignee(h, u.id))) : []; },
+  claim(h, id, userId) { this.setAssignee(h, id, userId); },
+  loads(h) {
+    const units = this.units(h);
+    return Split.loads(units, Object.fromEntries(units.map(u => [u.id, this.assignee(h, u.id)])), h.memberIds);
+  },
+  /** Who looks after a whole task: a name, "Shared" when its parts are split between people, or nobody. */
+  ownerOf(h, r) {
+    if (!this.isSplit(r)) return this.assignee(h, r.id);
+    const people = new Set(this.parts(r).map(p => this.assignee(h, p.id)).filter(Boolean));
+    return people.size === 1 ? [...people][0] : (people.size ? 'shared' : null);
+  },
   hasAccepted(h, userId) { return !!(h.plan && h.plan.accepted && h.plan.accepted[userId]); },
   acceptPlan(h, userId) {
     const accepted = { ...(h.plan.accepted || {}), [userId]: new Date().toISOString() };
     const everyone = h.memberIds.every(m => accepted[m]);
     h.plan = { ...h.plan, accepted, ...(everyone ? { status: 'active', startedAt: new Date().toISOString() } : {}) };
+  },
+
+  /* ---------- Reshuffle (start the split over) ---------- */
+  reshuffle: h => h.reshuffle || null,
+  requestReshuffle(h, from) { h.reshuffle = { id: uid(), by: from, status: 'pending', at: new Date().toISOString() }; },
+  /** Agreed: everyone answers again (a new round) and gets a fresh split. Ticks are kept. */
+  acceptReshuffle(h) {
+    h.prefRound = (h.prefRound || 0) + 1;
+    h.planSeed = (h.planSeed || 0) + 1;
+    h.previousAssignments = (h.plan && h.plan.assignments) || null;
+    h.plan = null; h.swaps = []; h.reshare = null;
+    h.reshuffle = { ...h.reshuffle, status: 'done', resolvedAt: new Date().toISOString() };
+  },
+  declineReshuffle(h) { h.reshuffle = { ...h.reshuffle, status: 'declined', resolvedAt: new Date().toISOString() }; },
+  markReshuffleSeen(h) { h.reshuffle = { ...h.reshuffle, seen: true }; },
+
+  /* ---------- Breaking tasks into parts (Premium) ---------- */
+  /** Suggested parts for a task, each with a share of its time and the same rhythm. */
+  defaultParts(r) {
+    const names = Library.parts(r.libraryId);
+    const t = Timing.of(r);
+    const each = Math.max(5, Math.round(t.minutes / Math.max(1, names.length) / 5) * 5);
+    return names.map(name => ({ name, minutes: each, frequency: t.frequency }));
+  },
+  /** Set a task's parts. An empty list puts it back together (with whoever had most of it). */
+  setBreakdown(h, respId, parts) {
+    const r = h.responsibilities.find(x => x.id === respId);
+    if (!r) return;
+    if (!parts.length) {
+      if (h.plan && this.parts(r).length) {
+        const keep = this.majority(h, r);
+        if (keep) h.plan = { ...h.plan, assignments: { ...(h.plan.assignments || {}), [r.id]: keep } };
+      }
+      r.parts = [];
+      return;
+    }
+    const byName = new Map(this.parts(r).map(p => [p.name.toLowerCase(), p]));
+    r.parts = parts.map(p => {
+      const old = byName.get(String(p.name).toLowerCase());
+      return { id: old ? old.id : uid(), name: String(p.name).slice(0, 60), minutes: Number(p.minutes) || 10,
+        frequency: p.frequency || Timing.of(r).frequency, ...(p.custom ? { custom: true } : {}) };
+    });
+  },
+  /** Parts that haven't been shared out yet (they sit with the task's owner for now). */
+  newParts(h) {
+    if (!this.premium || !h.plan || h.plan.status !== 'active') return [];
+    const a = h.plan.assignments || {};
+    return this.units(h).filter(u => u.parentId && !a[u.id]);
+  },
+
+  /* ---------- Re-share: rate just some parts, re-divide only those ---------- */
+  startReshare(h, by, unitIds) {
+    h.reshare = { id: uid(), by, status: 'rating', unitIds, prefs: {}, done: {}, accepted: {}, at: new Date().toISOString() };
+  },
+  reshareValue(h, userId, unit) {
+    const own = ((h.reshare && h.reshare.prefs) || {})[userId] || {};
+    return own[unit.id] || this.prefFor(h, userId, unit);
+  },
+  setResharePref(h, userId, unitId, value) {
+    const prefs = { ...(h.reshare.prefs || {}) };
+    prefs[userId] = { ...(prefs[userId] || {}), [unitId]: value };
+    h.reshare = { ...h.reshare, prefs };
+  },
+  /** Mark my answers done; when everyone is done, work out the proposal. */
+  finishReshare(h, userId) {
+    h.reshare = { ...h.reshare, done: { ...(h.reshare.done || {}), [userId]: true } };
+    if (!h.memberIds.every(m => h.reshare.done[m])) return;
+    const units = this.units(h);
+    const ids = new Set(h.reshare.unitIds);
+    const fixed = Object.fromEntries(units.filter(u => !ids.has(u.id)).map(u => [u.id, this.assignee(h, u.id)]).filter(([, m]) => m));
+    const prefs = Object.fromEntries(h.memberIds.map(m => [m, Object.fromEntries(units.map(u => [u.id, this.reshareValue(h, m, u)]))]));
+    const { assignments } = Split.run(units, h.memberIds, prefs, { fixed, seed: h.planSeed || 0 });
+    const proposal = Object.fromEntries(h.reshare.unitIds.filter(id => assignments[id]).map(id => [id, assignments[id]]));
+    h.reshare = { ...h.reshare, status: 'proposed', proposal, accepted: {} };
+  },
+  /** Everyone said yes → apply. */
+  acceptReshare(h, userId) {
+    h.reshare = { ...h.reshare, accepted: { ...(h.reshare.accepted || {}), [userId]: true } };
+    if (!h.memberIds.every(m => h.reshare.accepted[m])) return false;
+    Object.entries(h.reshare.proposal || {}).forEach(([id, m]) => this.setAssignee(h, id, m));
+    h.reshare = null;
+    return true;
+  },
+  /** Keep things as they are: the parts stay with whoever has them now. */
+  declineReshare(h) {
+    (h.reshare.unitIds || []).forEach(id => { const m = this.assignee(h, id); if (m) this.setAssignee(h, id, m); });
+    h.reshare = null;
   },
 
   /* ---------- Swaps ---------- */
@@ -192,15 +363,15 @@ const Household = {
     h.swaps = [...this.swaps(h), swap];
     return swap;
   },
-  incomingSwap(h, userId) { return this.swaps(h).find(x => x.status === 'pending' && x.to === userId) || null; },
+  /** Only swaps about tasks that still exist in the current view. */
+  incomingSwap(h, userId) { return this.swaps(h).find(x => x.status === 'pending' && x.to === userId && this.unit(h, x.respId)) || null; },
   pendingFor(h, respId) { return this.swaps(h).find(x => x.status === 'pending' && x.respId === respId) || null; },
   /** Accept: the task moves to them, and the task they pick moves back. */
   acceptSwap(h, swapId, giveRespId) {
     const x = this.swaps(h).find(s => s.id === swapId);
     if (!x || x.status !== 'pending') return;
-    const a = { ...h.plan.assignments, [x.respId]: x.to };
-    if (giveRespId) a[giveRespId] = x.from;
-    h.plan = { ...h.plan, assignments: a };
+    this.setAssignee(h, x.respId, x.to);
+    if (giveRespId) this.setAssignee(h, giveRespId, x.from);
     h.swaps = this.swaps(h).map(s => s.id === swapId ? { ...s, status: 'done', gave: giveRespId || null, resolvedAt: new Date().toISOString() } : s);
   },
   declineSwap(h, swapId) {
@@ -209,6 +380,7 @@ const Household = {
   /** Results the person who asked hasn't seen yet. */
   swapResults(h, userId) { return this.swaps(h).filter(x => x.from === userId && x.status !== 'pending' && !x.seen); },
   markSwapSeen(h, swapId) { h.swaps = this.swaps(h).map(s => s.id === swapId ? { ...s, seen: true } : s); },
+  unitName(h, id) { const u = this.unit(h, id) || h.responsibilities.find(r => r.id === id); return u ? u.name : 'a task'; },
 
   /* ---------- Schedule ---------- */
   /** Spread each person's first round evenly over the period (weekly over 7 days, monthly over 30). */
@@ -218,7 +390,7 @@ const Household = {
     const period = Schedule.periodDays(f);
     if (period <= 1) return 0;
     const owner = this.assignee(h, r.id);
-    const same = h.responsibilities
+    const same = this.units(h)
       .filter(x => this.assignee(h, x.id) === owner && Timing.of(x).frequency === freq)
       .map(x => x.id).sort();
     const i = same.indexOf(r.id);
@@ -229,7 +401,19 @@ const Household = {
   },
 
   /* ---------- Ticking things off ---------- */
-  completion: (h, respId) => (h.completions || {})[respId] || null,
+  /** A part starts from when its whole task was last done; a merged task from its latest part. */
+  completion(h, id) {
+    const all = h.completions || {};
+    const own = all[id] || null;
+    const parent = this.parentOf(h, id);
+    if (parent) return own || all[parent.id] || null;
+    const r = h.responsibilities.find(x => x.id === id);
+    if (r && this.parts(r).length && !this.premium) {
+      return [own, ...this.parts(r).map(p => all[p.id])].filter(c => c && c.last)
+        .sort((x, y) => new Date(y.last) - new Date(x.last))[0] || own;
+    }
+    return own;
+  },
   toggleDone(h, respId, userId, now = new Date()) {
     const c = this.completion(h, respId);
     const all = { ...(h.completions || {}) };

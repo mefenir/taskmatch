@@ -18,7 +18,8 @@ const A = {
 let unwatch = null;
 const $root = document.getElementById('app');
 
-const STATUS_LABEL = { pending: 'Waiting', approved: 'Premium', denied: 'Denied', revoked: 'Revoked' };
+const STATUS_LABEL = { pending: 'Waiting', approved: 'Premium', denied: 'Denied', revoked: 'Revoked', cancelled: 'Cancelled by user' };
+const CLOSED = ['denied', 'revoked', 'cancelled'];
 const FILTERS = [['pending', 'Waiting'], ['approved', 'Premium'], ['closed', 'Closed'], ['all', 'All']];
 
 function toast(msg) {
@@ -54,9 +55,9 @@ function view() {
     <p class="lead">${esc(A.user.email || 'This account')} isn't an admin account.</p>
     <button class="btn secondary" data-action="signOut">Sign out</button></main>`;
 
-  const matches = r => A.filter === 'all' || r.status === A.filter || (A.filter === 'closed' && (r.status === 'denied' || r.status === 'revoked'));
+  const matches = r => A.filter === 'all' || r.status === A.filter || (A.filter === 'closed' && CLOSED.includes(r.status));
   const list = A.requests.filter(matches);
-  const count = k => A.requests.filter(r => k === 'all' || r.status === k || (k === 'closed' && (r.status === 'denied' || r.status === 'revoked'))).length;
+  const count = k => A.requests.filter(r => k === 'all' || r.status === k || (k === 'closed' && CLOSED.includes(r.status))).length;
   const buttons = r => {
     const dis = A.busy === r.id ? 'disabled' : '';
     if (r.status === 'pending') return `<button class="btn primary" data-action="unlock" data-id="${r.id}" ${dis}>Unlock Premium</button>

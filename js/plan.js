@@ -19,15 +19,20 @@ const Split = {
    * @param responsibilities household responsibilities (with minutes/frequency)
    * @param memberIds        people to share between
    * @param prefs            { [uid]: { [responsibilityId]: 'love'|'ok'|'rather_not' } }
+   * @param options.fixed     { [id]: uid } items that stay where they are (re-sharing only some)
+   * @param options.seed      a reshuffle uses a new seed, so the plan can come out differently
    * @returns { assignments: { [responsibilityId]: uid }, loads: { [uid]: minutesPerWeek } }
    * Deterministic: the same input always gives the same plan on every phone.
    */
-  run(responsibilities, memberIds, prefs) {
+  run(responsibilities, memberIds, prefs, options = {}) {
+    const fixed = options.fixed || {};
+    const seed = options.seed || 0;
+    const jitter = id => { if (!seed) return 1; let h = seed * 2654435761 >>> 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return 1 + ((h % 1000) / 1000 - 0.5) * 0.4; };
     const people = memberIds.slice().sort();
     const score = (m, r) => { const v = (prefs[m] || {})[r.id]; return v in PREF_SCORE ? PREF_SCORE[v] : 1; };
     const items = responsibilities
-      .map(r => ({ r, w: Timing.weeklyMinutes(r) }))
-      .sort((a, b) => (b.w - a.w) || (a.r.id < b.r.id ? -1 : 1));
+      .map(r => ({ r, w: Timing.weeklyMinutes(r), order: Timing.weeklyMinutes(r) * jitter(r.id) }))
+      .sort((a, b) => (b.order - a.order) || (a.r.id < b.r.id ? -1 : 1));
 
     const load = Object.fromEntries(people.map(m => [m, 0]));
     const assignments = {};
@@ -43,8 +48,14 @@ const Split = {
     const cost = (it, m) => load[m] + it.w - score(m, it.r) * 0.3 * it.w;
     const best = (it, list) => list.reduce((a, m) => (cost(it, m) < cost(it, a) ? m : a), list[0]);
 
+    // 0. Items that stay where they are.
+    for (const it of items) {
+      const m = fixed[it.r.id];
+      if (m && m in load) { give(it, m); locked.add(it.r.id); }
+    }
     // 1. Clear oppositions first: they always go to the person who loves them.
     for (const it of items) {
+      if (it.r.id in assignments) continue;
       const c = candidates(it);
       if (c.length < people.length) { give(it, best(it, c)); if (c.length === 1) locked.add(it.r.id); }
     }

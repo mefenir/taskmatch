@@ -272,6 +272,99 @@ const Screens = {
     </main>`;
   },
 
+  /* ---------- Premium: break a task into parts ---------- */
+  breakdown() {
+    const h = S.household;
+    const bd = S.breakdown;
+    const r = bd && h.responsibilities.find(x => x.id === bd.respId);
+    if (!r) return Screens.inventory();
+    const isOwner = Household.isOwner(h, S.user.uid);
+    const ownerName = esc(Household.memberName(Household.owner(h)));
+    const on = bd.parts.filter(p => p.on);
+    const total = on.reduce((t, p) => t + p.minutes * Timing.frequency(p.frequency).perWeek, 0);
+    const freqOptions = sel => FREQUENCIES.map(f => `<option value="${f.id}" ${f.id === sel ? 'selected' : ''}>${f.label}</option>`).join('');
+    const minuteOptions = sel => (MINUTE_OPTIONS.includes(sel) ? MINUTE_OPTIONS : [...MINUTE_OPTIONS, sel].sort((a, b) => a - b))
+      .map(m => `<option value="${m}" ${m === sel ? 'selected' : ''}>${formatMinutes(m)}</option>`).join('');
+    const rows = bd.parts.map((p, i) => `<div class="timing-row">
+        <button class="row" style="padding:0;min-height:44px" data-action="toggleBreakPart" data-key="${i}" aria-pressed="${p.on}">
+          <span class="check" aria-hidden="true">${Icon.check}</span>
+          <div class="row-text"><span class="row-title">${esc(p.name)}</span>${p.custom ? '<span class="row-sub">Your own</span>' : ''}</div>
+        </button>
+        ${p.on ? `<div class="timing-controls">
+          <select class="select" data-change="breakFreq" data-key="${i}" aria-label="How often: ${esc(p.name)}">${freqOptions(p.frequency)}</select>
+          <select class="select minutes" data-change="breakMin" data-key="${i}" aria-label="How long: ${esc(p.name)}">${minuteOptions(p.minutes)}</select>
+        </div>` : ''}
+      </div>`).join('');
+    const wasSplit = Household.parts(r).length > 0;
+    return `<main class="screen">
+      ${topbar({ back: 'inventory' })}
+      <h1>Break down ${esc(r.name)}</h1>
+      <p class="lead" style="margin-bottom:0">${isOwner
+        ? 'Tick the parts you want as separate tasks. Each gets its own time and rhythm, and can go to a different person.'
+        : `Pick the parts you'd like as separate tasks. ${ownerName} decides.`}</p>
+      <div class="section-head"><h2 class="section-title">Parts</h2><span class="section-meta">${on.length} chosen</span></div>
+      <div class="card">${rows}
+        <div class="field" style="border-top:1px solid var(--line)"><label for="bd-new">Add your own part</label>
+          <div class="field-line"><input id="bd-new" maxlength="60" placeholder="e.g. Descale the kettle" value="${esc(bd.newName || '')}" data-input="breakNew" enterkeyhint="done">
+          <button class="mini" data-action="addBreakPart">Add</button></div></div>
+      </div>
+      <p class="fine" style="text-align:left;margin:0 4px">Together about ${formatMinutes(total)} a week. As one task it was ${formatMinutes(Timing.weeklyMinutes(r))}.</p>
+      <div class="bottom-bar">
+        ${isOwner
+          ? `<button class="btn premium" data-action="saveBreakdown" ${on.length < 2 ? 'disabled' : ''}>${wasSplit ? 'Save the parts' : 'Break it down'}</button>
+             ${wasSplit ? `<button class="btn ghost" data-action="mergeBreakdown">Put it back together</button>` : ''}`
+          : `<button class="btn premium" data-action="suggestBreakdown" ${on.length < 2 ? 'disabled' : ''}>Suggest this breakdown</button>`}
+        ${on.length < 2 ? '<p class="fine">Pick at least two parts.</p>' : ''}
+      </div>
+    </main>`;
+  },
+
+  /* ---------- Premium: rate the new parts, then see how they'd be shared ---------- */
+  reshare() {
+    const h = S.household;
+    const me = S.user.uid;
+    const rsh = h.reshare;
+    if (!rsh) return Screens.plan();
+    const units = (rsh.unitIds || []).map(id => Household.unit(h, id)).filter(Boolean);
+    const who = id => id === me ? 'You' : esc(Household.memberName(Household.member(h, id) || {}));
+    if (rsh.status === 'rating' && !(rsh.done || {})[me]) {
+      return `<main class="screen">
+        ${topbar({ back: 'plan' })}
+        <h1>How do you feel about the new parts?</h1>
+        <p class="lead" style="margin-bottom:12px">Only you see your answers. We've started from how you felt about the whole task.</p>
+        <div class="legend">${PREFERENCES.map(p => `<span>${p.emoji} ${p.label}</span>`).join('')}</div>
+        <div class="card" style="margin-top:12px">${units.map(u => {
+          const v = Household.reshareValue(h, me, u);
+          return `<div class="pref-row"><div class="row-text"><span class="row-title">${esc(u.name)}</span><span class="row-sub">${esc(u.parentName)} · ${esc(Timing.label(u))}</span></div>
+            <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn" data-action="setResharePref" data-id="${u.id}" data-key="${p.id}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${p.emoji}</button>`).join('')}</div></div>`;
+        }).join('')}</div>
+        <div class="bottom-bar"><button class="btn primary" data-action="finishReshare">Done</button></div>
+      </main>`;
+    }
+    if (rsh.status === 'rating') {
+      return `<main class="screen">${topbar({ back: 'plan' })}${houseArt}
+        <h1>Thanks!</h1><p class="lead">As soon as everyone has rated the new parts, you'll see how they'd be shared out.</p>
+        <div class="bottom-bar"><button class="btn secondary" data-action="nav" data-to="plan">Back to the plan</button></div></main>`;
+    }
+    const accepted = (rsh.accepted || {})[me];
+    const waiting = h.members.filter(m => !(rsh.accepted || {})[m.uid]).map(m => esc(Household.memberName(m)));
+    return `<main class="screen">
+      ${topbar({ back: 'plan' })}
+      <h1>Here's how the new parts would be shared</h1>
+      <p class="lead" style="margin-bottom:12px">Only these parts move. Everything else in your plan stays as it is.</p>
+      <div class="card">${units.map(u => {
+        const now = Household.assignee(h, u.id), next = (rsh.proposal || {})[u.id];
+        return `<div class="row static"><div class="row-text"><span class="row-title">${esc(u.name)}</span>
+          <span class="row-sub">${esc(u.parentName)}${now !== next ? ` · was ${who(now)}` : ''}</span></div>
+          <span class="tag" style="${next === me ? 'background:var(--accent-soft);color:var(--ink)' : ''}">${who(next)}</span></div>`;
+      }).join('')}</div>
+      <div class="bottom-bar">${accepted
+        ? `<p class="count">Waiting for ${waiting.join(' and ')} to say yes</p>`
+        : `<button class="btn primary" data-action="acceptReshare">Yes, share them like this</button>
+           <button class="btn ghost" data-action="declineReshare">Keep things as they are</button>`}</div>
+    </main>`;
+  },
+
   /* ---------- Premium ---------- */
   premium() {
     const h = S.household;
@@ -289,16 +382,28 @@ const Screens = {
     ];
     let action;
     if (premium) {
-      action = `<div class="result-card"><p class="joke">${isOwner ? 'You have Premium.' : `You have Premium through ${ownerName}.`}</p>
-        <p class="plain" style="margin:0">It covers everyone in your household.</p></div>`;
+      action = `<div class="result-card"><p class="joke">${isOwner ? 'You have Premium. 🎉' : `You have Premium through ${ownerName}. 🎉`}</p>
+        <p class="plain" style="margin:0">It covers everyone in your household.</p></div>
+        <div class="section-head"><h2 class="section-title">Get started</h2></div>
+        <div class="card">
+          <div class="row static"><span class="avatar" aria-hidden="true">1</span><div class="row-text"><span class="row-title">Open your household list</span>
+            <span class="row-sub">Every task can now be broken into parts.</span></div></div>
+          <div class="row static"><span class="avatar" aria-hidden="true">2</span><div class="row-text"><span class="row-title">Tap a task and pick its parts</span>
+            <span class="row-sub">${isOwner ? 'Choose the parts you want as separate tasks, or add your own.' : `Pick the parts you'd like and send them to ${ownerName} as a suggestion.`}</span></div></div>
+          <div class="row static"><span class="avatar" aria-hidden="true">3</span><div class="row-text"><span class="row-title">Rate the new parts and re-share</span>
+            <span class="row-sub">You both say how you feel about just the new parts, and the app shares them out fairly.</span></div></div>
+        </div>
+        <button class="btn primary" data-action="nav" data-to="inventory">Go to the household list</button>
+        ${isOwner ? `<button class="btn ghost text-danger" style="margin-top:24px" data-action="confirmCancelPremium">Cancel Premium subscription</button>` : ''}`;
     } else if (!isOwner) {
       action = `<div class="card next-card"><p style="margin:0">Premium is linked to ${ownerName}'s account and covers you both. Ask ${ownerName} to open this page and tap <b>I'm interested</b>.</p></div>`;
     } else if (status === 'pending') {
       action = `<div class="result-card"><p class="joke">Thanks, you're on the list! 🙌</p>
         <p class="plain" style="margin:0">We'll let you know as soon as Premium is ready for your household.</p></div>`;
     } else {
-      const lead = status === 'revoked' ? '<p class="fine" style="text-align:left;margin:0 0 12px">Your Premium has ended. Tap below if you would like it back.</p>'
-        : status === 'denied' ? '<p class="fine" style="text-align:left;margin:0 0 12px">Premium isn\'t available for your household just yet. You can ask again any time.</p>' : '';
+      const ended = status === 'revoked' || status === 'cancelled' || (S.subscription && S.subscription.plan === 'premium' && !premium);
+      const lead = status === 'denied' ? '<p class="fine" style="text-align:left;margin:0 0 12px">Premium isn\'t available for your household just yet. You can ask again any time.</p>'
+        : ended ? '<p class="fine" style="text-align:left;margin:0 0 12px">Your Premium has ended. Tap below if you would like it back.</p>' : '';
       action = `${lead}<button class="btn premium" data-action="requestPremium" ${S.busy ? 'disabled' : ''}>I'm interested</button>
         <p class="fine">Premium isn't on sale yet. Tap the button and we'll get in touch.</p>`;
     }
@@ -310,7 +415,8 @@ const Screens = {
       <div class="card">${benefits.map(([t, d]) => `<div class="row static">
           <span class="chev" style="color:var(--premium)">${Icon.check}</span>
           <div class="row-text"><span class="row-title">${t}</span><span class="row-sub">${d}</span></div></div>`).join('')}</div>
-      <div class="bottom-bar">${action}</div>
+      <div style="margin-top:8px">${action}</div>
+      <div style="height:calc(32px + env(safe-area-inset-bottom))"></div>
     </main>`;
   },
 
@@ -462,7 +568,7 @@ const Screens = {
         ? (pending ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${r.id}">Swap</button>`)
         : '';
       return `<div class="row static"><button class="name-btn" data-action="peek" data-id="${r.id}"><span class="row-title">${esc(r.name)}</span>
-        <span class="row-sub">${esc(Timing.label(r))}</span></button>${right}</div>`;
+        <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${esc(Timing.label(r))}</span></button>${right}</div>`;
     };
     const list = (title, items, own) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
       <div class="card">${items.length ? items.map(r => row(r, own)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
@@ -480,6 +586,17 @@ const Screens = {
     const accepted = Household.hasAccepted(h, me);
     const waiting = h.members.filter(m => !Household.hasAccepted(h, m.uid)).map(m => esc(Household.memberName(m)));
 
+    const newParts = Household.newParts(h);
+    const uneven = active && Household.premium && h.responsibilities.some(r => Household.isSplit(r)) && !Split.isEven(loads);
+    const reshareOffer = active && !h.reshare && Household.isOwner(h, me) && (newParts.length || uneven)
+      ? `<div class="nudge" style="background:var(--accent-soft)"><p>${newParts.length
+          ? `${plural(newParts.length, 'new part')} ${newParts.length === 1 ? 'is' : 'are'} waiting to be shared out. For now they stay with whoever had the whole task.`
+          : 'Things look a little uneven since the parts came back.'}</p>
+          <button class="mini" data-action="startReshare">Re-share</button></div>` : '';
+    const reshuffleLink = others.length && !(h.reshuffle && h.reshuffle.status === 'pending')
+      ? `<button class="btn ghost" style="color:var(--muted);font-weight:500;font-size:14px;min-height:40px;margin-top:20px" data-action="askReshuffle">Reshuffle the whole plan</button>`
+      : '';
+
     const bottom = active ? '' : `<div class="bottom-bar">
         ${accepted
           ? `<p class="count">Waiting for ${waiting.join(' and ')} to say yes</p>`
@@ -496,12 +613,14 @@ const Screens = {
         ? 'Who does what. Want to hand something over? Tap Swap.'
         : 'This is how it came out. If something isn\'t to your taste, tap Swap. When you\'re both happy, say yes.'}</p>
       ${swapCards(h)}
+      ${reshareOffer}
       ${balance}
       ${list('Your tasks', mine, true)}
       ${others.map(m => list(`${esc(Household.memberName(m))}'s tasks`, Household.tasksOf(h, m.uid), false)).join('')}
       ${unassigned.length ? `<div class="section-head"><h2 class="section-title">Needs a home</h2></div>
         <div class="card">${unassigned.map(r => `<div class="row static"><button class="name-btn" data-action="peek" data-id="${r.id}"><span class="row-title">${esc(r.name)}</span>
           <span class="row-sub">${esc(Timing.label(r))}</span></button><button class="mini" data-action="claim" data-id="${r.id}">I'll take it</button></div>`).join('')}</div>` : ''}
+      ${reshuffleLink}
       ${bottom}
       ${active ? bottomNav('plan') : ''}
     </main>`;
@@ -515,7 +634,7 @@ const Screens = {
     const everyone = !!S.everyone;
     const now = new Date();
     const today = Schedule.day(now);
-    const pool = h.responsibilities.filter(r => everyone || Household.assignee(h, r.id) === me);
+    const pool = Household.units(h).filter(r => everyone || Household.assignee(h, r.id) === me);
     const who = r => {
       if (!everyone) return '';
       const a = Household.assignee(h, r.id);
@@ -527,7 +646,7 @@ const Screens = {
       const done = Schedule.doneOn(c, now);
       return `<button class="row ${done ? 'done' : ''}" data-action="toggleDone" data-id="${r.id}" aria-pressed="${done}">
         <span class="check" aria-hidden="true">${Icon.check}</span>
-        <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${who(r)}${sub}</span></div>
+        <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${who(r)}${r.parentName ? esc(r.parentName) + ' · ' : ''}${sub}</span></div>
       </button>`;
     };
     const scheduled = pool.filter(r => Timing.isScheduled(r)).map(r => ({ r, due: Household.dueDate(h, r) }));
@@ -596,10 +715,12 @@ const Screens = {
     const stage = Household.stage(h);
     const hasPlan = stage === 'plan' || stage === 'active';
     const whose = r => {
-      if (!hasPlan) return '';
-      const a = Household.assignee(h, r.id);
+      const parts = Household.isSplit(r) ? `${plural(Household.parts(r).length, 'part')} · ` : '';
+      if (!hasPlan) return parts;
+      const a = Household.ownerOf(h, r);
+      if (a === 'shared') return 'Shared · ' + parts;
       if (!a || !h.memberIds.includes(a)) return 'Needs a home · ';
-      return a === me ? 'Yours · ' : `${esc(Household.memberName(Household.member(h, a)))}'s · `;
+      return (a === me ? 'Yours · ' : `${esc(Household.memberName(Household.member(h, a)))}'s · `) + parts;
     };
 
     const sections = groups.map(({ category, items }) => `<section aria-labelledby="inv-${category.id}">
@@ -652,10 +773,10 @@ const Screens = {
         <div class="card">${suggestions.map(x => {
           const by = esc(Household.memberName(Household.member(h, x.by) || { name: 'Someone' }));
           return `<div class="row static col">
-            <div class="row-text"><span class="row-title">${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}</span>
-              <span class="row-sub">Suggested by ${by}</span></div>
+            <div class="row-text"><span class="row-title">${x.type === 'breakdown' ? `Break down: ${esc(x.name)}` : `${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}`}</span>
+              <span class="row-sub">${x.type === 'breakdown' ? `Into ${esc((x.parts || []).map(p => p.name).join(', '))} · ` : ''}Suggested by ${by}</span></div>
             <div style="display:flex;gap:8px">
-              <button class="btn primary" style="min-height:44px" data-action="acceptSuggestion" data-id="${x.id}">${x.type === 'add' ? 'Add it' : 'Remove it'}</button>
+              <button class="btn primary" style="min-height:44px" data-action="acceptSuggestion" data-id="${x.id}">${x.type === 'add' ? 'Add it' : x.type === 'breakdown' ? 'Use these parts' : 'Remove it'}</button>
               <button class="btn secondary" style="min-height:44px;margin-top:0" data-action="declineSuggestion" data-id="${x.id}">Keep as is</button>
             </div></div>`;
         }).join('')}</div>`;
@@ -664,7 +785,7 @@ const Screens = {
       if (mine.length) {
         suggestionCard = `<div class="section-head"><h2 class="section-title">Your suggestions</h2><span class="section-meta">Waiting for ${esc(ownerName)}</span></div>
           <div class="card">${mine.map(x => `<div class="row static">
-            <div class="row-text"><span class="row-title">${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}</span></div>
+            <div class="row-text"><span class="row-title">${x.type === 'breakdown' ? `Break down: ${esc(x.name)}` : `${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}`}</span></div>
             ${locked ? '' : `<button class="link-btn" data-action="withdrawSuggestion" data-id="${x.id}">Withdraw</button>`}</div>`).join('')}</div>`;
       }
     }
@@ -721,7 +842,7 @@ const Screens = {
 function swapCards(h) {
   const me = S.user.uid;
   const name = id => esc(Household.memberName(Household.member(h, id) || {}));
-  const taskName = id => { const r = h.responsibilities.find(x => x.id === id); return r ? r.name : 'a task'; };
+  const taskName = id => Household.unitName(h, id);
   const incoming = Household.incomingSwap(h, me);
   const results = Household.swapResults(h, me);
   let html = '';
@@ -733,6 +854,36 @@ function swapCards(h) {
         <button class="btn primary" data-action="takeSwap" data-id="${incoming.id}">Deal, I'll take it</button>
         <button class="btn secondary" data-action="declineSwap" data-id="${incoming.id}">Nope, it's yours</button>
       </div></div>`;
+  }
+  const rs = Household.reshuffle(h);
+  if (rs && rs.status === 'pending' && rs.by !== me) {
+    html += `<div class="swap-card" role="status">
+      <p class="joke">${name(rs.by)} would like to reshuffle the whole plan. 🔀</p>
+      <p class="plain">You'd both answer again how you feel about each task, and get a fresh split. Your ticks are kept; swaps start over.</p>
+      <div class="btns">
+        <button class="btn primary" data-action="acceptReshuffle">Let's reshuffle</button>
+        <button class="btn secondary" data-action="declineReshuffle">Keep our plan</button>
+      </div></div>`;
+  } else if (rs && rs.status === 'pending' && rs.by === me) {
+    html += `<div class="result-card" role="status"><p class="plain" style="margin:0">Reshuffle asked. Waiting for the others to agree.</p></div>`;
+  } else if (rs && rs.status === 'declined' && rs.by === me && !rs.seen) {
+    html += `<div class="result-card" role="status"><p class="joke">They'd rather keep the current plan.</p>
+      <p class="plain">Nothing changes. You can still swap single tasks.</p>
+      <button class="btn secondary" style="min-height:44px" data-action="dismissReshuffle">OK</button></div>`;
+  }
+  const rsh = h.reshare;
+  if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) {
+    html += `<div class="swap-card" role="status"><p class="joke">Time to share out the new parts ✂️</p>
+      <p class="plain">Say how you feel about ${plural((rsh.unitIds || []).length, 'new part')}. It only takes a moment.</p>
+      <button class="btn primary" data-action="nav" data-to="reshare">Rate the new parts</button></div>`;
+  } else if (rsh && rsh.status === 'rating') {
+    html += `<div class="result-card" role="status"><p class="plain" style="margin:0">Thanks! Waiting for the others to rate the new parts.</p></div>`;
+  } else if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) {
+    html += `<div class="swap-card" role="status"><p class="joke">The new parts have been shared out.</p>
+      <p class="plain">Have a look and say yes if it works for you.</p>
+      <button class="btn primary" data-action="nav" data-to="reshare">See the changes</button></div>`;
+  } else if (rsh && rsh.status === 'proposed') {
+    html += `<div class="result-card" role="status"><p class="plain" style="margin:0">You said yes. Waiting for the others.</p></div>`;
   }
   results.forEach(x => {
     const vars = { name: Household.memberName(Household.member(h, x.to) || {}), task: taskName(x.respId), other: x.gave ? taskName(x.gave) : 'nothing' };
@@ -761,7 +912,8 @@ function memberChips(h) {
   return h.members.map(m => {
     const n = Household.memberName(m);
     const you = m.uid === S.user.uid ? ' <span class="you">(you)</span>' : '';
-    return `<span class="member"><span class="avatar" aria-hidden="true">${esc(n.charAt(0).toUpperCase())}</span>${esc(n)}${you}</span>`;
+    const gold = Entitlements.isPremium(S.subscription) ? ' premium' : '';
+    return `<span class="member${gold}"><span class="avatar" aria-hidden="true">${esc(n.charAt(0).toUpperCase())}</span>${esc(n)}${you}${gold ? ` <span class="gold" aria-label="Premium">${Icon.sparkSm}</span>` : ''}</span>`;
   }).join('');
 }
 
@@ -788,18 +940,21 @@ const Sheets = {
 
   /** What a task includes. On Free the parts are a locked preview of Premium. */
   taskPeek(r) {
-    const parts = Library.parts(r.libraryId);
     const unlocked = Entitlements.canViewDetailedTasks(S.subscription);
+    const parts = unlocked && Household.parts(r).length ? Household.parts(r).map(p => p.name) : Library.parts(r.libraryId);
     const assignee = Household.assignee(S.household, r.id);
     const who = assignee ? (assignee === S.user.uid ? 'Yours' : `${Household.memberName(Household.member(S.household, assignee))}'s`) : '';
     Sheet.open(`<h2>${esc(r.name)}</h2>
       <p style="margin-bottom:12px">${who ? esc(who) + ' · ' : ''}${esc(Timing.label(r))}${r.mentalLoad ? ' · Mental load' : ''}</p>
-      ${parts.length ? `<div class="section-head" style="margin-top:0"><h3 class="section-title">Includes</h3></div>
+      ${parts.length ? `<div class="section-head" style="margin-top:0"><h3 class="section-title">${unlocked && Household.parts(r).length ? 'Broken into' : 'Includes'}</h3></div>
         <div class="card">${parts.map(p => `<div class="row static ${unlocked ? '' : 'locked'}">
           <div class="row-text"><span class="row-title">${esc(p)}</span></div>${unlocked ? '' : `<span class="chev">${Icon.lock}</span>`}</div>`).join('')}</div>` : ''}
       ${unlocked
-        ? `<p>Splitting these into separate tasks with their own timing and owner is coming soon.</p>
-           <button class="btn secondary" data-action="closeSheet">Close</button>`
+        ? (Household.isOwner(S.household, S.user.uid)
+            ? `<button class="btn premium" data-action="openBreakdown" data-id="${r.id}">${Household.parts(r).length ? 'Edit the parts' : 'Break into parts'}</button>
+               <button class="btn ghost" data-action="closeSheet">Close</button>`
+            : `<button class="btn premium" data-action="openBreakdown" data-id="${r.id}">Suggest a breakdown</button>
+               <button class="btn ghost" data-action="closeSheet">Close</button>`)
         : `<p>With Premium, split these into separate tasks with their own timing, and share them between you.</p>
            <button class="btn premium" data-action="sheetNav" data-to="premium">See Premium</button>
            <button class="btn ghost" data-action="closeSheet">Not now</button>`}`, r.name);
@@ -834,6 +989,32 @@ const Sheets = {
       ${canShare ? `<button class="btn primary" data-action="shareInvite" data-link="${esc(state.link)}">Share link</button>` : ''}
       <button class="btn ${canShare ? 'secondary' : 'primary'}" data-action="copyInvite" data-link="${esc(state.link)}">${Icon.copy} Copy link</button>
       <p class="fine">Works once and expires in ${APP_CONFIG.inviteValidDays} days.</p>`, 'Invite');
+  },
+
+  /** Asking to start the whole split over. Not recommended, so it's worded honestly. */
+  askReshuffle() {
+    const others = S.household.members.filter(m => m.uid !== S.user.uid).map(m => esc(Household.memberName(m)));
+    Sheet.open(`<h2>Reshuffle the whole plan?</h2>
+      <p>You'd both answer again how you feel about each task, and the app makes a fresh split. Your ticks are kept, but any swaps start over, and the plan pauses until you both say yes again.</p>
+      <p style="margin-top:-8px">Usually a swap is enough. ${others.join(' and ')} will be asked to agree first.</p>
+      <button class="btn secondary" data-action="requestReshuffle">Ask ${others.join(' and ')}</button>
+      <button class="btn ghost" data-action="closeSheet">Keep my plan</button>`, 'Reshuffle');
+  },
+
+  /** Shown once on each device when Premium switches on. */
+  premiumWelcome() {
+    Sheet.open(`<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
+      <h2>Premium is on 🎉</h2>
+      <p>Your whole household now has Premium. Nothing in your plan has changed: you decide what to break into smaller parts.</p>
+      <button class="btn premium" data-action="sheetNav" data-to="premium">See what's new</button>
+      <button class="btn ghost" data-action="closeSheet">Later</button>`, 'Premium is on');
+  },
+
+  confirmCancelPremium() {
+    Sheet.open(`<h2>Cancel Premium?</h2>
+      <p>Premium ends straight away for everyone in your household. Tasks you broke into parts go back to being one task each. Your breakdowns are remembered, so they come back if you get Premium again.</p>
+      <button class="btn danger" data-action="cancelPremium">Cancel Premium</button>
+      <button class="btn ghost" data-action="closeSheet">Keep Premium</button>`, 'Cancel Premium');
   },
 
   /** Offering one of my tasks to someone else. */

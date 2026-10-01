@@ -62,13 +62,46 @@ function addOwnRow(label, locked) {
 const Sheet = (() => {
   let timer = null;
   const root = () => document.getElementById('sheet-root');
+
+  /** Pull the handle (or the top of the sheet) down to close it. */
+  function enableDrag(panel) {
+    let startY = 0, dy = 0, startT = 0, dragging = false;
+    const start = e => {
+      const onHandle = e.target.closest('.sheet-handle');
+      if (!onHandle && (panel.scrollTop > 0 || e.target.closest('button, a, input, select, textarea'))) return;
+      dragging = true; startY = e.clientY; dy = 0; startT = Date.now();
+      panel.style.transition = 'none';
+      try { panel.setPointerCapture(e.pointerId); } catch (_) {}
+    };
+    const move = e => {
+      if (!dragging) return;
+      dy = Math.max(0, e.clientY - startY);
+      panel.style.transform = `translateY(${dy}px)`;
+      if (dy > 4) e.preventDefault();
+    };
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      panel.style.transition = '';
+      const fast = dy > 40 && (dy / Math.max(1, Date.now() - startT)) > 0.5;
+      if (dy > Math.min(140, panel.offsetHeight * 0.3) || fast) { panel.style.transform = 'translateY(100%)'; Sheet.close(); }
+      else panel.style.transform = '';
+    };
+    panel.addEventListener('pointerdown', start);
+    panel.addEventListener('pointermove', move);
+    panel.addEventListener('pointerup', end);
+    panel.addEventListener('pointercancel', end);
+  }
+
   return {
     open(html, label) {
       clearTimeout(timer);
       const r = root();
       r.innerHTML = `<div class="sheet-backdrop" data-action="closeSheet"></div>
-        <div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(label || 'Dialog')}">${html}</div>`;
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(label || 'Dialog')}">
+          <div class="sheet-handle" aria-hidden="true"><span></span></div>${html}</div>`;
       r.classList.add('open');
+      enableDrag(r.querySelector('.sheet'));
       requestAnimationFrame(() => requestAnimationFrame(() => r.classList.add('show')));
       const first = r.querySelector('.sheet button');
       if (first) first.focus({ preventScroll: true });
