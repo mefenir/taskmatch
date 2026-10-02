@@ -226,10 +226,14 @@ function watchSubscription(ownerId) {
   stop('sub');
   watchers.ownerId = ownerId;
   S.subscription = null;
+  watchers.subLoaded = false;
   watchers.sub = Backend.Repo.watchSubscription(ownerId, sub => {
     const was = Entitlements.isPremium(S.subscription);
+    const firstLoad = !watchers.subLoaded;
     S.subscription = sub;
-    if (was !== Entitlements.isPremium(sub)) { maybeBuildPlan(); rerender(); }
+    watchers.subLoaded = true;
+    if (was && !Entitlements.isPremium(sub) && !firstLoad) premiumEnded();
+    if (was !== Entitlements.isPremium(sub) || firstLoad) { maybeBuildPlan(); rerender(); }
     if (Entitlements.isPremium(sub)) {
       const t = sub.grantedAt && typeof sub.grantedAt.toMillis === 'function' ? sub.grantedAt.toMillis() : (sub.grantedAt || 1);
       const key = `household-app/premium-welcome/${ownerId}/${t}`;
@@ -469,12 +473,14 @@ const Actions = {
   confirmCancelPremium() { Sheets.confirmCancelPremium(); },
   async cancelPremium() {
     Sheet.close();
+    S.justCancelled = true;
     try { await Backend.Repo.cancelPremium(S.user.uid); toast('Premium cancelled. Your breakdowns are remembered.'); }
-    catch (e) { console.error(e); toast("Couldn't cancel. Check your connection and try again."); }
+    catch (e) { S.justCancelled = false; console.error(e); toast("Couldn't cancel. Check your connection and try again."); }
   },
 
   /* break a task into parts (owner saves, partner suggests) */
   openBreakdown(d) {
+    if (premiumGone()) return;
     const h = S.household;
     const r = h.responsibilities.find(x => x.id === d.id);
     if (!r) return;
@@ -498,6 +504,7 @@ const Actions = {
     const input = document.getElementById('bd-new'); if (input) { input.value = ''; input.focus(); }
   },
   saveBreakdown() {
+    if (premiumGone()) return;
     const h = S.household;
     const bd = S.breakdown;
     const r = h.responsibilities.find(x => x.id === bd.respId);
@@ -513,6 +520,7 @@ const Actions = {
       : `${r.name} is now ${parts.length} parts.`);
   },
   mergeBreakdown() {
+    if (premiumGone()) return;
     const h = S.household;
     const r = h.responsibilities.find(x => x.id === S.breakdown.respId);
     Household.setBreakdown(h, r.id, []);
@@ -523,6 +531,7 @@ const Actions = {
     toast(`${r.name} is one task again.`);
   },
   suggestBreakdown() {
+    if (premiumGone()) return;
     const h = S.household;
     const bd = S.breakdown;
     const parts = bd.parts.filter(p => p.on);
@@ -536,6 +545,7 @@ const Actions = {
 
   /* re-share only the new parts */
   startReshare() {
+    if (premiumGone()) return;
     const h = S.household;
     const fresh = Household.newParts(h).map(u => u.id);
     const ids = fresh.length ? fresh : Household.units(h).filter(u => u.parentId).map(u => u.id);
@@ -544,9 +554,10 @@ const Actions = {
     save('reshare');
     go('reshare');
   },
-  setResharePref(d) { Household.setResharePref(S.household, S.user.uid, d.id, d.key); save('reshare'); rerender(); },
-  finishReshare() { Household.finishReshare(S.household, S.user.uid); save('reshare'); rerender(); },
+  setResharePref(d) { if (premiumGone()) return; Household.setResharePref(S.household, S.user.uid, d.id, d.key); save('reshare'); rerender(); },
+  finishReshare() { if (premiumGone()) return; Household.finishReshare(S.household, S.user.uid); save('reshare'); rerender(); },
   acceptReshare() {
+    if (premiumGone()) return;
     const h = S.household;
     const done = Household.acceptReshare(h, S.user.uid);
     save('plan', 'reshare');
@@ -673,7 +684,7 @@ const Actions = {
     rerender();
   },
   acceptSuggestion(d) {
-    if (!isOwner()) return;
+    if (!isOwner() || premiumGone()) return;
     const sug = Household.suggestions(S.household).find(x => x.id === d.id);
     Household.acceptSuggestion(S.household, d.id);
     save('responsibilities', 'suggestions');
@@ -713,7 +724,48 @@ let currentRoute = null;
 const hashName = () => location.hash.replace(/^#\/?/, '').split('?')[0];
 
 /** Broken-down tasks only count while the household has Premium. */
-function syncPremium() { Household.premium = Entitlements.canViewDetailedTasks(S.subscription); }
+function syncPremium() {
+  Household.premium = Entitlements.canViewDetailedTasks(S.subscription);
+  if (!Household.premium) dropPremiumLeftovers();
+}
+
+/**
+ * Without Premium nothing Premium-only may stay open: a re-share in progress, suggestions
+ * waiting for the organiser, a breakdown being edited. (Parts themselves are kept but merge
+ * back automatically, so they return as they were if Premium comes back.)
+ * Data is only cleared once the subscription has really loaded, never on a slow start.
+ */
+function dropPremiumLeftovers() {
+  S.breakdown = null;
+  S.suggestMode = false;
+  const h = S.household;
+  if (!h || !watchers.subLoaded || !S.user) return;
+  const fields = [];
+  if (h.reshare) { h.reshare = null; fields.push('reshare'); }
+  if (Household.isOwner(h, S.user.uid) && Household.suggestions(h).length) { h.suggestions = []; fields.push('suggestions'); }
+  if (fields.length) save(...fields);
+}
+
+/** Premium just switched off while the app was open: close whatever Premium thing was showing. */
+function premiumEnded() {
+  syncPremium();
+  if (Sheet.isOpen()) Sheet.close();
+  if (S.justCancelled) { S.justCancelled = false; return; }
+  const h = S.household;
+  const hadParts = h && h.plan && h.responsibilities.some(r => Household.parts(r).length);
+  setTimeout(() => Sheets.notice('Premium has ended',
+    (hadParts ? 'Tasks you broke into parts are one task again, with whoever did most of them. ' : 'Your household is back on Free. ')
+    + 'Anything Premium that was still waiting, like suggestions or sharing out new parts, has been cancelled.'), 260);
+}
+
+/** For actions that only make sense with Premium: stop quietly if it has ended meanwhile. */
+function premiumGone() {
+  if (Entitlements.canViewDetailedTasks(S.subscription)) return false;
+  toast('Premium has ended, so this is no longer available.');
+  S.breakdown = null;
+  goHome();
+  return true;
+}
 
 function resolveRoute() {
   const name = hashName();
@@ -729,7 +781,7 @@ function resolveRoute() {
   const stage = Household.stage(h);
   if (name === 'premium') return 'premium';
   if (name === 'breakdown' && S.breakdown && Entitlements.canViewDetailedTasks(S.subscription)) return 'breakdown';
-  if (name === 'reshare' && h.reshare) return 'reshare';
+  if (name === 'reshare' && Household.premium && h.reshare) return 'reshare';
 
   // Setting up: the owner walks through the steps, everyone else waits.
   if (stage === 'setup') {

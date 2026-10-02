@@ -483,7 +483,7 @@ const Screens = {
             </button>`;
         }).join('')}</div>`).join('')}` : '';
 
-    const mine = Household.suggestions(h).filter(x => x.by === me);
+    const mine = (Household.premium ? Household.suggestions(h) : []).filter(x => x.by === me);
     const locked = !Entitlements.canSuggestChanges(S.subscription);
     const bottom = suggesting
       ? `<p class="count">${mine.length ? `${plural(mine.length, 'suggestion')} sent to ${esc(ownerName)}` : 'Tap anything to suggest a change'}</p>
@@ -765,7 +765,7 @@ const Screens = {
 
     // Suggestions: the owner decides; members see their own pending ones.
     const locked = !Entitlements.canSuggestChanges(S.subscription);
-    const suggestions = Household.suggestions(h);
+    const suggestions = Household.premium ? Household.suggestions(h) : [];
     let suggestionCard = '';
     if (isOwner && suggestions.length) {
       suggestionCard = `<div class="section-head"><h2 class="section-title">Suggestions</h2><span class="section-meta">${suggestions.length}</span></div>
@@ -840,7 +840,7 @@ const Screens = {
 /** The organiser has new parts to share out, or things got uneven after parts came back. */
 function reshareOfferFor(h, me) {
   const active = h.plan && h.plan.status === 'active';
-  if (!active || h.reshare || !Household.isOwner(h, me)) return false;
+  if (!active || !Household.premium || h.reshare || !Household.isOwner(h, me)) return false;
   if (Household.newParts(h).length) return true;
   return Household.premium && h.responsibilities.some(r => Household.isSplit(r)) && !Split.isEven(Household.loads(h));
 }
@@ -851,7 +851,7 @@ function planNeedsMe(h) {
   if (reshareOfferFor(h, me) || Household.incomingSwap(h, me)) return true;
   const rs = Household.reshuffle(h);
   if (rs && rs.status === 'pending' && rs.by !== me) return true;
-  const rsh = h.reshare;
+  const rsh = Household.premium ? h.reshare : null;
   if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) return true;
   if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) return true;
   if (rs && rs.status === 'declined' && rs.by === me && !rs.seen) return true;   // "They'd rather keep the plan" → OK
@@ -862,7 +862,7 @@ function planNeedsMe(h) {
 
 /** Something on the Household tab is waiting for me: suggestions the organiser hasn't answered yet. */
 function householdNeedsMe(h) {
-  return Household.isOwner(h, S.user.uid) && Household.suggestions(h).length > 0;
+  return Household.premium && Household.isOwner(h, S.user.uid) && Household.suggestions(h).length > 0;
 }
 
 /** Red dots on the bottom tabs: every tab where an action is waiting for me. */
@@ -901,7 +901,7 @@ function swapCards(h) {
       <p class="plain">Nothing changes. You can still swap single tasks.</p>
       <button class="btn secondary" style="min-height:44px" data-action="dismissReshuffle">OK</button></div>`;
   }
-  const rsh = h.reshare;
+  const rsh = Household.premium ? h.reshare : null;
   if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) {
     html += `<div class="swap-card" role="status"><p class="joke">Time to share out the new parts ✂️</p>
       <p class="plain">Say how you feel about ${plural((rsh.unitIds || []).length, 'new part')}. It only takes a moment.</p>
