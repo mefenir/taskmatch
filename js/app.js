@@ -514,10 +514,9 @@ const Actions = {
     save(...(h.plan ? ['responsibilities', 'plan'] : ['responsibilities']));
     maybeBuildPlan(true);
     S.breakdown = null;
+    if (shareNewParts()) { toast(`${r.name} is now ${parts.length} parts. Say how you feel about them, then they're shared out fairly.`); return; }
     go('inventory');
-    toast(Household.stage(h) === 'active'
-      ? `${r.name} is now ${parts.length} parts. Share them out from the plan when you're ready.`
-      : `${r.name} is now ${parts.length} parts.`);
+    toast(`${r.name} is now ${parts.length} parts.`);
   },
   mergeBreakdown() {
     if (premiumGone()) return;
@@ -633,7 +632,7 @@ const Actions = {
     if (!swap || swap.status !== 'pending') return;
     Household.acceptSwap(h, d.id, d.key || null);
     save('plan', 'swaps');
-    const task = (h.responsibilities.find(r => r.id === swap.respId) || {}).name;
+    const task = Household.unitName(h, swap.respId);
     toast(`Deal! ${task} is yours now.`);
     rerender();
   },
@@ -724,6 +723,7 @@ const Actions = {
     save('responsibilities', 'suggestions');
     maybeBuildPlan(true);
     rerender();
+    if (sug && sug.type === 'breakdown' && shareNewParts()) { toast(`${sug.name} is now broken into parts. Say how you feel about them, then they're shared out fairly.`); return; }
     if (sug) toast(sug.type === 'add' ? `Added ${sug.name}` : sug.type === 'breakdown' ? `${sug.name} is now broken into parts.` : `Removed ${sug.name}`);
   },
   declineSuggestion(d) {
@@ -791,6 +791,19 @@ function premiumEnded() {
   setTimeout(() => Sheets.notice('Premium has ended',
     (hadParts ? 'Tasks you broke into parts are one task again, with whoever did most of them. ' : 'Your household is back on Free. ')
     + 'Anything Premium that was still waiting, like suggestions or sharing out new parts, has been cancelled.'), 260);
+}
+
+/** New parts in a running plan are shared out straight away (rate → fair split → both say yes),
+ *  instead of quietly staying with whoever had the whole task. */
+function shareNewParts() {
+  const h = S.household;
+  if (!h || Household.stage(h) !== 'active' || h.reshare || !Household.isOwner(h, S.user.uid)) return false;
+  const ids = Household.newParts(h).map(u => u.id);
+  if (!ids.length) return false;
+  Household.startReshare(h, S.user.uid, ids);
+  save('reshare');
+  go('reshare');
+  return true;
 }
 
 /** For actions that only make sense with Premium: stop quietly if it has ended meanwhile. */

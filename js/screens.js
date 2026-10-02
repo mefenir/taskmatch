@@ -348,16 +348,24 @@ const Screens = {
     }
     const accepted = (rsh.accepted || {})[me];
     const waiting = h.members.filter(m => !(rsh.accepted || {})[m.uid]).map(m => esc(Household.memberName(m)));
+    const moved = (rsh.moved || []).map(id => Household.unit(h, id)).filter(Boolean);
+    const changeRow = u => {
+      const now = Household.assignee(h, u.id), next = (rsh.proposal || {})[u.id];
+      return `<div class="row static"><div class="row-text"><span class="row-title">${esc(u.name)}</span>
+        <span class="row-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${esc(Timing.label(u))}${now !== next ? ` · was ${who(now)}` : ''}</span></div>
+        <span class="tag" style="${next === me ? 'background:var(--accent-soft);color:var(--ink)' : ''}">${who(next)}</span></div>`;
+    };
     return `<main class="screen">
       ${topbar({ back: 'plan' })}
       <h1>Here's how the new parts would be shared</h1>
-      <p class="lead" style="margin-bottom:12px">Only these parts move. Everything else in your plan stays as it is.</p>
-      <div class="card">${units.map(u => {
-        const now = Household.assignee(h, u.id), next = (rsh.proposal || {})[u.id];
-        return `<div class="row static"><div class="row-text"><span class="row-title">${esc(u.name)}</span>
-          <span class="row-sub">${esc(u.parentName)}${now !== next ? ` · was ${who(now)}` : ''}</span></div>
-          <span class="tag" style="${next === me ? 'background:var(--accent-soft);color:var(--ink)' : ''}">${who(next)}</span></div>`;
-      }).join('')}</div>
+      <p class="lead" style="margin-bottom:12px">${moved.length
+        ? 'The new parts take quite some time, so a few other tasks change hands too, to keep things even.'
+        : 'Only these parts move. Everything else in your plan stays as it is.'}</p>
+      <div class="card">${units.map(changeRow).join('')}</div>
+      ${moved.length ? `<div class="section-head"><h2 class="section-title">Also changing hands</h2></div>
+        <div class="card">${moved.map(changeRow).join('')}</div>` : ''}
+      ${rsh.loads ? `<div class="card" style="margin-top:16px"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${h.members.map(m =>
+        `<div style="display:flex;justify-content:space-between"><span>${who(m.uid)}</span><span class="sub">about ${formatMinutes(rsh.loads[m.uid] || 0)} a week</span></div>`).join('')}</div></div>` : ''}
       <div class="bottom-bar">${accepted
         ? `<p class="count">Waiting for ${waiting.join(' and ')} to say yes</p>`
         : `<button class="btn primary" data-action="acceptReshare">Yes, share them like this</button>
@@ -1136,7 +1144,8 @@ const Sheets = {
   /** Offering one of my tasks to someone else. */
   askSwap(respId) {
     const h = S.household;
-    const r = h.responsibilities.find(x => x.id === respId);
+    const r = Household.unit(h, respId) || h.responsibilities.find(x => x.id === respId);
+    if (!r) return;
     const others = h.members.filter(m => m.uid !== S.user.uid);
     const offer = m => `<button class="btn primary" data-action="sendSwap" data-id="${respId}" data-to="${m.uid}">Offer it to ${esc(Household.memberName(m))}</button>`;
     Sheet.open(`<h2>Hand over ${esc(r.name)}?</h2>

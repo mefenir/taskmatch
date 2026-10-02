@@ -432,10 +432,19 @@ const Household = {
     const ids = new Set(h.reshare.unitIds);
     const fixed = Object.fromEntries(units.filter(u => !ids.has(u.id)).map(u => [u.id, this.assignee(h, u.id)]).filter(([, m]) => m));
     const prefs = Object.fromEntries(h.memberIds.map(m => [m, Object.fromEntries(units.map(u => [u.id, this.reshareValue(h, m, u)]))]));
-    const { assignments } = Split.run(units, h.memberIds, prefs, { fixed, seed: h.planSeed || 0 });
-    const proposal = Object.fromEntries(h.reshare.unitIds.filter(id => assignments[id]).map(id => [id, assignments[id]]));
-    h.reshare = { ...h.reshare, status: 'proposed', proposal, accepted: {} };
+    // First try moving only the new parts. If that can't keep things even (say a new part takes
+    // much longer than usual), let the fewest other tasks move too.
+    let { assignments, loads } = Split.run(units, h.memberIds, prefs, { fixed, seed: h.planSeed || 0 });
+    let moved = [];
+    if (!Split.isEven(loads)) {
+      const soft = Split.run(units, h.memberIds, prefs, { start: fixed, seed: h.planSeed || 0 });
+      const softMoved = Object.keys(fixed).filter(id => soft.assignments[id] !== fixed[id]);
+      if (Split.isEven(soft.loads) || this.gap(soft.loads) < this.gap(loads)) { assignments = soft.assignments; loads = soft.loads; moved = softMoved; }
+    }
+    const proposal = Object.fromEntries([...h.reshare.unitIds, ...moved].filter(id => assignments[id]).map(id => [id, assignments[id]]));
+    h.reshare = { ...h.reshare, status: 'proposed', proposal, moved, loads, accepted: {} };
   },
+  gap(loads) { const v = Object.values(loads); return v.length ? Math.max(...v) - Math.min(...v) : 0; },
   /** Everyone said yes → apply. */
   acceptReshare(h, userId) {
     h.reshare = { ...h.reshare, accepted: { ...(h.reshare.accepted || {}), [userId]: true } };

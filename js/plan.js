@@ -20,12 +20,14 @@ const Split = {
    * @param memberIds        people to share between
    * @param prefs            { [uid]: { [responsibilityId]: 'love'|'ok'|'rather_not' } }
    * @param options.fixed     { [id]: uid } items that stay where they are (re-sharing only some)
+   * @param options.start     { [id]: uid } where items start; unlike fixed they may still move to even things out
    * @param options.seed      a reshuffle uses a new seed, so the plan can come out differently
    * @returns { assignments: { [responsibilityId]: uid }, loads: { [uid]: minutesPerWeek } }
    * Deterministic: the same input always gives the same plan on every phone.
    */
   run(responsibilities, memberIds, prefs, options = {}) {
     const fixed = options.fixed || {};
+    const start = options.start || {};
     const seed = options.seed || 0;
     const jitter = id => { if (!seed) return 1; let h = seed * 2654435761 >>> 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return 1 + ((h % 1000) / 1000 - 0.5) * 0.4; };
     const people = memberIds.slice().sort();
@@ -52,6 +54,11 @@ const Split = {
     for (const it of items) {
       const m = fixed[it.r.id];
       if (m && m in load) { give(it, m); locked.add(it.r.id); }
+    }
+    // 0b. Items that start with someone but may still move (only as far as needed).
+    for (const it of items) {
+      const m = start[it.r.id];
+      if (!(it.r.id in assignments) && m && m in load) give(it, m);
     }
     // 1. Clear oppositions first: they always go to the person who loves them.
     for (const it of items) {
