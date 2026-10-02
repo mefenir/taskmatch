@@ -23,7 +23,7 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 - **The fair split** (`js/plan.js`). Shares tasks by *weekly effort* (time × how often), not by count. A clear opposition (❤️ vs 🙃) always goes to the person who loves it; everything else is balanced, leaning towards what people like. The same answers always give the same plan.
 - **The plan.** Both see who does what and "Evenly split". To hand something over, tap **Swap**: the other person takes it and picks one of their tasks to give back — or declines. Both say **Start this plan** to begin.
 - **Daily use.** Today / This week / This month, with a toggle for everyone's tasks. Tap to tick off (tap again the same day to undo); recurring tasks come back on schedule, and each person's first round is spread out so day one isn't overloaded. "As needed" tasks are ticked whenever they happen.
-- Tasks added after the plan starts show up under **Needs a home** for someone to claim.
+- **New tasks are shared out automatically.** Anything added to a running plan (a task from the list, a custom task, or new parts with Premium) is rated by both (❤️/🙂/🙃) and split fairly; both say yes. If new tasks alone can't keep things even, the fewest other tasks change hands too, shown before anyone agrees. Saying "not now" leaves new tasks under **Needs a home** for someone to claim.
 - **Reshuffle** (low-key button at the bottom of the plan, Free and Premium). Asks the other person first; if they agree, both answer preferences again and get a fresh split that differs from the old one.
 - Bottom sheets can be closed by dragging their top bar down.
 
@@ -37,7 +37,7 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 - Seeing the **total time per person** on the plan is Premium. Per-task times are free.
 
 - When Premium switches on, names get a gold badge and everyone sees a one-time **Premium is on** message with a button to the benefits.
-- **Breaking tasks into parts.** Only the owner can break a task down (tap a task → Break into parts). Partners tap **Suggest a breakdown**; the owner accepts or declines. New parts are then rated (❤️/🙂/🙃) and only those parts are re-shared; both say yes. Everything else in the plan stays as it was.
+- **Breaking tasks into parts.** Only the owner can break a task down (tap a task → Break into parts). Partners tap **Suggest a breakdown**; the owner accepts or declines. New parts are then shared out automatically like any new task (see above).
 - **When Premium ends**, parts merge back into their task and whoever had most of it (by effort) keeps it. Nothing is deleted: when Premium comes back, the breakdown returns as before with the same people.
 - **Board** (top of Today): both write. 💬 *Note* stays 7 days; 🧴 *Running low* goes to the Today list of whoever looks after the related task (Household supplies, Grocery, pets, car, garden…) until someone has got it; ⚡ *Today only* goes to whoever taps "I'll do it" first. Authors can delete their own notes. New notes from your partner put a red dot on Today. Without Premium the board is hidden (notes are kept).
 - The owner can **Cancel Premium subscription** on the Premium page. That switches Premium off for everyone (shown as "Cancelled by user" in the admin panel).

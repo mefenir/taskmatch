@@ -405,15 +405,30 @@ const Household = {
     });
   },
   /** Parts that haven't been shared out yet (they sit with the task's owner for now). */
-  newParts(h) {
-    if (!this.premium || !h.plan || h.plan.status !== 'active') return [];
+  newParts(h) { return this.newUnits(h).filter(u => u.parentId); },
+  /** Anything new in a running plan that hasn't been shared out yet: tasks added to the list
+   *  (nobody has them) and, with Premium, new parts (still sitting with whoever had the whole
+   *  task). Tasks the household chose to leave under "Needs a home" are skipped. */
+  newUnits(h) {
+    if (!h.plan || h.plan.status !== 'active') return [];
     const a = h.plan.assignments || {};
-    return this.units(h).filter(u => u.parentId && !a[u.id]);
+    const skipped = new Set(h.plan.skipped || []);
+    return this.units(h).filter(u => !skipped.has(u.id) &&
+      (u.parentId ? !a[u.id] : !h.memberIds.includes(this.assignee(h, u.id))));
+  },
+  /** A re-share that includes task parts only exists with Premium. */
+  reshareHasParts(h, rsh) { return (rsh.unitIds || []).some(id => this.parentOf(h, id)); },
+  activeReshare(h) {
+    const r = h.reshare;
+    if (!r) return null;
+    if (!this.premium && (r.premium || this.reshareHasParts(h, r))) return null;
+    return r;
   },
 
   /* ---------- Re-share: rate just some parts, re-divide only those ---------- */
   startReshare(h, by, unitIds) {
     h.reshare = { id: uid(), by, status: 'rating', unitIds, prefs: {}, done: {}, accepted: {}, at: new Date().toISOString() };
+    h.reshare.premium = this.reshareHasParts(h, h.reshare);
   },
   reshareValue(h, userId, unit) {
     const own = ((h.reshare && h.reshare.prefs) || {})[userId] || {};
@@ -455,7 +470,13 @@ const Household = {
   },
   /** Keep things as they are: the parts stay with whoever has them now. */
   declineReshare(h) {
-    (h.reshare.unitIds || []).forEach(id => { const m = this.assignee(h, id); if (m) this.setAssignee(h, id, m); });
+    const homeless = [];
+    (h.reshare.unitIds || []).forEach(id => {
+      const m = this.assignee(h, id);
+      if (m && h.memberIds.includes(m)) this.setAssignee(h, id, m); else homeless.push(id);
+    });
+    // New tasks nobody has stay under "Needs a home" without being offered again.
+    if (homeless.length) h.plan = { ...h.plan, skipped: [...new Set([...(h.plan.skipped || []), ...homeless])] };
     h.reshare = null;
   },
 

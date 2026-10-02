@@ -514,7 +514,7 @@ const Actions = {
     save(...(h.plan ? ['responsibilities', 'plan'] : ['responsibilities']));
     maybeBuildPlan(true);
     S.breakdown = null;
-    if (shareNewParts()) { toast(`${r.name} is now ${parts.length} parts. Say how you feel about them, then they're shared out fairly.`); return; }
+    if (shareNewTasks(true)) { toast(`${r.name} is now ${parts.length} parts. Say how you feel about them, then they're shared out fairly.`); return; }
     go('inventory');
     toast(`${r.name} is now ${parts.length} parts.`);
   },
@@ -543,29 +543,19 @@ const Actions = {
   },
 
   /* re-share only the new parts */
-  startReshare() {
-    if (premiumGone()) return;
-    const h = S.household;
-    const fresh = Household.newParts(h).map(u => u.id);
-    const ids = fresh.length ? fresh : Household.units(h).filter(u => u.parentId).map(u => u.id);
-    if (!ids.length) return;
-    Household.startReshare(h, S.user.uid, ids);
-    save('reshare');
-    go('reshare');
-  },
-  setResharePref(d) { if (premiumGone()) return; Household.setResharePref(S.household, S.user.uid, d.id, d.key); save('reshare'); rerender(); },
-  finishReshare() { if (premiumGone()) return; Household.finishReshare(S.household, S.user.uid); save('reshare'); rerender(); },
+  setResharePref(d) { if (premiumReshareGone()) return; Household.setResharePref(S.household, S.user.uid, d.id, d.key); save('reshare'); rerender(); },
+  finishReshare() { if (premiumReshareGone()) return; Household.finishReshare(S.household, S.user.uid); save('reshare'); rerender(); },
   acceptReshare() {
-    if (premiumGone()) return;
+    if (premiumReshareGone()) return;
     const h = S.household;
     const done = Household.acceptReshare(h, S.user.uid);
     save('plan', 'reshare');
-    if (done) { toast('Done! The new parts are shared out.'); go('plan'); } else rerender();
+    if (done) { toast('Done! Shared out fairly.'); go('plan'); } else rerender();
   },
   declineReshare() {
     Household.declineReshare(S.household);
     save('plan', 'reshare');
-    toast('No changes. The parts stay where they are.');
+    toast('No changes. Anything new that nobody has stays under Needs a home.');
     go('plan');
   },
 
@@ -723,7 +713,7 @@ const Actions = {
     save('responsibilities', 'suggestions');
     maybeBuildPlan(true);
     rerender();
-    if (sug && sug.type === 'breakdown' && shareNewParts()) { toast(`${sug.name} is now broken into parts. Say how you feel about them, then they're shared out fairly.`); return; }
+    if (sug && sug.type !== 'remove' && shareNewTasks(true)) { toast(sug.type === 'add' ? `Added ${sug.name}. Say how you feel about it, then it's shared out fairly.` : `${sug.name} is now broken into parts. Say how you feel about them, then they're shared out fairly.`); return; }
     if (sug) toast(sug.type === 'add' ? `Added ${sug.name}` : sug.type === 'breakdown' ? `${sug.name} is now broken into parts.` : `Removed ${sug.name}`);
   },
   declineSuggestion(d) {
@@ -776,7 +766,7 @@ function dropPremiumLeftovers() {
   const h = S.household;
   if (!h || !watchers.subLoaded || !S.user) return;
   const fields = [];
-  if (h.reshare) { h.reshare = null; fields.push('reshare'); }
+  if (h.reshare && (h.reshare.premium || Household.reshareHasParts(h, h.reshare))) { h.reshare = null; fields.push('reshare'); }
   if (Household.isOwner(h, S.user.uid) && Household.suggestions(h).length) { h.suggestions = []; fields.push('suggestions'); }
   if (fields.length) save(...fields);
 }
@@ -793,17 +783,28 @@ function premiumEnded() {
     + 'Anything Premium that was still waiting, like suggestions or sharing out new parts, has been cancelled.'), 260);
 }
 
-/** New parts in a running plan are shared out straight away (rate → fair split → both say yes),
- *  instead of quietly staying with whoever had the whole task. */
-function shareNewParts() {
+/** Anything new in a running plan (an added task, a custom task, new parts) is shared out
+ *  automatically: both rate it → fair split → both say yes. The organiser's app starts it,
+ *  since only the organiser changes the list. A finished re-share clears itself if its tasks
+ *  have since been removed. */
+function shareNewTasks(navigate = false) {
   const h = S.household;
-  if (!h || Household.stage(h) !== 'active' || h.reshare || !Household.isOwner(h, S.user.uid)) return false;
-  const ids = Household.newParts(h).map(u => u.id);
+  if (!h || !S.user || Household.stage(h) !== 'active' || !Household.isOwner(h, S.user.uid)) return false;
+  if (h.reshare && !(h.reshare.unitIds || []).some(id => Household.unit(h, id))) { h.reshare = null; save('reshare'); }
+  if (h.reshare) return false;
+  const ids = Household.newUnits(h).map(u => u.id);
   if (!ids.length) return false;
   Household.startReshare(h, S.user.uid, ids);
   save('reshare');
-  go('reshare');
+  if (navigate) go('reshare');
   return true;
+}
+const SHARE_FROM = ['today', 'plan', 'inventory'];
+
+/** A Premium re-share (with parts) can't go on once Premium has ended. */
+function premiumReshareGone() {
+  const h = S.household;
+  return !!(h && h.reshare && (h.reshare.premium || Household.reshareHasParts(h, h.reshare)) && premiumGone());
 }
 
 /** For actions that only make sense with Premium: stop quietly if it has ended meanwhile. */
@@ -829,7 +830,7 @@ function resolveRoute() {
   const stage = Household.stage(h);
   if (name === 'premium') return 'premium';
   if (name === 'breakdown' && S.breakdown && Entitlements.canViewDetailedTasks(S.subscription)) return 'breakdown';
-  if (name === 'reshare' && Household.premium && h.reshare) return 'reshare';
+  if (name === 'reshare' && Household.activeReshare(h)) return 'reshare';
 
   // Setting up: the owner walks through the steps, everyone else waits.
   if (stage === 'setup') {
@@ -862,6 +863,7 @@ function render(routeChanged) {
   if (name !== currentRoute && name !== 'review') S.suggestMode = false;
   currentRoute = name;
   watchLoading(name);
+  if (SHARE_FROM.includes(name)) shareNewTasks();
   $app.innerHTML = Screens[name]();
   fitButtons($app);
   if (changed) {

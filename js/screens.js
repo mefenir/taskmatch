@@ -221,7 +221,7 @@ const Screens = {
       <h1>What needs to happen in your household?</h1>
       <p class="lead" style="margin-bottom:0">${{
         setup: "Tick everything that applies. You're not deciding who does it yet.",
-        active: 'Tick anything new. New tasks show up under "Needs a home" on the plan, for one of you to take.',
+        active: "Tick anything new. Afterwards you'll both say how you feel about the new tasks, and they're shared out fairly.",
       }[Household.stage(h)] || 'Tick everything that applies. If you change the list, your partner gets to look through it again.'}</p>
       ${sections}
       <div class="section-head"><h2 class="section-title">Something missing?</h2></div>
@@ -323,19 +323,20 @@ const Screens = {
   reshare() {
     const h = S.household;
     const me = S.user.uid;
-    const rsh = h.reshare;
+    const rsh = Household.activeReshare(h);
     if (!rsh) return Screens.plan();
     const units = (rsh.unitIds || []).map(id => Household.unit(h, id)).filter(Boolean);
+    const noun = reshareNoun(h, rsh);
     const who = id => id === me ? 'You' : esc(Household.memberName(Household.member(h, id) || {}));
     if (rsh.status === 'rating' && !(rsh.done || {})[me]) {
       return `<main class="screen">
         ${topbar({ back: 'plan' })}
-        <h1>How do you feel about the new parts?</h1>
-        <p class="lead" style="margin-bottom:12px">Only you see your answers. We've started from how you felt about the whole task.</p>
+        <h1>How do you feel about the new ${noun}s?</h1>
+        <p class="lead" style="margin-bottom:12px">${noun === 'part' ? "Only you see your answers. We've started from how you felt about the whole task." : 'Only you see your answers. Then the app shares them out fairly between you.'}</p>
         <div class="legend">${PREFERENCES.map(p => `<span>${p.emoji} ${p.label}</span>`).join('')}</div>
         <div class="card" style="margin-top:12px">${units.map(u => {
           const v = Household.reshareValue(h, me, u);
-          return `<div class="pref-row"><div class="row-text"><span class="row-title">${esc(u.name)}</span><span class="row-sub">${esc(u.parentName)} · ${esc(Timing.label(u))}</span></div>
+          return `<div class="pref-row"><div class="row-text"><span class="row-title">${esc(u.name)}</span><span class="row-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${esc(Timing.label(u))}</span></div>
             <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn" data-action="setResharePref" data-id="${u.id}" data-key="${p.id}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${p.emoji}</button>`).join('')}</div></div>`;
         }).join('')}</div>
         <div class="bottom-bar"><button class="btn primary" data-action="finishReshare">Done</button></div>
@@ -343,7 +344,7 @@ const Screens = {
     }
     if (rsh.status === 'rating') {
       return `<main class="screen">${topbar({ back: 'plan' })}${houseArt}
-        <h1>Thanks!</h1><p class="lead">As soon as everyone has rated the new parts, you'll see how they'd be shared out.</p>
+        <h1>Thanks!</h1><p class="lead">As soon as everyone has rated the new ${noun}s, you'll see how they'd be shared out.</p>
         <div class="bottom-bar"><button class="btn secondary" data-action="nav" data-to="plan">Back to the plan</button></div></main>`;
     }
     const accepted = (rsh.accepted || {})[me];
@@ -352,24 +353,26 @@ const Screens = {
     const changeRow = u => {
       const now = Household.assignee(h, u.id), next = (rsh.proposal || {})[u.id];
       return `<div class="row static"><div class="row-text"><span class="row-title">${esc(u.name)}</span>
-        <span class="row-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${esc(Timing.label(u))}${now !== next ? ` · was ${who(now)}` : ''}</span></div>
+        <span class="row-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${esc(Timing.label(u))}${now !== next && h.memberIds.includes(now) ? ` · was ${who(now)}` : ''}</span></div>
         <span class="tag" style="${next === me ? 'background:var(--accent-soft);color:var(--ink)' : ''}">${who(next)}</span></div>`;
     };
     return `<main class="screen">
       ${topbar({ back: 'plan' })}
-      <h1>Here's how the new parts would be shared</h1>
+      <h1>Here's how the new ${noun}s would be shared</h1>
       <p class="lead" style="margin-bottom:12px">${moved.length
-        ? 'The new parts take quite some time, so a few other tasks change hands too, to keep things even.'
-        : 'Only these parts move. Everything else in your plan stays as it is.'}</p>
+        ? `The new ${noun}s take quite some time, so a few other tasks change hands too, to keep things even.`
+        : `Only the new ${noun}s are shared. Everything else in your plan stays as it is.`}</p>
       <div class="card">${units.map(changeRow).join('')}</div>
       ${moved.length ? `<div class="section-head"><h2 class="section-title">Also changing hands</h2></div>
         <div class="card">${moved.map(changeRow).join('')}</div>` : ''}
-      ${rsh.loads ? `<div class="card" style="margin-top:16px"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${h.members.map(m =>
+      ${rsh.loads && !Entitlements.canSeeTimeTotals(S.subscription) ? `<div class="card" style="margin-top:16px"><div class="row static"><span class="chev" style="color:var(--accent)">${Icon.check}</span>
+        <div class="row-text"><span class="row-title">${Split.isEven(rsh.loads) ? 'Evenly split' : 'As even as your answers allow'}</span><span class="row-sub">Shared by effort, not by number of tasks</span></div></div></div>` : ''}
+      ${rsh.loads && Entitlements.canSeeTimeTotals(S.subscription) ? `<div class="card" style="margin-top:16px"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${h.members.map(m =>
         `<div style="display:flex;justify-content:space-between"><span>${who(m.uid)}</span><span class="sub">about ${formatMinutes(rsh.loads[m.uid] || 0)} a week</span></div>`).join('')}</div></div>` : ''}
       <div class="bottom-bar">${accepted
         ? `<p class="count">Waiting for ${waiting.join(' and ')} to say yes</p>`
-        : `<button class="btn primary" data-action="acceptReshare">Yes, share them like this</button>
-           <button class="btn ghost" data-action="declineReshare">Keep things as they are</button>`}</div>
+        : `<button class="btn primary" data-action="acceptReshare">Yes, share it like this</button>
+           <button class="btn ghost" data-action="declineReshare">${noun === 'part' ? 'Keep things as they are' : "Not now, we'll pick them ourselves"}</button>`}</div>
     </main>`;
   },
 
@@ -591,16 +594,11 @@ const Screens = {
           <span class="row-sub">Shared by effort, not by number of tasks</span></div>
           <span class="badge">${Icon.sparkSm} Time</span></button></div>`;
 
-    const unassigned = active ? Household.unassigned(h) : [];
+    const sharing = new Set(((Household.activeReshare(h) || {}).unitIds) || []);
+    const unassigned = active ? Household.unassigned(h).filter(u => !sharing.has(u.id)) : [];
     const accepted = Household.hasAccepted(h, me);
     const waiting = h.members.filter(m => !Household.hasAccepted(h, m.uid)).map(m => esc(Household.memberName(m)));
 
-    const newParts = Household.newParts(h);
-    const reshareOffer = reshareOfferFor(h, me)
-      ? `<div class="nudge" style="background:var(--accent-soft)"><p>${newParts.length
-          ? `${plural(newParts.length, 'new part')} ${newParts.length === 1 ? 'is' : 'are'} waiting to be shared out. For now they stay with whoever had the whole task.`
-          : 'Things look a little uneven since the parts came back.'}</p>
-          <button class="mini" data-action="startReshare">Re-share</button></div>` : '';
     const reshuffleLink = others.length && !(h.reshuffle && h.reshuffle.status === 'pending')
       ? `<button class="btn ghost" style="color:var(--muted);font-weight:500;font-size:14px;min-height:40px;margin-top:20px" data-action="askReshuffle">Reshuffle the whole plan</button>`
       : '';
@@ -621,7 +619,6 @@ const Screens = {
         ? 'Who does what. Want to hand something over? Tap Swap.'
         : 'This is how it came out. If something isn\'t to your taste, tap Swap. When you\'re both happy, say yes.'}</p>
       ${swapCards(h)}
-      ${reshareOffer}
       ${balance}
       ${list('Your tasks', mine, true)}
       ${others.map(m => list(`${esc(Household.memberName(m))}'s tasks`, Household.tasksOf(h, m.uid), false)).join('')}
@@ -917,26 +914,22 @@ function noteTaskRow(h, n, ownerId, everyone) {
     <div class="row-text"><span class="row-title">${k.emoji} ${n.kind === 'low' ? 'Get ' : ''}${esc(n.text)}</span><span class="row-sub">${sub}</span></div></button>`;
 }
 
-/** The organiser has new parts to share out, or things got uneven after parts came back. */
-function reshareOfferFor(h, me) {
-  const active = h.plan && h.plan.status === 'active';
-  if (!active || !Household.premium || h.reshare || !Household.isOwner(h, me)) return false;
-  if (Household.newParts(h).length) return true;
-  return Household.premium && h.responsibilities.some(r => Household.isSplit(r)) && !Split.isEven(Household.loads(h));
-}
+/** "parts" when only task parts are being shared, otherwise "tasks". */
+function reshareNoun(h, rsh) { return (rsh.unitIds || []).every(id => Household.parentOf(h, id)) ? 'part' : 'task'; }
 
 /** Something on the Plan tab is waiting for me to act. */
 function planNeedsMe(h) {
   const me = S.user.uid;
-  if (reshareOfferFor(h, me) || Household.incomingSwap(h, me)) return true;
+  if (Household.incomingSwap(h, me)) return true;
   const rs = Household.reshuffle(h);
   if (rs && rs.status === 'pending' && rs.by !== me) return true;
-  const rsh = Household.premium ? h.reshare : null;
+  const rsh = Household.activeReshare(h);
   if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) return true;
   if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) return true;
   if (rs && rs.status === 'declined' && rs.by === me && !rs.seen) return true;   // "They'd rather keep the plan" → OK
   if (Household.swapResults(h, me).length) return true;                          // my swap was taken or declined → OK
-  if (Household.unassigned(h).length) return true;                               // "Needs a home" → someone claims it
+  const sharing = new Set(((Household.activeReshare(h) || {}).unitIds) || []);
+  if (Household.unassigned(h).some(u => !sharing.has(u.id))) return true;                               // "Needs a home" → someone claims it
   return false;
 }
 
@@ -981,15 +974,16 @@ function swapCards(h) {
       <p class="plain">Nothing changes. You can still swap single tasks.</p>
       <button class="btn secondary" style="min-height:44px" data-action="dismissReshuffle">OK</button></div>`;
   }
-  const rsh = Household.premium ? h.reshare : null;
+  const rsh = Household.activeReshare(h);
+  const noun = rsh ? reshareNoun(h, rsh) : '';
   if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) {
-    html += `<div class="swap-card" role="status"><p class="joke">Time to share out the new parts ✂️</p>
-      <p class="plain">Say how you feel about ${plural((rsh.unitIds || []).length, 'new part')}. It only takes a moment.</p>
-      <button class="btn primary" data-action="nav" data-to="reshare">Rate the new parts</button></div>`;
+    html += `<div class="swap-card" role="status"><p class="joke">Time to share out the new ${noun}s ✂️</p>
+      <p class="plain">Say how you feel about ${plural((rsh.unitIds || []).length, 'new ' + noun)}. It only takes a moment.</p>
+      <button class="btn primary" data-action="nav" data-to="reshare">Rate the new ${noun}s</button></div>`;
   } else if (rsh && rsh.status === 'rating') {
-    html += `<div class="result-card" role="status"><p class="plain" style="margin:0">Thanks! Waiting for the others to rate the new parts.</p></div>`;
+    html += `<div class="result-card" role="status"><p class="plain" style="margin:0">Thanks! Waiting for the others to rate the new ${noun}s.</p></div>`;
   } else if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) {
-    html += `<div class="swap-card" role="status"><p class="joke">The new parts have been shared out.</p>
+    html += `<div class="swap-card" role="status"><p class="joke">The new ${noun}s have been shared out.</p>
       <p class="plain">Have a look and say yes if it works for you.</p>
       <button class="btn primary" data-action="nav" data-to="reshare">See the changes</button></div>`;
   } else if (rsh && rsh.status === 'proposed') {
