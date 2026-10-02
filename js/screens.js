@@ -1187,10 +1187,12 @@ const Sheets = {
   },
 
   confirmDelete() {
-    Sheet.open(`<h2>Delete this household?</h2>
-      <p>This removes the household and its responsibilities for everyone in it. It can't be undone.</p>
-      <button class="btn danger" data-action="deleteHousehold">Delete household</button>
-      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Delete household');
+    const others = S.household.members.filter(m => m.uid !== S.user.uid).map(m => esc(Household.memberName(m)));
+    Sheet.open(`<h2>There's no way back</h2>
+      <p style="margin-bottom:12px">Deleting the household removes its tasks, your plan, everything you've ticked off${others.length ? ` and ${others.join(' and ')}'s place in it` : ''}. It's gone for good, for everyone.</p>
+      <p><b style="color:var(--ink)">Do you still want to delete the household?</b></p>
+      <button class="btn danger" data-action="deleteHousehold">Yes, delete household</button>
+      <button class="btn secondary" data-action="closeSheet">No, keep it</button>`, 'Delete household');
   },
 
   confirmLeave() {
