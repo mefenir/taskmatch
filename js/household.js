@@ -26,6 +26,16 @@
    ========================================================= */
 const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], children: [0, 8] };
 
+/* Running low → which task it belongs to. First match wins; otherwise Household supplies, then Grocery. */
+const SUPPLY_ROUTES = [
+  { lib: ['pet_care', 'feed_pet'], words: ['dog', ' cat', 'pet', 'litter', 'kibble', 'treats', 'hund', 'katze', 'bird', 'hay '] },
+  { lib: ['kids_ready', 'kids_admin'], words: ['nappies', 'nappy', 'diaper', 'baby', 'formula', 'windeln', 'school'] },
+  { lib: ['car_care', 'car_service'], words: [' car', 'motor oil', 'engine', 'washer fluid', 'windscreen', 'tyre', 'tire', 'fuel', 'petrol', 'diesel'] },
+  { lib: ['garden_tidy', 'water_garden', 'mow'], words: ['garden', 'seeds', 'soil', 'compost', 'fertili', 'hose', 'lawn', 'plant food'] },
+  { lib: ['supplies'], words: ['toilet', 'detergent', 'dishwasher', 'soap', 'sponge', 'bin bag', 'bin liner', 'bags', 'cleaner', 'cleaning', 'bleach', 'paper', 'tissue', 'shampoo', 'toothpaste', 'battery', 'batteries', 'bulb', 'foil', 'cling', 'salt for', 'rinse aid', 'softener'] },
+  { lib: ['groceries'], words: ['milk', 'bread', 'egg', 'coffee', ' tea', 'butter', 'cheese', 'fruit', 'veg', 'tomato', 'onion', 'potato', 'pasta', 'rice', 'flour', 'sugar', 'salt', 'oil', 'juice', 'water', 'beer', 'wine', 'yog', 'meat', 'chicken', 'fish', 'cereal', 'snack', 'food', 'apple', 'banana', 'sauce', 'spice', 'honey', 'jam', 'oat', 'milch', 'brot', 'eier', 'kaffee', 'käse'] },
+];
+
 const Household = {
   /** Data for a new household document (id is assigned by the backend). */
   create({ ownerId, ownerName }) {
@@ -71,6 +81,91 @@ const Household = {
   },
   agree(h, userId) {
     h.agreements = { ...(h.agreements || {}), [userId]: { at: new Date().toISOString(), signature: this.signature(h) } };
+  },
+
+  /* ---------- Board (Premium): notes, running low, today only ---------- *
+   * notes [{ id, by, kind: 'note'|'low'|'today', text, createdAt (ms), day ('YYYY-MM-DD'), claimedBy? }]
+   *  - note:  stays 7 days, the author can delete it any time
+   *  - low:   goes to whoever looks after the related task, until someone has got it
+   *  - today: on the board for the day it was written; whoever taps "I'll do it" first
+   *           takes it onto their Today list, where it stays until ticked
+   * Done items are simply removed. */
+  NOTE_DAYS: 7,
+  NOTE_MAX_LENGTH: 140,
+  notes: h => h.notes || [],
+  dayKey(ms = Date.now()) {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  },
+  noteAlive(n, now = Date.now()) {
+    const fresh = now - n.createdAt < this.NOTE_DAYS * 864e5;
+    if (n.kind === 'note') return fresh;
+    if (n.kind === 'today') return n.claimedBy ? fresh : n.day === this.dayKey(now);
+    return true;
+  },
+  liveNotes(h, now = Date.now()) { return this.notes(h).filter(n => this.noteAlive(n, now)); },
+  /** What's on the board: everything alive except "today" tasks someone has taken. */
+  boardNotes(h, now = Date.now()) {
+    return this.liveNotes(h, now).filter(n => !(n.kind === 'today' && n.claimedBy)).sort((a, b) => b.createdAt - a.createdAt);
+  },
+  addNote(h, userId, kind, text) {
+    const clean = String(text || '').trim().slice(0, this.NOTE_MAX_LENGTH);
+    if (!clean || !['note', 'low', 'today'].includes(kind)) return null;
+    const n = { id: uid(), by: userId, kind, text: clean, createdAt: Date.now(), day: this.dayKey() };
+    h.notes = [...this.liveNotes(h), n];
+    return n;
+  },
+  deleteNote(h, userId, id) {
+    const n = this.notes(h).find(x => x.id === id);
+    if (!n || n.by !== userId) return false;
+    h.notes = this.liveNotes(h).filter(x => x.id !== id);
+    return true;
+  },
+  /** First tap wins: returns false if someone already took it. */
+  claimNote(h, userId, id) {
+    const n = this.notes(h).find(x => x.id === id);
+    if (!n || n.kind !== 'today' || n.claimedBy) return false;
+    h.notes = this.liveNotes(h).map(x => x.id === id ? { ...x, claimedBy: userId } : x);
+    return true;
+  },
+  finishNote(h, id) {
+    const had = this.notes(h).some(x => x.id === id);
+    h.notes = this.liveNotes(h).filter(x => x.id !== id);
+    return had;
+  },
+  /** Running low: which task (and so which person) it belongs to. */
+  noteTarget(h, n) {
+    const text = ' ' + n.text.toLowerCase() + ' ';
+    const route = SUPPLY_ROUTES.find(r => r.words.some(w => text.includes(w))) || null;
+    const chain = [...(route ? route.lib : []), 'supplies', 'groceries'];
+    for (const lib of chain) {
+      const r = h.responsibilities.find(x => x.libraryId === lib);
+      if (!r) continue;
+      let unit = r;
+      if (this.isSplit(r)) {
+        const score = p => {
+          const name = p.name.toLowerCase();
+          let s = name.split(/[^a-z]+/).filter(w => w.length > 3 && text.includes(w)).length;
+          if (/^shopping$|buy|other/.test(name)) s += 0.6; else if (/shop|suppl|product/.test(name)) s += 0.4;
+          return s;
+        };
+        const best = this.parts(r).slice().sort((a, b) => score(b) - score(a))[0];
+        unit = this.unit(h, best.id) || r;
+      }
+      const who = this.assignee(h, unit.id);
+      if (who && h.memberIds.includes(who)) return { uid: who, unitId: unit.id, via: unit.parentName ? `${unit.parentName} · ${unit.name}` : unit.name };
+    }
+    return null;
+  },
+  /** Board items that sit on this person's Today list. */
+  myNoteTasks(h, userId) {
+    return this.liveNotes(h).filter(n =>
+      (n.kind === 'today' && n.claimedBy === userId) ||
+      (n.kind === 'low' && (this.noteTarget(h, n) || {}).uid === userId));
+  },
+  /** New on the board since this person last looked, written by someone else. */
+  unseenNotes(h, userId, seenAt) {
+    return this.boardNotes(h).filter(n => n.by !== userId && n.createdAt > (seenAt || 0));
   },
 
   /* ---------- Suggestions (Premium) ---------- */

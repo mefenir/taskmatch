@@ -39,6 +39,7 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 - When Premium switches on, names get a gold badge and everyone sees a one-time **Premium is on** message with a button to the benefits.
 - **Breaking tasks into parts.** Only the owner can break a task down (tap a task → Break into parts). Partners tap **Suggest a breakdown**; the owner accepts or declines. New parts are then rated (❤️/🙂/🙃) and only those parts are re-shared; both say yes. Everything else in the plan stays as it was.
 - **When Premium ends**, parts merge back into their task and whoever had most of it (by effort) keeps it. Nothing is deleted: when Premium comes back, the breakdown returns as before with the same people.
+- **Board** (top of Today): both write. 💬 *Note* stays 7 days; 🧴 *Running low* goes to the Today list of whoever looks after the related task (Household supplies, Grocery, pets, car, garden…) until someone has got it; ⚡ *Today only* goes to whoever taps "I'll do it" first. Authors can delete their own notes. New notes from your partner put a red dot on Today. Without Premium the board is hidden (notes are kept).
 - The owner can **Cancel Premium subscription** on the Premium page. That switches Premium off for everyone (shown as "Cancelled by user" in the admin panel).
 - The app can never grant Premium. It's stored in `subscriptions/{ownerUid}`, which only an admin (or later a payment webhook) can switch on; the owner may only switch it off.
 

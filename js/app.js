@@ -645,6 +645,40 @@ const Actions = {
   toggleEveryone() { S.everyone = !S.everyone; rerender(); },
   toggleDone(d) { Household.toggleDone(S.household, d.id, S.user.uid); save('completions'); rerender(); },
 
+  /* board (Premium) */
+  boardPremium() {
+    Sheets.premium({ title: 'A board for each other', body: 'With Premium you can leave each other notes, flag supplies that are running low, and post last-minute tasks.' });
+  },
+  toggleBoard() { S.boardOpen = !S.boardOpen; rerender(); },
+  addNote() { if (premiumGone()) return; Sheets.addNote(); },
+  noteKind(d) { S.noteDraft = { ...(S.noteDraft || {}), kind: d.key }; Sheets.addNote(); },
+  postNote() {
+    if (premiumGone()) return;
+    const h = S.household;
+    const d = S.noteDraft || {};
+    const n = Household.addNote(h, S.user.uid, d.kind || 'note', d.text);
+    if (!n) { const i = document.getElementById('note-text'); if (i) i.focus(); toast('Write something first.'); return; }
+    save('notes');
+    S.noteDraft = { kind: d.kind || 'note', text: '' };
+    S.boardOpen = true;
+    Sheet.close();
+    rerender();
+    if (n.kind === 'low') {
+      const t = Household.noteTarget(h, n);
+      toast(!t ? 'On the board for whoever gets there first.'
+        : t.uid === S.user.uid ? `Added to your Today list (${t.via}).`
+        : `${Household.memberName(Household.member(h, t.uid))} will see it with ${t.via}.`);
+    } else toast(n.kind === 'today' ? 'On the board. Whoever takes it first gets it.' : 'On the board for 7 days.');
+  },
+  deleteNote(d) { if (Household.deleteNote(S.household, S.user.uid, d.id)) { save('notes'); rerender(); } },
+  claimNote(d) {
+    if (premiumGone()) return;
+    if (Household.claimNote(S.household, S.user.uid, d.id)) { save('notes'); rerender(); toast("It's on your Today list."); }
+    else { toast('Someone already took it.'); rerender(); }
+  },
+  gotNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Thanks! Off the board.'); } },
+  doneNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Done. Nice one.'); } },
+
   /* members: agree to the owner's list */
   agree() {
     Household.agree(S.household, S.user.uid);
@@ -708,6 +742,7 @@ const Changes = {
 };
 
 const Inputs = {
+  noteText(value) { S.noteDraft = { ...(S.noteDraft || { kind: 'note' }), text: value }; },
   breakNew(value) { if (S.breakdown) S.breakdown.newName = value; },
   myName(value) {
     Household.renameMember(S.household, S.user.uid, value);
@@ -900,6 +935,7 @@ document.addEventListener('focusout', e => { if (e.target.matches && e.target.ma
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && Sheet.isOpen()) Sheet.close();
   if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-input="myName"]')) e.target.blur();
+  if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-input="noteText"]')) { e.preventDefault(); Actions.postNote(); }
 });
 
 /* ---------- boot ---------- */

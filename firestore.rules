@@ -64,7 +64,8 @@ service cloud.firestore {
           && request.resource.data.members.size() <= 12
           && request.resource.data.memberIds.size() <= 12
           && request.resource.data.get('suggestions', []).size() <= 200
-          && request.resource.data.get('swaps', []).size() <= 300;
+          && request.resource.data.get('swaps', []).size() <= 300
+          && request.resource.data.get('notes', []).size() <= 200;
       }
 
       // The owner can change anything except who owns it and who's in it.
@@ -75,7 +76,8 @@ service cloud.firestore {
       }
 
       // Other members: agree and answer preferences for themselves only; take part in the
-      // plan (say yes, swap, claim, tick off); suggest list changes only with the owner's Premium.
+      // plan (say yes, swap, claim, tick off); suggest list changes and use the board
+      // only with the owner's Premium.
       function memberEdit() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
         let agreementsChanged = request.resource.data.get('agreements', {})
@@ -85,10 +87,10 @@ service cloud.firestore {
         return request.auth.uid in resource.data.memberIds
           && request.auth.uid != resource.data.ownerId
           && changed.hasOnly(['agreements', 'suggestions', 'preferences', 'plan', 'swaps', 'completions',
-                              'reshare', 'reshuffle', 'prefRound', 'planSeed', 'previousAssignments', 'updatedAt'])
+                              'reshare', 'reshuffle', 'prefRound', 'planSeed', 'previousAssignments', 'notes', 'updatedAt'])
           && agreementsChanged.hasOnly([request.auth.uid])
           && preferencesChanged.hasOnly([request.auth.uid])
-          && (!changed.hasAny(['suggestions']) || ownerIsPremium(resource.data.ownerId));
+          && (!changed.hasAny(['suggestions', 'notes']) || ownerIsPremium(resource.data.ownerId));
       }
 
       function ownerIsPremium(ownerUid) {

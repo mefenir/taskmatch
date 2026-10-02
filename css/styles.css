@@ -248,3 +248,22 @@ button.row:active{background:var(--surface-2)}
 .part-chips li{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:var(--surface);box-shadow:var(--shadow);font-size:13.5px;white-space:nowrap}
 .part-chips.locked li{color:var(--muted);background:var(--surface-2);box-shadow:none}
 .part-chips svg{width:13px;height:13px;flex:none}
+
+/* Board (Premium) */
+.board{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);margin:0 0 16px;overflow:hidden}
+.board-head{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;padding:12px 14px;min-height:52px;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.board-head.locked{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);margin:0 0 16px;color:var(--muted)}
+.board-icon{font-size:18px;line-height:1;flex:none}
+.board-title{font-weight:650;flex:none}
+.board-meta{flex:1;min-width:0;font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+.board-meta b{color:var(--accent);font-weight:650}
+.board-head.locked .board-title{font-weight:600;flex:1}
+.board-chev{flex:none;width:22px;height:22px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--muted);line-height:1}
+.board-items{border-top:1px solid var(--line)}
+.note-row{display:flex;align-items:center;gap:10px;padding:10px 14px}
+.note-row + .note-row{border-top:1px solid var(--line)}
+.note-kind{font-size:17px;line-height:1;flex:none;width:22px;text-align:center}
+.note-text{display:block;font-size:15px;overflow-wrap:anywhere}
+.note-row .mini{border:0;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:650;cursor:pointer;flex:none}
+.note-del{border:0;background:transparent;color:var(--muted);font-size:22px;line-height:1;width:32px;height:32px;border-radius:50%;cursor:pointer;flex:none}
+.board-add{margin:4px 14px 14px;width:calc(100% - 28px);min-height:44px}

@@ -379,6 +379,7 @@ const Screens = {
       ['Add your own tasks', "Anything the list doesn't cover, like Clean the aquarium."],
       ['Suggest changes', 'Your partner can propose additions or removals, and you decide.'],
       ['See the time behind the split', 'Roughly how much time each of you spends on the household every week.'],
+      ['A board for each other', 'Leave notes, flag supplies that are running low, and post last-minute tasks.'],
     ];
     let action;
     if (premium) {
@@ -652,12 +653,18 @@ const Screens = {
     const freqOf = r => Timing.of(r).frequency;
 
     let body = '';
+    const boardTasks = Household.premium && view === 'today'
+      ? (everyone ? h.memberIds.flatMap(id => Household.myNoteTasks(h, id).map(n => ({ n, id }))) : Household.myNoteTasks(h, me).map(n => ({ n, id: me })))
+          .filter((x, i, all) => all.findIndex(y => y.n.id === x.n.id) === i)
+      : [];
+    const boardTaskRows = boardTasks.length ? `<div class="section-head" style="margin-top:4px"><h2 class="section-title">From the board</h2></div>
+      <div class="card">${boardTasks.map(({ n, id }) => noteTaskRow(h, n, id, everyone)).join('')}</div>` : '';
     if (view === 'today') {
       const open = scheduled.filter(x => x.due <= today && !Schedule.doneOn(Household.completion(h, x.r.id), now));
       const done = pool.filter(r => Timing.isScheduled(r) && Schedule.doneOn(Household.completion(h, r.id), now));
       const whenNeeded = pool.filter(r => !Timing.isScheduled(r));
       open.sort((a, b) => a.due - b.due);
-      body = `${open.length || done.length ? `<div class="card">
+      body = `${boardTaskRows}${open.length || done.length ? `${boardTaskRows ? '<div class="section-head"><h2 class="section-title">Your plan</h2></div>' : ''}<div class="card">
           ${open.map(x => tick(x.r, x.due < today ? `Was due ${Schedule.relative(x.due, now).toLowerCase()}` : Timing.frequency(freqOf(x.r)).label)).join('')}
           ${done.map(r => tick(r, 'Done today')).join('')}
         </div>` : ''}
@@ -687,6 +694,7 @@ const Screens = {
       </div>
       <h1 style="margin-top:0">${{ today: 'Today', week: 'This week', month: 'This month' }[view]}</h1>
       ${swapCards(h)}
+      ${boardCard(h)}
       <div class="seg" role="group" aria-label="Period">
         <button data-action="setView" data-key="today" aria-pressed="${view === 'today'}">Today</button>
         <button data-action="setView" data-key="week" aria-pressed="${view === 'week'}">This week</button>
@@ -837,6 +845,70 @@ const Screens = {
   },
 };
 
+/* ---------- Board (Premium) ---------- */
+const NOTE_KINDS = {
+  note:  { emoji: '💬', label: 'Note',        hint: 'Stays on the board for 7 days.',                               placeholder: 'e.g. Plumber comes Thursday at 10' },
+  low:   { emoji: '🧴', label: 'Running low', hint: 'Goes to whoever looks after it, until someone has got it.',     placeholder: 'e.g. Dishwasher tabs' },
+  today: { emoji: '⚡', label: 'Today only',  hint: 'Whoever taps "I\'ll do it" first gets it on their Today list.', placeholder: 'e.g. Take the parcel to the post office' },
+};
+function boardSeenKey(h) { return `household-app/board-seen/${h.id}/${S.user.uid}`; }
+function boardSeenAt(h) { return Number(SafeStorage.get(boardSeenKey(h)) || 0); }
+function boardUnseen(h) { return Household.premium ? Household.unseenNotes(h, S.user.uid, boardSeenAt(h)) : []; }
+
+/** One line at the top of Today; opens in place. On Free, a quiet locked line. */
+function boardCard(h) {
+  const me = S.user.uid;
+  const partner = h.members.find(m => m.uid !== me);
+  const partnerName = partner ? Household.memberName(partner) : '';
+  if (!Household.premium) {
+    return `<button class="board-head locked" data-action="boardPremium">
+      <span class="board-icon" aria-hidden="true">📝</span><span class="board-title">Notes for each other</span>
+      <span class="badge">${Icon.sparkSm} Premium</span></button>`;
+  }
+  const items = Household.boardNotes(h);
+  if (S.boardOpen) SafeStorage.set(boardSeenKey(h), String(Date.now()));
+  const unseen = S.boardOpen ? [] : boardUnseen(h);
+  const newFrom = [...new Set(unseen.map(n => Household.memberName(Household.member(h, n.by) || {})))];
+  const meta = !items.length ? (partnerName ? `Leave a note for ${esc(partnerName)}` : 'Leave a note')
+    : unseen.length ? `<b>New from ${esc(newFrom.join(' and '))}</b>` : plural(items.length, 'note');
+  const head = `<button class="board-head" data-action="${items.length ? 'toggleBoard' : 'addNote'}" aria-expanded="${!!S.boardOpen}">
+      <span class="board-icon" aria-hidden="true">📝</span><span class="board-title">Board</span>
+      <span class="board-meta">${meta}</span>
+      <span class="board-chev" aria-hidden="true">${items.length ? (S.boardOpen ? '–' : '+') : '+'}</span></button>`;
+  if (!S.boardOpen || !items.length) return `<div class="board">${head}</div>`;
+  const now = new Date();
+  const row = n => {
+    const k = NOTE_KINDS[n.kind];
+    const author = n.by === me ? 'You' : esc(Household.memberName(Household.member(h, n.by) || {}));
+    let sub = `${author} · ${Schedule.relative(new Date(n.createdAt), now)}`;
+    let act = '';
+    if (n.kind === 'low') {
+      const t = Household.noteTarget(h, n);
+      sub = `${t ? (t.uid === me ? 'For you' : 'For ' + esc(Household.memberName(Household.member(h, t.uid) || {}))) + ' · ' + esc(t.via) : 'For whoever gets there first'} · ${sub}`;
+      act = `<button class="mini" data-action="gotNote" data-id="${n.id}">Got it</button>`;
+    } else if (n.kind === 'today') {
+      act = `<button class="mini" data-action="claimNote" data-id="${n.id}">I'll do it</button>`;
+    }
+    const del = n.by === me ? `<button class="note-del" data-action="deleteNote" data-id="${n.id}" aria-label="Delete note">×</button>` : '';
+    return `<div class="note-row"><span class="note-kind" aria-label="${k.label}" title="${k.label}">${k.emoji}</span>
+      <div class="row-text"><span class="note-text">${esc(n.text)}</span><span class="row-sub">${sub}</span></div>${act}${del}</div>`;
+  };
+  return `<div class="board open">${head}<div class="board-items">${items.map(row).join('')}</div>
+    <button class="btn secondary board-add" data-action="addNote">Add to the board</button></div>`;
+}
+
+/** A board item on someone's Today list: tick it and it's gone. */
+function noteTaskRow(h, n, ownerId, everyone) {
+  const me = S.user.uid;
+  const k = NOTE_KINDS[n.kind];
+  const by = n.by === me ? 'your note' : `${esc(Household.memberName(Household.member(h, n.by) || {}))}'s note`;
+  const who = everyone ? (ownerId === me ? 'You · ' : esc(Household.memberName(Household.member(h, ownerId) || {})) + ' · ') : '';
+  const sub = n.kind === 'low' ? `${who}Running low · ${by}` : `${who}Today only · ${by}`;
+  return `<button class="row" data-action="doneNote" data-id="${n.id}" aria-pressed="false">
+    <span class="check" aria-hidden="true">${Icon.check}</span>
+    <div class="row-text"><span class="row-title">${k.emoji} ${n.kind === 'low' ? 'Get ' : ''}${esc(n.text)}</span><span class="row-sub">${sub}</span></div></button>`;
+}
+
 /** The organiser has new parts to share out, or things got uneven after parts came back. */
 function reshareOfferFor(h, me) {
   const active = h.plan && h.plan.status === 'active';
@@ -866,7 +938,7 @@ function householdNeedsMe(h) {
 }
 
 /** Red dots on the bottom tabs: every tab where an action is waiting for me. */
-function navDots(h) { return { plan: planNeedsMe(h), inventory: householdNeedsMe(h) }; }
+function navDots(h) { return { today: boardUnseen(h).length > 0, plan: planNeedsMe(h), inventory: householdNeedsMe(h) }; }
 
 /** Incoming swap requests and results of my own requests (on Plan and Today). */
 function swapCards(h) {
@@ -1037,6 +1109,21 @@ const Sheets = {
       <p>Your whole household now has Premium. Nothing in your plan has changed: you decide what to break into smaller parts.</p>
       <button class="btn premium" data-action="sheetNav" data-to="premium">See what's new</button>
       <button class="btn ghost" data-action="closeSheet">Later</button>`, 'Premium is on');
+  },
+
+  /** Add something to the board. */
+  addNote() {
+    const d = S.noteDraft || (S.noteDraft = { kind: 'note', text: '' });
+    const k = NOTE_KINDS[d.kind];
+    Sheet.open(`<h2>Add to the board</h2>
+      <div class="chips" role="group" aria-label="Kind" style="margin-bottom:10px">${Object.entries(NOTE_KINDS).map(([id, x]) =>
+        `<button class="chip" data-action="noteKind" data-key="${id}" aria-pressed="${d.kind === id}">${x.emoji} ${x.label}</button>`).join('')}</div>
+      <p style="margin-bottom:12px">${esc(k.hint)}</p>
+      <div class="field"><input id="note-text" data-input="noteText" maxlength="${Household.NOTE_MAX_LENGTH}" placeholder="${esc(k.placeholder)}" value="${esc(d.text)}" autocomplete="off" enterkeyhint="done"></div>
+      <button class="btn primary" data-action="postNote">Add</button>
+      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Add to the board');
+    const input = document.getElementById('note-text');
+    if (input) { input.focus({ preventScroll: true }); input.setSelectionRange(input.value.length, input.value.length); }
   },
 
   confirmCancelPremium() {
