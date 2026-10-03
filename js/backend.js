@@ -11,8 +11,11 @@
      users/{uid}            { email, displayName, householdId, createdAt }
      households/{hid}       { ownerId, memberIds[], members[], rooms[], children[],
                               pets[], circumstances, responsibilities[], settings }
-     invites/{code}         { householdId, createdBy, createdAt, expiresAt, usedBy, usedAt }
-     subscriptions/{uid}    { plan: 'free'|'premium', active, expiresAt? }   ← admin-only writes
+     invites/{code}         { householdId, createdBy, createdAt, expiresAt, usedBy, usedAt, forName }
+     subscriptions/{uid}    { plan: 'free'|'premium', active, expiresAt? }   ← Premium granted from the admin panel
+     customers/{uid}        ← Stripe extension: checkout_sessions (created here), subscriptions (synced by Stripe)
+     paidPremium/{uid}      { plan, active, expiresAt }   ← "has paid until", for the security rules
+     metrics/{hid}          { created, listed, rated, invited, joined, reviewed, started, checkout, activeDays[] }
      premiumRequests/{uid}  { uid, email, name, householdId, members, status, requestedAt, decidedAt? }
                             status: pending → approved | denied; approved → revoked | cancelled; denied/revoked/cancelled → pending
      admins/{uid}           { role: 'admin' }   ← created by hand in the Firebase console
@@ -126,7 +129,7 @@ const Backend = (() => {
       return households().doc(hid).update({ ...fields, updatedAt: now() });
     },
 
-    async createInvite(hid, userId) {
+    async createInvite(hid, userId, forName = '') {
       const code = randomCode(16);
       const expires = new Date(Date.now() + APP_CONFIG.inviteValidDays * 864e5);
       await invites().doc(code).set({
@@ -136,6 +139,7 @@ const Backend = (() => {
         expiresAt: firebase.firestore.Timestamp.fromDate(expires),
         usedBy: null,
         usedAt: null,
+        forName: String(forName || '').slice(0, 40),
       });
       return code;
     },
@@ -207,6 +211,82 @@ const Backend = (() => {
     await premiumRequests().doc(userId).update({ status: 'cancelled', cancelledAt: now() }).catch(() => {});
   };
 
+  /* ---------- Funnel metrics (no personal data: step times per household) ---------- */
+  const METRIC_STEPS = ['created', 'listed', 'rated', 'invited', 'joined', 'reviewed', 'started', 'checkout'];
+  const Metrics = {
+    STEPS: METRIC_STEPS,
+    mark(hid, step) {
+      if (!METRIC_STEPS.includes(step)) return Promise.resolve();
+      return db.collection('metrics').doc(hid).set({ [step]: now() }, { merge: true });
+    },
+    activeDay(hid, day) {
+      return db.collection('metrics').doc(hid).set({ activeDays: firebase.firestore.FieldValue.arrayUnion(day) }, { merge: true });
+    },
+  };
+
+  /* ---------- Billing (Stripe through the Firebase extension) ---------- */
+  const Billing = {
+    enabled: () => !!(APP_CONFIG.billing.prices.monthly && APP_CONFIG.billing.prices.yearly),
+    customers: () => db.collection(APP_CONFIG.billing.customersCollection),
+    /** The organiser's Stripe subscriptions (any status). Unreadable → null ("unknown", never "none"). */
+    watchSubscriptions(userId, onData) {
+      return Billing.customers().doc(userId).collection('subscriptions').onSnapshot(
+        q => onData(q.docs.map(d => {
+          const x = d.data();
+          return { id: d.id, status: x.status, price: x.price ? { id: x.price.id } : null, created: x.created,
+            trial_end: x.trial_end, current_period_end: x.current_period_end, cancel_at_period_end: x.cancel_at_period_end };
+        })),
+        () => onData(null));
+    },
+    /**
+     * Create a Checkout Session and resolve with its URL. The extension fills in `url` (or `error`).
+     * One call = one session; the caller makes sure it isn't called twice.
+     */
+    startCheckout(userId, plan, { trial }) {
+      const cfg = APP_CONFIG.billing;
+      const price = cfg.prices[plan];
+      if (!price) return Promise.reject(Object.assign(new Error('Billing is not set up'), { code: 'billing/not-configured' }));
+      const back = `${location.origin}${location.pathname}`;
+      const session = {
+        price,
+        success_url: `${back}?checkout=success#/premium`,
+        cancel_url: `${back}?checkout=cancel#/premium`,
+        allow_promotion_codes: true,
+        client_reference_id: userId,
+        metadata: { uid: userId, plan },
+        locale: 'auto',
+        // Stripe's shortest allowed lifetime: an abandoned checkout page can't be paid later.
+        expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
+      };
+      if (trial && plan === 'yearly') session.trial_period_days = cfg.trialDays;
+      return Billing.customers().doc(userId).collection('checkout_sessions').add(session).then(ref => new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { off(); reject(Object.assign(new Error('Checkout timed out'), { code: 'billing/timeout' })); }, 30000);
+        const off = ref.onSnapshot(snap => {
+          const d = snap.data() || {};
+          if (d.error) { clearTimeout(timer); off(); reject(Object.assign(new Error(d.error.message || 'Checkout failed'), { code: 'billing/error' })); }
+          else if (d.url) { clearTimeout(timer); off(); resolve(d.url); }
+        }, err => { clearTimeout(timer); reject(err); });
+      }));
+    },
+    /**
+     * Copy "has paid until …" to paidPremium/{uid} so the security rules can check the partner's
+     * Premium writes. Allowed only while the sign-in token carries stripeRole == 'premium'.
+     */
+    async mirror(userId, untilMs) {
+      const ref = db.collection('paidPremium').doc(userId);
+      if (!untilMs) return ref.set({ active: false, syncedAt: now() }, { merge: true });
+      await auth.currentUser.getIdToken(true);
+      return ref.set({ plan: 'premium', active: true, expiresAt: firebase.firestore.Timestamp.fromMillis(untilMs), syncedAt: now() });
+    },
+    /** Stripe customer portal: change plan, update card, cancel. */
+    async portalUrl() {
+      const fn = firebase.app().functions(APP_CONFIG.billing.functionsRegion)
+        .httpsCallable('ext-firestore-stripe-payments-createPortalLink');
+      const { data } = await fn({ returnUrl: `${location.origin}${location.pathname}#/premium`, locale: 'auto' });
+      return data.url;
+    },
+  };
+
   /* ---------- Admin panel ---------- */
   const Admin = {
     isAdmin: async userId => (await db.collection('admins').doc(userId).get()).exists,
@@ -219,6 +299,8 @@ const Backend = (() => {
       await batch.commit();
     },
     deny: (userId, adminId) => premiumRequests().doc(userId).update({ status: 'denied', decidedAt: now(), decidedBy: adminId }),
+    watchMetrics: (onData, onError) =>
+      db.collection('metrics').onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, ...d.data() }))), onError),
     async revoke(userId, adminId) {
       const batch = db.batch();
       batch.set(subscriptions().doc(userId), { active: false, revokedAt: now(), revokedBy: adminId }, { merge: true });
@@ -227,5 +309,5 @@ const Backend = (() => {
     },
   };
 
-  return { init, isConfigured, sdkLoaded, Auth, Repo, Admin };
+  return { init, isConfigured, sdkLoaded, Auth, Repo, Admin, Billing, Metrics };
 })();

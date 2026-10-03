@@ -3,26 +3,26 @@
 /* =========================================================
    HOUSEHOLD DOMAIN LOGIC — pure functions, no DOM, no Firebase
    ---------------------------------------------------------
-   Responsibility ≠ assignment: a selected responsibility has
-   no owner, frequency or preference. Those arrive in later
-   phases and live on tasks.
+   The organiser (ownerId, who created the household) sets it up
+   alone and gets a plan straight away, split with a placeholder
+   for the partner (INVITEE). The partner joins with that plan in
+   hand, marks only what doesn't suit them, and both say yes.
 
    members[]   people in the household, each linked to an account
    memberIds[] the account ids, used by the security rules
-   ownerId     the account that created the household; Premium
-               follows this account (see entitlements.js)
-   agreements  { [uid]: { at, signature } } — a member agreeing to the
-               owner's list; it goes stale when the list changes
-   suggestions [{ id, by, type: 'add'|'remove', libraryId?, responsibilityId?,
-               name, category, at }] — Premium: members propose edits,
-               the owner accepts or declines
-   preferences { [uid]: { values: { [respId]: 'love'|'ok'|'rather_not' }, submittedAt } }
-               never shown to the other person
-   plan        { status: 'proposed'|'active', assignments: { [respId]: uid },
-               signature, accepted: { [uid]: at }, createdAt, startedAt }
-   swaps       [{ id, from, to, respId, status: 'pending'|'done'|'declined',
-               gave?, at, resolvedAt?, seen? }]
-   completions { [respId]: { last, prev, by } }
+   ownerId     the organiser; Premium follows this account (entitlements.js)
+   settings    { step, onboarded, partnerName, baseline, invitedAt }
+   responsibilities [{ id, libraryId|null, name, category, minutes, frequency,
+               predefined, custom?, parts?[] }] — "tasks" in the app
+   suggestions [{ id, by, type: 'add'|'remove'|'breakdown', … }] — Premium:
+               the partner proposes, the organiser decides
+   preferences { [uid]: { values: { [unitId]: 'love'|'rather_not' }, submittedAt } }
+               unmarked = 'ok'; never shown to the other person
+   plan        { status: 'proposed'|'active', assignments: { [unitId]: uid|INVITEE },
+               signature, accepted: { [uid]: at }, rebalancedBy?, createdAt, startedAt }
+   swaps       [{ id, from, to, respId, status: 'pending'|'done'|'declined', gave?, at, resolvedAt?, seen? }]
+   completions { [unitId]: { last, prev, by } }
+   reshare, reshuffle, notes — see their sections below
    ========================================================= */
 const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], children: [0, 8] };
 
@@ -35,6 +35,9 @@ const SUPPLY_ROUTES = [
   { lib: ['supplies'], words: ['toilet', 'detergent', 'dishwasher', 'soap', 'sponge', 'bin bag', 'bin liner', 'bags', 'cleaner', 'cleaning', 'bleach', 'paper', 'tissue', 'shampoo', 'toothpaste', 'battery', 'batteries', 'bulb', 'foil', 'cling', 'salt for', 'rinse aid', 'softener'] },
   { lib: ['groceries'], words: ['milk', 'bread', 'egg', 'coffee', ' tea', 'butter', 'cheese', 'fruit', 'veg', 'tomato', 'onion', 'potato', 'pasta', 'rice', 'flour', 'sugar', 'salt', 'oil', 'juice', 'water', 'beer', 'wine', 'yog', 'meat', 'chicken', 'fish', 'cereal', 'snack', 'food', 'apple', 'banana', 'sauce', 'spice', 'honey', 'jam', 'oat', 'milch', 'brot', 'eier', 'kaffee', 'käse'] },
 ];
+
+/** The partner who hasn't joined yet (plan placeholder). Never a real user id (those are 28 chars, no dashes). */
+const INVITEE = 'invitee';
 
 const Household = {
   /** Data for a new household document (id is assigned by the backend). */
@@ -54,33 +57,45 @@ const Household = {
       pets: [],
       circumstances: { garden: false, car: false },
       responsibilities: [],
-      agreements: {},
       suggestions: [],
-      settings: { step: 'members', onboarded: false, libraryVersion: LIBRARY.version },
+      settings: { step: 'members', onboarded: false, partnerName: '', libraryVersion: LIBRARY.version },
     };
   },
 
   isOwner: (h, userId) => !!h && h.ownerId === userId,
   owner: h => (h.members || []).find(m => m.uid === h.ownerId) || null,
-  member: (h, userId) => (h.members || []).find(m => m.uid === userId) || null,
+  /** A real member, or the partner who hasn't joined yet (INVITEE). */
+  member(h, userId) {
+    if (userId === INVITEE) return this.invitee(h);
+    return (h.members || []).find(m => m.uid === userId) || null;
+  },
   memberName(m) {
     const n = ((m && m.name) || '').trim();
-    return n || (m && m.role === 'owner' ? 'Household owner' : 'Household member');
+    if (n) return n;
+    if (m && m.placeholder) return 'Your partner';
+    return m && m.role === 'owner' ? 'Organiser' : 'Partner';
   },
-  renameMember(h, userId, name) { const m = this.member(h, userId); if (m) m.name = name.slice(0, 40); },
+  renameMember(h, userId, name) { const m = this.member(h, userId); if (m && !m.placeholder) m.name = name.slice(0, 40); },
 
-  /* ---------- Agreement (members confirm the owner's list) ---------- */
-
-  /** Fingerprint of the current list; an agreement only counts for the list it was given on. */
-  signature(h) { return h.responsibilities.map(r => r.id).sort().join(','); },
-  agreementState(h, userId) {
-    if (this.isOwner(h, userId)) return 'owner';
-    const a = (h.agreements || {})[userId];
-    if (!a) return 'pending';
-    return a.signature === this.signature(h) ? 'agreed' : 'changed';
+  /* ---------- People in the plan ----------
+   * The organiser builds the plan before the partner joins. Until then the partner is a
+   * placeholder (INVITEE) with the name the organiser gave; when they join, everything
+   * the placeholder had becomes theirs. */
+  alone: h => (h.memberIds || []).length < 2,
+  partnerId: h => (h.memberIds || []).find(m => m !== h.ownerId) || null,
+  invitee: h => ({ uid: INVITEE, name: ((h.settings && h.settings.partnerName) || '').trim(), role: 'member', placeholder: true }),
+  /** Everyone the plan is shared between: the members, plus the placeholder while the organiser is alone. */
+  people(h) {
+    const real = (h.memberIds || []).map(id => (h.members || []).find(m => m.uid === id)).filter(Boolean);
+    return this.alone(h) ? [...real, this.invitee(h)] : real;
   },
-  agree(h, userId) {
-    h.agreements = { ...(h.agreements || {}), [userId]: { at: new Date().toISOString(), signature: this.signature(h) } };
+  peopleIds(h) { return this.people(h).map(m => m.uid); },
+  /** Who an assignment really means today (the placeholder ↔ the partner, someone who left → the placeholder). */
+  norm(h, id) {
+    if (!id) return null;
+    if (this.alone(h)) return (h.memberIds || []).includes(id) ? id : INVITEE;
+    if (id === INVITEE) return this.partnerId(h);
+    return id;
   },
 
   /* ---------- Board (Premium): notes, running low, today only ---------- *
@@ -227,49 +242,50 @@ const Household = {
     r.frequency = changes.frequency || t.frequency;
   },
 
-  /* ---------- Where the household is ---------- */
-  /**
-   * setup → (alone) → agreeing → preferences → plan → active
-   * 'plan' means a proposed plan both still have to say yes to.
-   */
+  /* ---------- Where the household is ----------
+   * setup  → the organiser is still setting up (home, tasks, times, own answers)
+   * draft  → the plan exists; the partner hasn't joined yet
+   * review → the partner has joined and is looking at the plan
+   * plan   → both have answered; the plan waits for both to say yes
+   * active → the plan runs */
   stage(h) {
     if (!h.settings.onboarded) return 'setup';
-    if ((h.memberIds || []).length < 2) return 'alone';
-    // Once the plan runs, later list changes don't stop daily use: new tasks just need a home.
     if (h.plan && h.plan.status === 'active') return 'active';
-    if (h.memberIds.some(m => this.agreementState(h, m) === 'pending' || this.agreementState(h, m) === 'changed')) return 'agreeing';
-    if (h.memberIds.some(m => !this.prefsComplete(h, m))) return 'preferences';
+    if (this.alone(h)) return 'draft';
+    if (h.memberIds.some(m => !this.prefsComplete(h, m))) return 'review';
     return 'plan';
   },
 
-  /* ---------- Preferences (private to each person) ---------- */
-  // A reshuffle starts a new answering round: answers from an older round don't count.
+  /* ---------- Preferences (private to each person) ----------
+   * Anything not marked counts as 🙂 Don't mind. */
   prefs(h, userId) { return ((h.preferences || {})[userId]) || { values: {} }; },
   setPref(h, userId, respId, value) {
     const mine = this.prefs(h, userId);
-    h.preferences = { ...(h.preferences || {}), [userId]: { ...mine, values: { ...(mine.values || {}), [respId]: value } } };
+    const values = { ...(mine.values || {}) };
+    if (value === 'ok') delete values[respId]; else values[respId] = value;
+    h.preferences = { ...(h.preferences || {}), [userId]: { ...mine, values } };
   },
-  allRated(h, userId) { const v = this.prefs(h, userId).values || {}; return h.responsibilities.every(r => v[r.id]); },
-  prefsComplete(h, userId) {
-    const p = this.prefs(h, userId);
-    return !!p.submittedAt && (p.round || 0) === (h.prefRound || 0) && this.allRated(h, userId);
-  },
+  /** How many tasks this person marked as something other than 🙂. */
+  marked(h, userId) { return Object.keys(this.prefs(h, userId).values || {}).length; },
+  prefsComplete(h, userId) { return !!this.prefs(h, userId).submittedAt; },
   submitPrefs(h, userId) {
     const mine = this.prefs(h, userId);
-    h.preferences = { ...(h.preferences || {}), [userId]: { ...mine, submittedAt: new Date().toISOString(), round: h.prefRound || 0 } };
+    h.preferences = { ...(h.preferences || {}), [userId]: { ...mine, submittedAt: new Date().toISOString() } };
   },
   /** How someone feels about a unit: its own answer, else the answer for the whole task. */
   prefFor(h, userId, unit) {
     const v = this.prefs(h, userId).values || {};
     return v[unit.id] || (unit.parentId ? v[unit.parentId] : null) || 'ok';
   },
+  /** What the split uses: only answers someone has handed in (the rest is 🙂). */
+  planPref(h, userId, unit) { return this.prefsComplete(h, userId) ? this.prefFor(h, userId, unit) : 'ok'; },
 
   /* ---------- Units: what the plan is made of ----------
    * Without Premium (or for tasks that aren't broken down) a unit is the whole
    * responsibility. With Premium, a broken-down task contributes its parts instead.
    * When Premium ends the parts stay stored, so they come back exactly as they
    * were when Premium returns. */
-  premium: false, // set by the app from the owner's subscription
+  premium: false, // set by the app from the organiser's subscription
   parts: r => r.parts || [],
   isSplit(r) { return this.premium && this.parts(r).length > 0; },
   partUnit(r, p) {
@@ -289,37 +305,49 @@ const Household = {
   planSignature(h) {
     const units = this.units(h).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
     const parts = units.map(u => { const t = Timing.of(u); return `${u.id}:${t.minutes}:${t.frequency}`; });
-    const prefs = h.memberIds.slice().sort().map(m => m + '=' + units.map(u => this.prefFor(h, m, u)[0]).join(''));
+    const prefs = this.peopleIds(h).slice().sort().map(m => m + '=' + units.map(u => this.planPref(h, m, u)[0]).join(''));
     return parts.join('|') + '#' + prefs.join('|') + '#' + (h.planSeed || 0);
   },
+  /** A plan that isn't running yet follows every change to the list, times, parts or answers. */
   needsNewPlan(h) {
-    return this.stage(h) === 'plan' && (!h.plan || h.plan.status !== 'proposed' || h.plan.signature !== this.planSignature(h));
+    const st = this.stage(h);
+    if (st === 'setup' || st === 'active') return false;
+    return !h.plan || h.plan.signature !== this.planSignature(h);
   },
   prefMap(h, units) {
-    return Object.fromEntries(h.memberIds.map(m => [m, Object.fromEntries(units.map(u => [u.id, this.prefFor(h, m, u)]))]));
+    return Object.fromEntries(this.peopleIds(h).map(m => [m, Object.fromEntries(units.map(u => [u.id, this.planPref(h, m, u)]))]));
   },
-  buildPlan(h) {
+  /** Work out the split. `by` (who caused it) counts as having said yes; if nothing moved,
+   *  earlier yeses stay. */
+  buildPlan(h, by = null) {
     const units = this.units(h);
+    const ids = this.peopleIds(h);
     const prefs = this.prefMap(h, units);
     let seed = h.planSeed || 0;
-    let { assignments } = Split.run(units, h.memberIds, prefs, { seed });
+    let { assignments } = Split.run(units, ids, prefs, { seed });
     // After a reshuffle, look for a split that's actually different (and still fair).
     const before = h.previousAssignments;
     if (before) {
       const same = a => units.every(u => a[u.id] === before[u.id]);
       for (let tries = 0; tries < 12 && same(assignments); tries++) {
-        const next = Split.run(units, h.memberIds, prefs, { seed: seed + 1 });
+        const next = Split.run(units, ids, prefs, { seed: seed + 1 });
         seed += 1;
-        if (Split.isEven(Split.loads(units, next.assignments, h.memberIds)) || tries === 11) assignments = next.assignments;
+        if (Split.isEven(Split.loads(units, next.assignments, ids)) || tries === 11) assignments = next.assignments;
       }
       h.planSeed = seed;
+      h.previousAssignments = null;
     }
-    h.plan = { status: 'proposed', assignments, signature: this.planSignature(h), accepted: {}, createdAt: new Date().toISOString() };
-    h.swaps = [];
+    const old = h.plan;
+    const unchanged = !!old && old.assignments && units.every(u => this.norm(h, old.assignments[u.id]) === assignments[u.id]);
+    const accepted = unchanged ? { ...(old.accepted || {}) } : {};
+    if (by) accepted[by] = new Date().toISOString();
+    h.plan = { status: 'proposed', assignments, signature: this.planSignature(h), accepted, createdAt: new Date().toISOString() };
+    if (!unchanged) h.swaps = [];
     h.reshare = null;
   },
   /** Who does a unit. A broken-down task seen without Premium belongs to whoever has most of its parts. */
-  assignee(h, id) {
+  assignee(h, id) { return this.norm(h, this.rawAssignee(h, id)); },
+  rawAssignee(h, id) {
     const a = (h.plan && h.plan.assignments) || {};
     const r = h.responsibilities.find(x => x.id === id);
     if (r) {
@@ -332,7 +360,7 @@ const Household = {
   majority(h, r) {
     const a = (h.plan && h.plan.assignments) || {};
     const load = {};
-    this.parts(r).forEach(p => { const m = a[p.id] || a[r.id]; if (m) load[m] = (load[m] || 0) + Timing.weeklyMinutes(this.partUnit(r, p)); });
+    this.parts(r).forEach(p => { const m = this.norm(h, a[p.id] || a[r.id]); if (m) load[m] = (load[m] || 0) + Timing.weeklyMinutes(this.partUnit(r, p)); });
     const people = Object.keys(load);
     if (!people.length) return null;
     return people.sort((x, y) => (load[y] - load[x]) || (x === a[r.id] ? -1 : y === a[r.id] ? 1 : (x < y ? -1 : 1)))[0];
@@ -344,12 +372,14 @@ const Household = {
   },
   tasksOf(h, userId) { return this.units(h).filter(u => this.assignee(h, u.id) === userId); },
   /** Added after the plan started: nobody's yet. */
-  unassigned(h) { return h.plan ? this.units(h).filter(u => !h.memberIds.includes(this.assignee(h, u.id))) : []; },
+  unassigned(h) { const ids = this.peopleIds(h); return h.plan ? this.units(h).filter(u => !ids.includes(this.assignee(h, u.id))) : []; },
   claim(h, id, userId) { this.setAssignee(h, id, userId); },
   loads(h) {
     const units = this.units(h);
-    return Split.loads(units, Object.fromEntries(units.map(u => [u.id, this.assignee(h, u.id)])), h.memberIds);
+    return Split.loads(units, Object.fromEntries(units.map(u => [u.id, this.assignee(h, u.id)])), this.peopleIds(h));
   },
+  /** The whole household's work, in minutes a week. */
+  weeklyTotal(h) { return this.units(h).reduce((t, u) => t + Timing.weeklyMinutes(u), 0); },
   /** Who looks after a whole task: a name, "Shared" when its parts are split between people, or nobody. */
   ownerOf(h, r) {
     if (!this.isSplit(r)) return this.assignee(h, r.id);
@@ -357,21 +387,25 @@ const Household = {
     return people.size === 1 ? [...people][0] : (people.size ? 'shared' : null);
   },
   hasAccepted(h, userId) { return !!(h.plan && h.plan.accepted && h.plan.accepted[userId]); },
+  /** The plan starts once every member (not the placeholder) has said yes. */
   acceptPlan(h, userId) {
     const accepted = { ...(h.plan.accepted || {}), [userId]: new Date().toISOString() };
-    const everyone = h.memberIds.every(m => accepted[m]);
+    const everyone = !this.alone(h) && h.memberIds.every(m => accepted[m]);
     h.plan = { ...h.plan, accepted, ...(everyone ? { status: 'active', startedAt: new Date().toISOString() } : {}) };
   },
 
   /* ---------- Reshuffle (start the split over) ---------- */
   reshuffle: h => h.reshuffle || null,
   requestReshuffle(h, from) { h.reshuffle = { id: uid(), by: from, status: 'pending', at: new Date().toISOString() }; },
-  /** Agreed: everyone answers again (a new round) and gets a fresh split. Ticks are kept. */
-  acceptReshuffle(h) {
-    h.prefRound = (h.prefRound || 0) + 1;
+  /** A fresh split that differs from the current one; both say yes again. Ticks are kept. */
+  reshufflePlan(h, by) {
     h.planSeed = (h.planSeed || 0) + 1;
-    h.previousAssignments = (h.plan && h.plan.assignments) || null;
+    h.previousAssignments = Object.fromEntries(this.units(h).map(u => [u.id, this.assignee(h, u.id)]));
     h.plan = null; h.swaps = []; h.reshare = null;
+    this.buildPlan(h, by);
+  },
+  acceptReshuffle(h, by) {
+    this.reshufflePlan(h, by);
     h.reshuffle = { ...h.reshuffle, status: 'done', resolvedAt: new Date().toISOString() };
   },
   declineReshuffle(h) { h.reshuffle = { ...h.reshuffle, status: 'declined', resolvedAt: new Date().toISOString() }; },
@@ -572,13 +606,30 @@ const Household = {
       name: lib.name,
       description: '',
       predefined: true,
-      premium: false,
       mentalLoad: !!lib.mentalLoad,
       minutes: Timing.defaultsFor(lib.id).minutes,
       frequency: Timing.defaultsFor(lib.id).frequency,
-      tasks: [], // Premium later: detailed tasks, each with its own effort and owner
       createdAt: new Date().toISOString(),
     });
+  },
+  /** A task of your own (not from the list). */
+  addCustom(h, { name, category, minutes, frequency }) {
+    const clean = String(name || '').trim().slice(0, 60);
+    if (!clean) return null;
+    const cat = LIBRARY.categories.some(c => c.id === category) ? category : 'organisation';
+    const r = {
+      id: uid(), libraryId: null, category: cat, name: clean, description: '', predefined: false, custom: true,
+      mentalLoad: false, minutes: MINUTE_OPTIONS.includes(Number(minutes)) ? Number(minutes) : 15,
+      frequency: FREQUENCIES.some(f => f.id === frequency) ? frequency : 'weekly', createdAt: new Date().toISOString(),
+    };
+    h.responsibilities.push(r);
+    return r;
+  },
+  customCount: h => h.responsibilities.filter(r => !r.predefined).length,
+  removeTask(h, id) {
+    const before = h.responsibilities.length;
+    h.responsibilities = h.responsibilities.filter(r => r.id !== id);
+    return h.responsibilities.length !== before;
   },
   deselect(h, libId) { h.responsibilities = h.responsibilities.filter(r => !(r.predefined && r.libraryId === libId)); },
   toggle(h, libId) { this.selectedLibraryIds(h).has(libId) ? this.deselect(h, libId) : this.select(h, libId); },

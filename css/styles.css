@@ -267,3 +267,48 @@ button.row:active{background:var(--surface-2)}
 .note-row .mini{border:0;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:650;cursor:pointer;flex:none}
 .note-del{border:0;background:transparent;color:var(--muted);font-size:22px;line-height:1;width:32px;height:32px;border-radius:50%;cursor:pointer;flex:none}
 .board-add{margin:4px 14px 14px;width:calc(100% - 28px);min-height:44px}
+
+/* ---------- Tap feedback: every button reacts the moment it's touched ---------- */
+button, .btn, .chip, .mini, .pref-btn, .step-btn, .icon-btn, .plan-card, .link-btn{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.btn, .chip, .mini, .pref-btn, .step-btn, .icon-btn, .plan-card, .board-head, .note-del, .bottom-nav button{transition:transform .12s cubic-bezier(.2,.8,.2,1),background-color .15s,border-color .15s,opacity .15s,box-shadow .15s}
+.btn:active, .chip:active, .mini:active, .pref-btn:active, .step-btn:active, .icon-btn:active, .plan-card:active, .board-head:active, .note-del:active, .bottom-nav button:active{transform:scale(.96)}
+.link-btn:active{opacity:.6}
+button.row:active{transform:none}
+.pressed{animation:pressed .32s cubic-bezier(.2,.8,.2,1)}
+@keyframes pressed{0%{transform:scale(.96)}55%{transform:scale(1.015)}100%{transform:scale(1)}}
+button.row.pressed{animation:row-pressed .35s ease-out}
+@keyframes row-pressed{0%{background:var(--surface-2)}100%{background:transparent}}
+.pref-btn.pressed[aria-pressed="true"]{animation:pref-pop .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes pref-pop{0%{transform:scale(.85)}60%{transform:scale(1.12)}100%{transform:scale(1)}}
+/* Busy: the button stays where it is, its label fades and a spinner shows it's working. */
+.is-busy{position:relative;pointer-events:none;cursor:progress}
+.btn.is-busy, .mini.is-busy{color:transparent!important;opacity:1!important}
+.btn.is-busy::after, .mini.is-busy::after{content:"";position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;border:2.5px solid currentColor;border-color:var(--busy-ring, rgba(127,127,127,.35));border-top-color:var(--busy-head, currentColor);animation:spin .7s linear infinite}
+.btn.primary.is-busy{--busy-ring:rgba(255,255,255,.35);--busy-head:var(--accent-ink)}
+.btn.premium.is-busy{--busy-ring:rgba(255,255,255,.35);--busy-head:var(--bg)}
+.btn.secondary.is-busy, .btn.ghost.is-busy, .mini.is-busy{--busy-head:var(--accent)}
+.btn.danger.is-busy{--busy-ring:rgba(255,255,255,.35);--busy-head:#fff}
+@media (prefers-reduced-motion: reduce){.pressed, .pref-btn.pressed[aria-pressed="true"]{animation:none}}
+
+/* ---------- New flow ---------- */
+.has-nav .bottom-bar{bottom:calc(68px + env(safe-area-inset-bottom))}
+.hero-card{display:flex;flex-direction:column;align-items:flex-start;padding:18px 18px 16px;gap:2px}
+.hero-num{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.hero-sub{font-size:14px;color:var(--muted)}
+.btn-pair{display:flex;flex-wrap:wrap;gap:8px}
+.btn-pair .btn{flex:1 1 auto;width:auto;min-height:44px;margin-top:0}
+.btn.quiet{color:var(--muted);font-weight:500;font-size:14px;min-height:40px;margin-top:20px}
+.legal-line{margin-top:10px}
+.legal-line a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.spinner.small{width:20px;height:20px;border-width:2.5px;margin-bottom:8px}
+.timing-controls{display:flex;gap:8px}
+
+/* Premium plans */
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 14px}
+.plan-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:16px 14px 14px;border-radius:16px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;min-height:132px;font:inherit}
+.plan-card[aria-checked="true"]{border-color:var(--premium);box-shadow:0 0 0 1.5px var(--premium) inset}
+.plan-tag{position:absolute;top:-10px;left:12px;background:var(--premium);color:var(--bg);font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.plan-name{font-weight:650;font-size:15px;margin-top:4px}
+.plan-price{font-size:24px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.plan-price small{font-size:13px;font-weight:500;color:var(--muted);margin-left:2px}
+.plan-sub{font-size:12.5px;color:var(--muted);line-height:1.35}

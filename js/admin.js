@@ -1,7 +1,7 @@
 'use strict';
 
 /* =========================================================
-   ADMIN PANEL — Premium requests
+   ADMIN PANEL — Premium gifts/requests and the signup funnel
    Sign in with the admin account (created in the Firebase
    console). Access is checked twice: here, and by the
    Firestore rules (admins/{uid} must exist).
@@ -10,12 +10,21 @@ const A = {
   phase: 'loading',     // loading | signedOut | notAdmin | ready | error
   user: null,
   requests: [],
+  metrics: [],
+  tab: 'funnel',        // funnel | requests
+  range: 30,            // funnel: households created in the last N days (0 = all)
   filter: 'pending',
   busy: null,           // uid currently being changed
   error: '',
   values: {},
 };
 let unwatch = null;
+let unwatchMetrics = null;
+const STEP_LABEL = {
+  created: 'Started setting up', listed: 'Picked their tasks', rated: 'Saw their plan', invited: 'Invited their partner',
+  joined: 'Partner joined', reviewed: 'Partner reviewed', started: 'Plan started', checkout: 'Opened Premium checkout',
+};
+const millis = t => (!t ? null : typeof t.toMillis === 'function' ? t.toMillis() : typeof t === 'number' ? t : Date.parse(t));
 const $root = document.getElementById('app');
 
 const STATUS_LABEL = { pending: 'Waiting', approved: 'Premium', denied: 'Denied', revoked: 'Revoked', cancelled: 'Cancelled by user' };
@@ -55,6 +64,13 @@ function view() {
     <p class="lead">${esc(A.user.email || 'This account')} isn't an admin account.</p>
     <button class="btn secondary" data-action="signOut">Sign out</button></main>`;
 
+  const tabs = `<div class="seg" role="group" aria-label="Section">
+      <button data-action="tab" data-key="funnel" aria-pressed="${A.tab === 'funnel'}">Funnel</button>
+      <button data-action="tab" data-key="requests" aria-pressed="${A.tab === 'requests'}">Premium requests</button></div>`;
+  const head = `<div class="topbar"><span class="spacer"></span><button class="link-btn" style="margin:0" data-action="signOut">Sign out</button></div>
+    <h1 style="margin-top:0">Admin</h1>${tabs}`;
+  if (A.tab === 'funnel') return `<main class="screen">${head}${funnel()}</main>`;
+
   const matches = r => A.filter === 'all' || r.status === A.filter || (A.filter === 'closed' && CLOSED.includes(r.status));
   const list = A.requests.filter(matches);
   const count = k => A.requests.filter(r => k === 'all' || r.status === k || (k === 'closed' && CLOSED.includes(r.status))).length;
@@ -65,10 +81,8 @@ function view() {
     if (r.status === 'approved') return `<button class="btn secondary" data-action="revoke" data-id="${r.id}" ${dis}>Revoke Premium</button>`;
     return `<button class="btn primary" data-action="unlock" data-id="${r.id}" ${dis}>Unlock Premium</button>`;
   };
-  return `<main class="screen">
-    <div class="topbar"><span class="spacer"></span><button class="link-btn" style="margin:0" data-action="signOut">Sign out</button></div>
-    <h1 style="margin-top:0">Premium requests</h1>
-    <p class="lead" style="margin-bottom:12px">Signed in as ${esc(A.user.email || '')}. Unlocking gives the whole household Premium.</p>
+  return `<main class="screen">${head}
+    <p class="lead" style="margin-bottom:12px">Signed in as ${esc(A.user.email || '')}. Unlocking gives the whole household Premium (use it for gifts and tests; paid Premium runs through Stripe).</p>
     <div class="seg" role="group" aria-label="Filter">${FILTERS.map(([k, l]) =>
       `<button data-action="filter" data-key="${k}" aria-pressed="${A.filter === k}">${l} (${count(k)})</button>`).join('')}</div>
     <div class="card">${list.length ? list.map(r => `<div class="req">
@@ -77,6 +91,33 @@ function view() {
         <div class="btns">${buttons(r)}</div>
       </div>`).join('') : `<div class="note" style="border:0">Nothing here.</div>`}</div>
   </main>`;
+}
+
+/** How many households reached each step, and how many came back a week after starting. */
+function funnel() {
+  const since = A.range ? Date.now() - A.range * 864e5 : 0;
+  const rows = A.metrics.filter(m => (millis(m.created) || 0) >= since);
+  const steps = Object.keys(STEP_LABEL);
+  const n = k => rows.filter(m => m[k]).length;
+  const first = n('created') || 0;
+  const retained = rows.filter(m => {
+    const s = millis(m.started); if (!s) return false;
+    return (m.activeDays || []).some(d => Date.parse(d) >= s + 7 * 864e5);
+  }).length;
+  const pct = (a, b) => (b ? Math.round(a / b * 100) + '%' : '—');
+  const ranges = [[30, '30 days'], [90, '90 days'], [0, 'All time']];
+  return `<div class="seg" role="group" aria-label="Period" style="margin-top:12px">${ranges.map(([k, l]) =>
+      `<button data-action="range" data-key="${k}" aria-pressed="${A.range === k}">${l}</button>`).join('')}</div>
+    <div class="card">${steps.map((k, i) => {
+      const v = n(k); const prev = i ? n(steps[i - 1]) : v;
+      return `<div class="row static"><div class="row-text"><span class="row-title">${STEP_LABEL[k]}</span>
+        <span class="row-sub">${i ? `${pct(v, prev)} of the step before · ` : ''}${pct(v, first)} of all</span></div>
+        <span class="status">${v}</span></div>`;
+    }).join('')}
+      <div class="row static"><div class="row-text"><span class="row-title">Still using it a week after starting</span>
+        <span class="row-sub">${pct(retained, n('started'))} of plans started</span></div><span class="status">${retained}</span></div>
+    </div>
+    <p class="fine" style="text-align:left">Households, not people. Counted from when each step was first reached.</p>`;
 }
 
 function render() { $root.innerHTML = view(); fitButtons($root); }
@@ -98,6 +139,8 @@ async function act(kind, userId) {
 const Actions = {
   signOut() { Backend.Auth.signOut(); },
   filter(d) { A.filter = d.key; render(); },
+  tab(d) { A.tab = d.key === 'requests' ? 'requests' : 'funnel'; render(); },
+  range(d) { A.range = Number(d.key) || 0; render(); },
   unlock(d) { act('unlock', d.id); },
   deny(d) { act('deny', d.id); },
   revoke(d) { if (confirm('Revoke Premium for this household?')) act('revoke', d.id); },
@@ -126,6 +169,7 @@ document.addEventListener('submit', async e => {
   }
   Backend.Auth.onChange(async user => {
     if (unwatch) { unwatch(); unwatch = null; }
+    if (unwatchMetrics) { unwatchMetrics(); unwatchMetrics = null; }
     A.user = user; A.busy = null; A.requests = [];
     if (!user) { A.phase = 'signedOut'; render(); return; }
     A.phase = 'loading'; render();
@@ -136,5 +180,6 @@ document.addEventListener('submit', async e => {
     unwatch = Backend.Admin.watchRequests(list => { A.requests = list; render(); }, e => {
       console.error(e); A.phase = 'error'; A.error = `Couldn't load requests (${e.code || 'error'}). Publish the latest firestore.rules.`; render();
     });
+    unwatchMetrics = Backend.Admin.watchMetrics(list => { A.metrics = list; render(); }, e => console.error(e));
   });
 })();

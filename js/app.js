@@ -4,9 +4,10 @@
    APP — state, auth flow, live sync, actions, routing
    ========================================================= */
 const INVITE_KEY = 'household-app/pending-invite';
-const HOUSEHOLD_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'frequency', 'inventory', 'review', 'waiting',
-  'preferences', 'prefsDone', 'plan', 'today', 'premium', 'breakdown', 'reshare'];
-const SETUP_SCREENS = ['members', 'home', 'circumstances', 'responsibilities', 'frequency'];
+const INVITE_FROM_KEY = 'household-app/pending-invite-from';
+const HOUSEHOLD_SCREENS = ['members', 'home', 'responsibilities', 'frequency', 'rate', 'review', 'plan', 'today', 'inventory',
+  'premium', 'breakdown', 'reshare'];
+const SETUP_SCREENS = ONBOARDING;
 
 const S = {
   phase: 'loading',          // loading | setup | signedOut | ready | error
@@ -14,20 +15,27 @@ const S = {
   user: null,                // Firebase user
   profile: null,             // users/{uid}
   household: null,           // households/{hid} (live)
-  subscription: null,        // subscriptions/{household.ownerId} (live)
-  premiumRequest: null,      // premiumRequests/{uid} — my own "I'm interested" (live)
+  grant: null,               // subscriptions/{organiser} — Premium given from the admin panel (live)
+  stripeSubs: [],            // customers/{organiser}/subscriptions — paid Premium (live)
+  subscription: null,        // the two above merged (Entitlements.effective)
+  premiumRequest: null,      // premiumRequests/{uid} — "I'm interested" while billing isn't set up (live)
   householdLoading: false,
   joining: false,
-  busy: false,
   suggestMode: false,
   breakdown: null,           // { respId, parts: [{ name, minutes, frequency, custom, on }], newName } while editing
+  prefDraft: null,           // answers being changed on the review / rate screens, saved in one go
+  customDraft: null,         // the "add your own task" form
+  planChoice: 'yearly',      // Premium plan picked on the pricing screen
+  checkoutReturn: null,      // 'success' | 'cancel' after coming back from Stripe
+  inviteLink: null,          // ready-made invite (so sharing can open straight from the tap)
   view: 'today',
   everyone: false,
   pendingInvite: null,
+  inviteFrom: null,
   auth: { mode: 'signup', busy: false, error: '', note: '', values: {} },
 };
 
-const watchers = { user: null, household: null, sub: null, householdId: undefined, ownerId: null };
+const watchers = { user: null, household: null, sub: null, stripe: null, householdId: undefined, ownerId: null };
 
 /* ---------- helpers ---------- */
 const AUTH_ERRORS = {
@@ -63,6 +71,12 @@ const DATA_ERRORS = {
   'unavailable': "You're offline and this household isn't saved on this device yet.",
 };
 
+const BILLING_ERRORS = {
+  'billing/not-configured': "Payments aren't set up yet. Please try again later.",
+  'billing/timeout': "The payment page didn't open in time. Check your connection and try again.",
+  'billing/error': "The payment page couldn't be opened. Nothing was charged. Please try again.",
+};
+
 function fail(e) {
   console.error(e);
   S.phase = 'error';
@@ -71,80 +85,108 @@ function fail(e) {
   render(true);
 }
 
-function captureInvite() {
+/** Read one-time parameters from the address (invite link, return from Stripe), then tidy the address. */
+function captureParams() {
   try {
     const params = new URLSearchParams(location.search);
     const code = params.get('invite');
     if (code && /^[a-z0-9]{8,40}$/.test(code)) {
       SafeStorage.set(INVITE_KEY, code);
-      params.delete('invite');
-      const q = params.toString();
-      history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash);
+      const from = (params.get('from') || '').trim().slice(0, 40);
+      if (from) SafeStorage.set(INVITE_FROM_KEY, from); else SafeStorage.remove(INVITE_FROM_KEY);
     }
+    const checkout = params.get('checkout');
+    if (checkout === 'success' || checkout === 'cancel') S.checkoutReturn = checkout;
+    ['invite', 'from', 'checkout'].forEach(k => params.delete(k));
+    const q = params.toString();
+    history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash);
   } catch (e) {}
   S.pendingInvite = SafeStorage.get(INVITE_KEY);
+  S.inviteFrom = S.pendingInvite ? SafeStorage.get(INVITE_FROM_KEY) : null;
 }
-function clearInvite() { S.pendingInvite = null; SafeStorage.remove(INVITE_KEY); }
+function clearInvite() { S.pendingInvite = null; S.inviteFrom = null; SafeStorage.remove(INVITE_KEY); SafeStorage.remove(INVITE_FROM_KEY); }
 
 /* ---------- persistence of household changes ---------- */
 function save(...fields) {
   const h = S.household;
-  if (!h) return;
+  if (!h) return Promise.resolve();
   const data = {};
-  fields.forEach(f => { data[f] = h[f]; });
-  Backend.Repo.saveHousehold(h.id, data).catch(e => {
+  [...new Set(fields)].forEach(f => { data[f] = h[f] === undefined ? null : h[f]; });
+  return Backend.Repo.saveHousehold(h.id, data).catch(e => {
     console.error(e);
+    const premiumWrite = ('notes' in data || 'suggestions' in data) && !Household.isOwner(h, S.user.uid);
     toast(e && e.code === 'permission-denied'
-      ? "Couldn't save: the database refused access (permission-denied). Check firestore.rules is published."
+      ? (premiumWrite ? `Couldn't save. Ask ${Household.memberName(Household.owner(h))} to open the app once to refresh Premium.`
+        : "Couldn't save: the database refused access. Check firestore.rules is published.")
       : "Couldn't save that change. Check your connection and try again.");
   });
 }
+/** Save a change and, if it changes a plan that isn't running yet, the updated plan in the same write. */
+function commit(...fields) {
+  if (rebuildPlan(S.user && S.user.uid)) fields.push('plan', 'swaps', 'planSeed', 'previousAssignments', 'reshare');
+  return save(...fields);
+}
+/** Work out the plan again if the list, times, parts or answers changed. `by` counts as having said yes. */
+function rebuildPlan(by) {
+  syncPremium();
+  const h = S.household;
+  if (!h || !Household.needsNewPlan(h)) return false;
+  Household.buildPlan(h, by || null);
+  return true;
+}
 let nameTimer = null;
+let partnerTimer = null;
 function flushName() { if (nameTimer) { clearTimeout(nameTimer); nameTimer = null; save('members'); } }
+function flushPartnerName() { if (partnerTimer) { clearTimeout(partnerTimer); partnerTimer = null; save('settings'); } }
 
-/** After rooms/children/pets change, drop responsibilities that no longer apply. */
+/** After rooms/children/pets change, drop tasks that no longer apply. */
 function saveSetup(field) {
   const h = S.household;
   const fields = [field];
   if (Household.prune(h)) fields.push('responsibilities');
   if (Household.tidySuggestions(h)) fields.push('suggestions');
-  save(...fields);
+  commit(...fields);
   rerender();
 }
 function saveResponsibilities() {
   const fields = ['responsibilities'];
   if (Household.tidySuggestions(S.household)) fields.push('suggestions');
-  save(...fields);
+  commit(...fields);
   rerender();
 }
-const isOwner = () => !!S.household && Household.isOwner(S.household, S.user.uid);
+const isOrganiser = () => !!S.household && Household.isOwner(S.household, S.user.uid);
 
-/** Once everyone has answered (or the inputs changed before starting), work out the split. */
-function maybeBuildPlan(byMe = false) {
-  syncPremium();
+/** Funnel steps, written once per household from each device (no personal data). */
+function mark(step) {
   const h = S.household;
-  if (!h || !Household.needsNewPlan(h)) return false;
-  const hadPlan = !!h.plan && h.plan.status === 'proposed';
-  Household.buildPlan(h);
-  save('plan', 'swaps', 'planSeed');
-  if (hadPlan) toast(byMe
-    ? 'Plan re-balanced. You both need to say yes again.'
-    : 'Something changed, so the plan was re-balanced. Have another look.');
-  return true;
+  if (!h) return;
+  const key = `household-app/metric/${h.id}/${step}`;
+  if (SafeStorage.get(key)) return;
+  SafeStorage.set(key, '1');
+  Backend.Metrics.mark(h.id, step).catch(() => SafeStorage.remove(key));
+}
+function markActiveDay() {
+  const h = S.household;
+  if (!h || !h.settings.onboarded) return;
+  const day = Household.dayKey();
+  const key = `household-app/active/${h.id}`;
+  if (SafeStorage.get(key) === day) return;
+  SafeStorage.set(key, day);
+  Backend.Metrics.activeDay(h.id, day).catch(() => SafeStorage.remove(key));
 }
 
 /* ---------- live data ---------- */
 function stop(key) { if (watchers[key]) { watchers[key](); watchers[key] = null; } }
 function teardown() {
-  stop('user'); stop('household'); stop('sub'); stop('request'); S.premiumRequest = null; clearTimeout(watchers.retryTimer);
+  stop('user'); stop('household'); stop('sub'); stop('stripe'); stop('request'); S.premiumRequest = null; clearTimeout(watchers.retryTimer);
   watchers.householdId = undefined; watchers.ownerId = null;
 }
 
 async function onAuth(user) {
   teardown();
   Sheet.close();
-  S.user = user; S.profile = null; S.household = null; S.subscription = null;
-  S.householdLoading = false; S.joining = false; S.lastStage = undefined;
+  S.user = user; S.profile = null; S.household = null; S.grant = null; S.stripeSubs = []; S.subscription = null;
+  S.householdLoading = false; S.joining = false; S.lastStage = undefined; S.inviteLink = null;
   if (!user) { S.phase = 'signedOut'; render(true); return; }
   // On sign-up this fires before the display name is saved, so use what was typed.
   const nameHint = user.displayName || (S.auth.values.name || '').trim();
@@ -166,7 +208,7 @@ function onProfile(profile) {
     if (!hid) { redeemInvite(); return; }
     clearInvite();
     render(false);
-    Sheets.notice("You're already in a household", 'Being part of more than one household isn\'t possible yet. To join another one, leave this household first.');
+    Sheets.notice("You're already in a household", "Being part of more than one household isn't possible yet. To join another one, leave this household first.");
   }
   if (hid !== watchers.householdId) watchHousehold(hid);
   render(false);
@@ -174,7 +216,7 @@ function onProfile(profile) {
 
 function watchHousehold(hid, attempt = 0) {
   stop('household');
-  if (attempt === 0) { stop('sub'); watchers.ownerId = null; S.household = null; S.subscription = null; }
+  if (attempt === 0) { stop('sub'); stop('stripe'); watchers.ownerId = null; S.household = null; S.grant = null; S.stripeSubs = []; S.subscription = null; }
   watchers.householdId = hid;
   clearTimeout(watchers.retryTimer);
   if (!hid) { S.householdLoading = false; return; }
@@ -190,8 +232,8 @@ function watchHousehold(hid, attempt = 0) {
     if (!(h.memberIds || []).includes(S.user.uid)) { forgetHousehold(); return; }
     S.householdLoading = false;
     S.household = h;
-    if (h.ownerId !== watchers.ownerId) watchSubscription(h.ownerId);
-    maybeBuildPlan();
+    if (h.ownerId !== watchers.ownerId) watchPremium(h.ownerId);
+    afterSnapshot(h);
     if (S.joining) {
       // The household can arrive before the join call itself resolves, so it finishes the join.
       S.joining = false;
@@ -213,35 +255,85 @@ function watchHousehold(hid, attempt = 0) {
   });
 }
 
+/** Housekeeping on every update from the server. */
+function afterSnapshot(h) {
+  const me = S.user.uid;
+  syncPremium();
+  // The partner takes over what the placeholder had in the plan.
+  if (!Household.isOwner(h, me)) {
+    mark('joined');
+    if (h.plan && Object.values(h.plan.assignments || {}).includes(INVITEE)) {
+      h.plan = { ...h.plan, assignments: Object.fromEntries(Object.entries(h.plan.assignments).map(([k, v]) => [k, v === INVITEE ? me : v])) };
+      save('plan');
+    }
+  }
+  // Changes nobody in particular made (e.g. Premium switching parts on or off): the organiser's app updates the plan.
+  if (Household.isOwner(h, me) && rebuildPlan(null)) save('plan', 'swaps', 'planSeed', 'previousAssignments', 'reshare');
+  if (Household.isOwner(h, me) && Household.stage(h) === 'draft') prepareInvite();
+  // The plan has just started (whoever said the last yes): the organiser's moment for the trial offer.
+  if (Household.isOwner(h, me) && h.plan && h.plan.status === 'active' && Date.now() - Date.parse(h.plan.startedAt || 0) < 10 * 60 * 1000) offerPremiumOnce();
+  markActiveDay();
+}
+
 function forgetHousehold() {
-  S.household = null; S.subscription = null;
-  stop('household'); stop('sub');
+  S.household = null; S.grant = null; S.stripeSubs = []; S.subscription = null;
+  stop('household'); stop('sub'); stop('stripe');
   watchers.householdId = null;
   Backend.Repo.setHouseholdRef(S.user.uid, null).catch(() => {});
   render(true);
 }
 
-/** Premium follows the household owner's account. */
-function watchSubscription(ownerId) {
-  stop('sub');
+/** Premium follows the organiser's account: a paid Stripe subscription, or a grant from the admin panel. */
+function watchPremium(ownerId) {
+  stop('sub'); stop('stripe');
   watchers.ownerId = ownerId;
-  S.subscription = null;
+  S.grant = null; S.stripeSubs = []; S.subscription = null;
   watchers.subLoaded = false;
-  watchers.sub = Backend.Repo.watchSubscription(ownerId, sub => {
+  const loaded = { grant: false, stripe: !Backend.Billing.enabled() };
+  const update = () => {
     const was = Entitlements.isPremium(S.subscription);
     const firstLoad = !watchers.subLoaded;
-    S.subscription = sub;
+    S.subscription = Entitlements.effective(S.grant, S.stripeSubs);
+    if (!(loaded.grant && loaded.stripe)) return;
     watchers.subLoaded = true;
-    if (was && !Entitlements.isPremium(sub) && !firstLoad) premiumEnded();
-    if (was !== Entitlements.isPremium(sub) || firstLoad) { maybeBuildPlan(); rerender(); }
-    if (Entitlements.isPremium(sub)) {
-      const t = sub.grantedAt && typeof sub.grantedAt.toMillis === 'function' ? sub.grantedAt.toMillis() : (sub.grantedAt || 1);
-      const key = `household-app/premium-welcome/${ownerId}/${t}`;
+    const now = Entitlements.isPremium(S.subscription);
+    if (was && !now && !firstLoad) premiumEnded();
+    if (now) {
+      if (S.checkoutReturn === 'success') S.checkoutReturn = null;
+      const sub = S.subscription;
+      const key = `household-app/premium-welcome/${ownerId}/${sub.source}`;
       if (!SafeStorage.get(key) && S.household && Household.stage(S.household) !== 'setup') {
         SafeStorage.set(key, '1');
         setTimeout(() => { if (!Sheet.isOpen()) Sheets.premiumWelcome(); }, 300);
       }
     }
+    if (S.household && Household.isOwner(S.household, S.user.uid) && Backend.Billing.enabled()) syncPaidMirror();
+    if (was !== now || firstLoad) {
+      if (S.household && Household.isOwner(S.household, S.user.uid) && rebuildPlan(null)) save('plan', 'swaps', 'planSeed', 'previousAssignments', 'reshare');
+    }
+    rerender();
+  };
+  watchers.sub = Backend.Repo.watchSubscription(ownerId, grant => { S.grant = grant; loaded.grant = true; update(); });
+  if (Backend.Billing.enabled()) {
+    watchers.stripe = Backend.Billing.watchSubscriptions(ownerId, subs => { S.stripeSubs = subs; loaded.stripe = true; update(); });  // null = couldn't read
+  }
+}
+
+/** Keep paidPremium/{me} in step with my Stripe subscription (the rules read it for my partner). */
+function syncPaidMirror(attempt = 0) {
+  const sub = S.subscription;
+  const paid = sub && sub.source === 'stripe' && Entitlements.isPremium(sub);
+  // A week of grace past the paid period, so a renewal never locks the partner out before the organiser's app catches up.
+  const until = paid ? (Math.max(sub.periodEnd || 0, sub.trialEnd || 0) || Date.now() + 30 * 864e5) + 7 * 864e5 : 0;
+  const key = `household-app/paid-mirror/${S.user.uid}`;
+  const value = String(until);
+  if (SafeStorage.get(key) === value) return;
+  if (!paid && !SafeStorage.get(key)) return; // never mirrored: nothing to switch off
+  clearTimeout(watchers.mirrorRetry);
+  Backend.Billing.mirror(S.user.uid, until).then(() => SafeStorage.set(key, value), e => {
+    // Right after paying, Stripe's role claim can arrive a little after the subscription: try again.
+    console.warn('Premium mirror not written yet', e);
+    if (attempt < 5) watchers.mirrorRetry = setTimeout(() => syncPaidMirror(attempt + 1), [2, 5, 15, 60, 300][attempt] * 1000);
   });
 }
 
@@ -263,12 +355,37 @@ async function redeemInvite() {
   }
 }
 
+/* ---------- invite: made in advance so the share sheet opens straight from the tap ---------- */
+const INVITE_LINK_KEY = 'household-app/invite-link/';
+function inviteText() {
+  const h = S.household;
+  const me = Household.memberName(Household.member(h, S.user.uid));
+  return `${me} made a plan for our home: who does what, split fairly. Have a look and mark anything that doesn't suit you.`;
+}
+function prepareInvite() {
+  const h = S.household;
+  if (S.inviteLink || watchers.inviteBusy) return;
+  try {
+    const saved = JSON.parse(SafeStorage.get(INVITE_LINK_KEY + h.id) || 'null');
+    if (saved && saved.until > Date.now()) { S.inviteLink = saved.link; return; }
+  } catch (e) {}
+  watchers.inviteBusy = true;
+  const me = Household.memberName(Household.member(h, S.user.uid));
+  Backend.Repo.createInvite(h.id, S.user.uid, h.settings.partnerName || '')
+    .then(code => {
+      S.inviteLink = `${location.origin}${location.pathname}?invite=${code}&from=${encodeURIComponent(me)}`;
+      // Keep it a little shorter than the invite itself lives.
+      SafeStorage.set(INVITE_LINK_KEY + h.id, JSON.stringify({ link: S.inviteLink, until: Date.now() + (APP_CONFIG.inviteValidDays - 1) * 864e5 }));
+    })
+    .catch(e => console.error(e))
+    .finally(() => { watchers.inviteBusy = false; });
+}
+
 /* ---------- auth form ---------- */
 async function submitAuth() {
   const { mode, values: v } = S.auth;
   const email = (v.email || '').trim();
   const password = v.password || '';
-  const name = (v.name || '').trim();
   const min = APP_CONFIG.minPasswordLength;
   let error = '';
   if (!email) error = 'Enter your email address.';
@@ -279,7 +396,7 @@ async function submitAuth() {
   S.auth.busy = true; S.auth.error = ''; S.auth.note = '';
   rerender();
   try {
-    if (mode === 'signup') await Backend.Auth.signUp(name, email, password);
+    if (mode === 'signup') await Backend.Auth.signUp((v.name || '').trim(), email, password);
     else if (mode === 'signin') await Backend.Auth.signIn(email, password);
     else {
       await Backend.Auth.resetPassword(email);
@@ -300,7 +417,12 @@ async function submitAuth() {
 
 /* =========================================================
    ACTIONS — UI events → domain logic → save → render
+   An action that returns a promise keeps its button busy until it settles
+   (see the click handler), so nothing can run twice.
    ========================================================= */
+let checkoutInFlight = false;
+const CHECKOUT_KEY = 'household-app/checkout/';
+
 const Actions = {
   reload() { location.reload(); },
 
@@ -316,64 +438,71 @@ const Actions = {
     S.auth.busy = false;
     if (S.phase === 'signedOut') rerender();
   },
-  signOut() { Sheet.close(); flushName(); Backend.Auth.signOut(); },
+  signOut() { Sheet.close(); flushName(); flushPartnerName(); Backend.Auth.signOut(); },
 
   /* household lifecycle */
   async createHousehold() {
-    if (S.busy) return;
-    S.busy = true; rerender();
     const name = (S.user.displayName || (S.profile && S.profile.displayName) || '').trim();
     try {
-      await Backend.Repo.createHousehold(S.user.uid, Household.create({ ownerId: S.user.uid, ownerName: name }));
+      const hid = await Backend.Repo.createHousehold(S.user.uid, Household.create({ ownerId: S.user.uid, ownerName: name }));
+      SafeStorage.set(`household-app/metric/${hid}/created`, '1');
+      Backend.Metrics.mark(hid, 'created').catch(() => {});
       history.replaceState(null, '', '#/members');
     } catch (e) {
       console.error(e);
-      S.busy = false;
       history.replaceState(null, '', '#/start');
       render(true);
       const why = DATA_ERRORS[e && e.code] || 'Check your connection and try again.';
       Sheets.notice("Couldn't create your household", `${why} (Error code: ${(e && (e.code || e.message)) || 'unknown'})`);
-      return;
     }
-    S.busy = false; rerender();
   },
   async deleteHousehold() {
-    Sheet.close();
-    try { await Backend.Repo.deleteHousehold(S.household.id, S.user.uid); }
+    try { await Backend.Repo.deleteHousehold(S.household.id, S.user.uid); Sheet.close(); }
     catch (e) { console.error(e); toast("Couldn't delete the household. Try again."); }
   },
   async leaveHousehold() {
-    Sheet.close();
-    try { await Backend.Repo.leaveHousehold(S.household, S.user.uid); }
+    try { await Backend.Repo.leaveHousehold(S.household, S.user.uid); Sheet.close(); }
     catch (e) { console.error(e); toast("Couldn't leave the household. Try again."); }
   },
 
-  /* invites */
+  /* invite: the phone's share sheet straight away; a sheet with the link otherwise */
   async invite() {
-    Sheets.invite('loading');
-    try {
-      const code = await Backend.Repo.createInvite(S.household.id, S.user.uid);
-      const link = `${location.origin}${location.pathname}?invite=${code}`;
-      Sheets.invite({ link });
-    } catch (e) {
-      console.error(e);
-      Sheets.invite({ error: "Couldn't create an invite link. Check your connection and try again." });
+    const h = S.household;
+    if (!isOrganiser() || !Household.alone(h)) return;
+    const name = Household.memberName(Household.invitee(h));
+    const text = inviteText();
+    if (!S.inviteLink) {
+      prepareInvite();
+      for (let i = 0; i < 40 && !S.inviteLink; i++) await new Promise(r => setTimeout(r, 250));
+      if (!S.inviteLink) { toast("Couldn't create an invite link. Check your connection and try again."); return; }
+      Sheets.invite({ link: S.inviteLink, text, name });   // the tap's moment to share has passed
+    } else if (typeof navigator.share === 'function') {
+      try { await navigator.share({ title: 'Our home plan', text, url: S.inviteLink }); }
+      catch (e) { if (e && e.name === 'AbortError') return; Sheets.invite({ link: S.inviteLink, text, name }); }
+    } else {
+      Sheets.invite({ link: S.inviteLink, text, name });
     }
+    if (!h.settings.invitedAt) { h.settings.invitedAt = new Date().toISOString(); save('settings'); }
+    mark('invited');
+    rerender();
   },
-  copyInvite(d) {
-    const done = () => toast('Link copied');
+  copyInvite() {
+    const value = `${inviteText()}\n${S.inviteLink}`;
+    const done = () => toast('Copied. Paste it into a message.');
     const failCopy = () => toast("Copying didn't work. Press and hold the link to copy it.");
-    try { navigator.clipboard.writeText(d.link).then(done, failCopy); } catch (e) { failCopy(); }
+    try { navigator.clipboard.writeText(value).then(done, failCopy); } catch (e) { failCopy(); }
   },
-  shareInvite(d) {
-    navigator.share({ title: 'Join our household', text: "Join our household so we can organise it together:", url: d.link }).catch(() => {});
+  async shareInvite() {
+    try { await navigator.share({ title: 'Our home plan', text: inviteText(), url: S.inviteLink }); Sheet.close(); }
+    catch (e) { /* closed the share sheet: the link stays on screen */ }
   },
 
   /* navigation */
   nav(d) {
-    flushName();
+    flushName(); flushPartnerName();
     const h = S.household;
     if (h && !h.settings.onboarded && ONBOARDING.includes(d.to) && h.settings.step !== d.to) {
+      if (currentRoute === 'responsibilities' && d.to === 'frequency') mark('listed');
       h.settings.step = d.to;
       save('settings');
     }
@@ -385,23 +514,24 @@ const Actions = {
   confirmDelete() { Sheets.confirmDelete(); },
   confirmLeave() { Sheets.confirmLeave(); },
 
-  /* household setup */
+  /* household setup (organiser) */
   step(d) {
+    if (!isOrganiser()) return;
     const h = S.household;
     const [min, max] = LIMITS[d.key];
     const delta = Number(d.delta);
     if (d.key === 'children') { Household.setChildren(h, clamp(h.children.length + delta, min, max)); saveSetup('children'); }
     else { Household.setRoom(h, d.key, clamp(roomCount(h, d.key) + delta, min, max)); saveSetup('rooms'); }
   },
-  toggleRoom(d) { const h = S.household; Household.setRoom(h, d.key, roomCount(h, d.key) > 0 ? 0 : 1); saveSetup('rooms'); },
-  toggleFlag(d) { const h = S.household; h.circumstances[d.key] = !h.circumstances[d.key]; saveSetup('circumstances'); },
-  togglePet(d) { Household.togglePet(S.household, d.key); saveSetup('pets'); },
-  clearPets() { S.household.pets = []; saveSetup('pets'); },
+  toggleRoom(d) { if (!isOrganiser()) return; const h = S.household; Household.setRoom(h, d.key, roomCount(h, d.key) > 0 ? 0 : 1); saveSetup('rooms'); },
+  toggleFlag(d) { if (!isOrganiser()) return; const h = S.household; h.circumstances[d.key] = !h.circumstances[d.key]; saveSetup('circumstances'); },
+  togglePet(d) { if (!isOrganiser()) return; Household.togglePet(S.household, d.key); saveSetup('pets'); },
+  clearPets() { if (!isOrganiser()) return; S.household.pets = []; saveSetup('pets'); },
 
-  /* responsibilities */
-  toggleResp(d) { if (!isOwner()) return; Household.toggle(S.household, d.id); saveResponsibilities(); },
+  /* tasks */
+  toggleResp(d) { if (!isOrganiser()) return; Household.toggle(S.household, d.id); saveResponsibilities(); },
   toggleCategory(d) {
-    if (!isOwner()) return;
+    if (!isOrganiser()) return;
     const h = S.household;
     const items = Library.relevant(h).filter(r => r.category === d.cat);
     const sel = Household.selectedLibraryIds(h);
@@ -409,199 +539,124 @@ const Actions = {
     items.forEach(i => (all ? Household.deselect(h, i.id) : Household.select(h, i.id)));
     saveResponsibilities();
   },
-  confirmSelection() { if (S.household.responsibilities.length) Sheets.confirm(); },
-  finishSetup() {
+  addCustomTask() {
+    if (!isOrganiser()) return;
+    if (!Entitlements.canAddCustomTask(S.subscription, Household.customCount(S.household))) { Sheets.premium('custom'); return; }
+    Sheets.customTask();
+  },
+  saveCustomTask() {
     const h = S.household;
-    h.settings.onboarded = true;
-    h.settings.step = 'inventory';
-    save('settings');
+    const d = S.customDraft || {};
+    if (!isOrganiser() || !Entitlements.canAddCustomTask(S.subscription, Household.customCount(h))) return;
+    const r = Household.addCustom(h, d);
+    if (!r) { toast('Give the task a name first.'); const i = document.getElementById('ct-name'); if (i) i.focus(); return; }
+    S.customDraft = null;
     Sheet.close();
-    go('inventory');
+    saveResponsibilities();
+    toast(`Added ${r.name}.`);
   },
-
-  /* Premium-gated: always routed through Entitlements with the owner's subscription. */
-  addResponsibility() {
-    if (Entitlements.canCreateCustomResponsibility(S.subscription)) { toast('Custom responsibilities arrive in the Premium phase.'); return; }
-    Sheets.premium({
-      title: 'Make your household fit your life.',
-      body: 'Premium lets you add your own responsibilities and break everyday chores into detailed tasks.',
-    });
-  },
-  openResponsibility(d) { Actions.peek(d); },
-  peek(d) {
-    const h = S.household;
-    const r = h.responsibilities.find(x => x.id === d.id) || Household.parentOf(h, d.id);
-    if (r) Sheets.taskPeek(r);
-  },
-  upgrade() { Sheet.close(); go('premium'); },
-  async requestPremium() {
-    if (S.busy) return;
-    const h = S.household;
-    S.busy = true; rerender();
-    try {
-      await Backend.Repo.requestPremium(S.user, {
-        name: Household.memberName(Household.member(h, S.user.uid)),
-        householdId: h.id,
-        members: h.memberIds.length,
-      });
-      toast("Thanks! You're on the list.");
-    } catch (e) {
-      console.error(e);
-      toast("Couldn't send that. Check your connection and try again.");
-    }
-    S.busy = false; rerender();
-  },
-  /* reshuffle the whole plan (both have to agree) */
-  askReshuffle() { Sheets.askReshuffle(); },
-  requestReshuffle() {
-    Sheet.close();
-    Household.requestReshuffle(S.household, S.user.uid);
-    save('reshuffle'); rerender();
-    toast('Asked. If they agree, you both answer again.');
-  },
-  acceptReshuffle() {
-    const h = S.household;
-    Household.acceptReshuffle(h);
-    save('prefRound', 'planSeed', 'previousAssignments', 'plan', 'swaps', 'reshare', 'reshuffle');
-    toast("Let's reshuffle! Answer again and you'll get a fresh split.");
-    goHome();
-  },
-  declineReshuffle() { Household.declineReshuffle(S.household); save('reshuffle'); rerender(); },
-  dismissReshuffle() { Household.markReshuffleSeen(S.household); save('reshuffle'); rerender(); },
-
-  /* cancel Premium (owner) */
-  confirmCancelPremium() { Sheets.confirmCancelPremium(); },
-  async cancelPremium() {
-    Sheet.close();
-    S.justCancelled = true;
-    try { await Backend.Repo.cancelPremium(S.user.uid); toast('Premium cancelled. Your breakdowns are remembered.'); }
-    catch (e) { S.justCancelled = false; console.error(e); toast("Couldn't cancel. Check your connection and try again."); }
-  },
-
-  /* break a task into parts (owner saves, partner suggests) */
-  openBreakdown(d) {
-    if (premiumGone()) return;
+  removeTask(d) {
+    if (!isOrganiser()) return;
     const h = S.household;
     const r = h.responsibilities.find(x => x.id === d.id);
-    if (!r) return;
-    const current = Household.parts(r).map(p => ({ name: p.name, minutes: p.minutes, frequency: p.frequency, custom: !!p.custom, on: true }));
-    const names = new Set(current.map(p => p.name.toLowerCase()));
-    const offered = Household.defaultParts(r).filter(p => !names.has(p.name.toLowerCase())).map(p => ({ ...p, on: false }));
-    S.breakdown = { respId: r.id, parts: [...current, ...offered], newName: '' };
+    if (!r || r.predefined) return;
+    Household.removeTask(h, r.id);
     Sheet.close();
-    go('breakdown');
-  },
-  toggleBreakPart(d) { const p = S.breakdown.parts[Number(d.key)]; if (p) p.on = !p.on; rerender(); },
-  addBreakPart() {
-    const bd = S.breakdown;
-    const name = (bd.newName || '').trim();
-    if (!name) return;
-    if (bd.parts.some(p => p.name.toLowerCase() === name.toLowerCase())) { toast('That part is already in the list.'); return; }
-    const r = S.household.responsibilities.find(x => x.id === bd.respId);
-    bd.parts.push({ name, minutes: 10, frequency: Timing.of(r).frequency, custom: true, on: true });
-    bd.newName = '';
-    rerender();
-    const input = document.getElementById('bd-new'); if (input) { input.value = ''; input.focus(); }
-  },
-  saveBreakdown() {
-    if (premiumGone()) return;
-    const h = S.household;
-    const bd = S.breakdown;
-    const r = h.responsibilities.find(x => x.id === bd.respId);
-    const parts = bd.parts.filter(p => p.on);
-    if (!r || parts.length < 2) return;
-    Household.setBreakdown(h, r.id, parts);
-    save(...(h.plan ? ['responsibilities', 'plan'] : ['responsibilities']));
-    maybeBuildPlan(true);
-    S.breakdown = null;
-    if (shareNewTasks(true)) { toast(`${r.name} is now ${parts.length} parts. Say how you feel about them, then they're shared out fairly.`); return; }
-    go('inventory');
-    toast(`${r.name} is now ${parts.length} parts.`);
-  },
-  mergeBreakdown() {
-    if (premiumGone()) return;
-    const h = S.household;
-    const r = h.responsibilities.find(x => x.id === S.breakdown.respId);
-    Household.setBreakdown(h, r.id, []);
-    save(...(h.plan ? ['responsibilities', 'plan'] : ['responsibilities']));
-    maybeBuildPlan(true);
-    S.breakdown = null;
-    go('inventory');
-    toast(`${r.name} is one task again.`);
-  },
-  suggestBreakdown() {
-    if (premiumGone()) return;
-    const h = S.household;
-    const bd = S.breakdown;
-    const parts = bd.parts.filter(p => p.on);
-    if (parts.length < 2) return;
-    Household.suggestBreakdown(h, S.user.uid, bd.respId, parts);
-    save('suggestions');
-    S.breakdown = null;
-    go('inventory');
-    toast(`Suggestion sent to ${Household.memberName(Household.owner(h))}.`);
+    saveResponsibilities();
+    toast(`Removed ${r.name}.`);
   },
 
-  /* re-share only the new parts */
-  setResharePref(d) { if (premiumReshareGone()) return; Household.setResharePref(S.household, S.user.uid, d.id, d.key); save('reshare'); rerender(); },
-  finishReshare() { if (premiumReshareGone()) return; Household.finishReshare(S.household, S.user.uid); save('reshare'); rerender(); },
-  acceptReshare() {
-    if (premiumReshareGone()) return;
+  /* answers: during setup they're saved as you tap; later they're changed in one go */
+  setPref(d) {
     const h = S.household;
-    const done = Household.acceptReshare(h, S.user.uid);
-    save('plan', 'reshare');
-    if (done) { toast('Done! Shared out fairly.'); go('plan'); } else rerender();
+    if (!h.settings.onboarded) {
+      if (!isOrganiser()) return;
+      Household.setPref(h, S.user.uid, d.id, d.key);
+      save('preferences');
+    } else {
+      S.prefDraft = { ...(S.prefDraft || {}), [d.id]: d.key };
+    }
+    rerender();
   },
-  declineReshare() {
-    Household.declineReshare(S.household);
-    save('plan', 'reshare');
-    toast('No changes. Anything new that nobody has stays under Needs a home.');
+  setBaseline(d) {
+    if (!isOrganiser() || !['me', 'half', 'them'].includes(d.key)) return;
+    S.household.settings.baseline = d.key;
+    save('settings');
+    rerender();
+  },
+  /** The organiser's last setup step: hand in the answers and see the plan. */
+  finishSetup() {
+    const h = S.household;
+    if (!isOrganiser() || h.settings.onboarded) return;
+    const me = S.user.uid;
+    Household.submitPrefs(h, me);
+    h.settings.onboarded = true;
+    h.settings.step = 'plan';
+    Household.buildPlan(h, me);
+    save('settings', 'preferences', 'plan', 'swaps', 'planSeed');
+    mark('rated');
+    prepareInvite();
     go('plan');
   },
-
-  dismissNudge() { SafeStorage.set('household-app/nudge-dismissed/' + S.household.id, '1'); rerender(); },
-
-  /* preferences */
-  setPref(d) {
-    Household.setPref(S.household, S.user.uid, d.id, d.key);
-    save('preferences');
-    rerender();
-  },
-  fillPrefs() {
+  /** Changing answers later (anyone, before the plan runs). */
+  saveAnswers() {
+    applyPrefDraft();
     const h = S.household;
-    const v = Household.prefs(h, S.user.uid).values || {};
-    h.responsibilities.forEach(r => { if (!v[r.id]) Household.setPref(h, S.user.uid, r.id, 'ok'); });
-    save('preferences');
-    rerender();
-  },
-  submitPrefs() {
-    const h = S.household;
-    if (!Household.allRated(h, S.user.uid)) return;
     Household.submitPrefs(h, S.user.uid);
-    save('preferences');
-    maybeBuildPlan(true);
-    goHome();
+    commit('preferences');
+    toast('Saved. The plan follows your answers.');
+    go('plan');
   },
-  editPrefs() {
-    Sheet.close();
+  /** The partner, after looking at the plan: start it, or rebalance with their answers first. */
+  submitReview() {
     const h = S.household;
-    const mine = Household.prefs(h, S.user.uid);
-    h.preferences = { ...(h.preferences || {}), [S.user.uid]: { ...mine, submittedAt: null } };
-    save('preferences');
-    go('preferences');
+    const me = S.user.uid;
+    if (Household.isOwner(h, me)) return;
+    applyPrefDraft();
+    const changes = Household.marked(h, me) > 0;
+    Household.submitPrefs(h, me);
+    Household.buildPlan(h, changes ? null : me);
+    if (changes) h.plan = { ...h.plan, rebalancedBy: me };
+    else if (Household.hasAccepted(h, me)) Household.acceptPlan(h, me);
+    save('preferences', 'plan', 'swaps', 'planSeed');
+    mark('reviewed');
+    if (h.plan.status === 'active') { mark('started'); toast("You're all set. Let's go!"); go('today'); return; }
+    toast(changes ? "Rebalanced with your answers. Have a look and say yes." : 'Thanks! The plan starts once you both say yes.');
+    go('plan');
   },
 
   /* plan */
   acceptPlan() {
     const h = S.household;
+    if (!h.plan || h.plan.status === 'active' || Household.alone(h)) return;
     Household.acceptPlan(h, S.user.uid);
     save('plan');
-    if (h.plan.status === 'active') { toast("You're all set. Let's go!"); go('today'); } else rerender();
-  },
-  timeTotals() {
-    Sheets.premium({ title: 'See the time behind the split', body: 'Premium shows roughly how much time each of you spends on the household every week.' });
+    if (h.plan.status === 'active') {
+      mark('started');
+      toast("You're all set. Let's go!");
+      go('today');
+      offerPremiumOnce();
+    } else rerender();
   },
   claim(d) { Household.claim(S.household, d.id, S.user.uid); save('plan'); rerender(); },
+
+  /* reshuffle the whole plan (the other person agrees first) */
+  askReshuffle() { Sheets.askReshuffle(); },
+  requestReshuffle() {
+    Sheet.close();
+    Household.requestReshuffle(S.household, S.user.uid);
+    save('reshuffle'); rerender();
+    toast('Asked. If they agree, you both get a fresh split.');
+  },
+  acceptReshuffle() {
+    const h = S.household;
+    Household.acceptReshuffle(h, S.user.uid);
+    save('planSeed', 'previousAssignments', 'plan', 'swaps', 'reshare', 'reshuffle');
+    toast("Here's a fresh split. Say yes when it works for you.");
+    go('plan');
+  },
+  declineReshuffle() { Household.declineReshuffle(S.household); save('reshuffle'); rerender(); },
+  dismissReshuffle() { Household.markReshuffleSeen(S.household); save('reshuffle'); rerender(); },
 
   /* swaps */
   askSwap(d) { Sheets.askSwap(d.id); },
@@ -622,8 +677,7 @@ const Actions = {
     if (!swap || swap.status !== 'pending') return;
     Household.acceptSwap(h, d.id, d.key || null);
     save('plan', 'swaps');
-    const task = Household.unitName(h, swap.respId);
-    toast(`Deal! ${task} is yours now.`);
+    toast(`Deal! ${Household.unitName(h, swap.respId)} is yours now.`);
     rerender();
   },
   declineSwap(d) { Household.declineSwap(S.household, d.id); save('swaps'); rerender(); },
@@ -634,10 +688,152 @@ const Actions = {
   toggleEveryone() { S.everyone = !S.everyone; rerender(); },
   toggleDone(d) { Household.toggleDone(S.household, d.id, S.user.uid); save('completions'); rerender(); },
 
-  /* board (Premium) */
-  boardPremium() {
-    Sheets.premium({ title: 'A board for each other', body: 'With Premium you can leave each other notes, flag supplies that are running low, and post last-minute tasks.' });
+  /* Premium: one prompt for every locked feature, one page, one checkout */
+  premiumInfo(d) { Sheets.premium(d.key); },
+  peek(d) {
+    const h = S.household;
+    const r = h.responsibilities.find(x => x.id === d.id) || Household.parentOf(h, d.id);
+    if (r) Sheets.taskPeek(r);
   },
+  choosePlan(d) { if (d.key === 'yearly' || d.key === 'monthly') { S.planChoice = d.key; rerender(); } },
+  /**
+   * Open Stripe Checkout. Guarded four ways against paying twice: the busy button, an in-flight
+   * flag, "already Premium", and re-using the same checkout page for 20 minutes (so even a second
+   * tap after a reload lands on the same payment, not a new one).
+   */
+  async startCheckout() {
+    if (checkoutInFlight || !isOrganiser()) return;
+    if (!watchers.subLoaded || !Array.isArray(S.stripeSubs)) { toast("We're still checking your plan. Try again in a moment."); return; }
+    if (Entitlements.isPremium(S.subscription)) { toast('You already have Premium.'); return; }
+    if (Entitlements.paymentProblem(S.stripeSubs)) { toast('Please fix the payment for your subscription first.'); return; }
+    const plan = S.planChoice === 'monthly' ? 'monthly' : 'yearly';
+    const key = `${CHECKOUT_KEY}${S.user.uid}`;
+    try {
+      const recent = JSON.parse(SafeStorage.get(key) || 'null');
+      if (recent && recent.plan === plan && Date.now() - recent.at < 25 * 60 * 1000 && recent.url) { location.assign(recent.url); return holdBusy(); }
+    } catch (e) {}
+    checkoutInFlight = true;
+    try {
+      mark('checkout');
+      const url = await Backend.Billing.startCheckout(S.user.uid, plan, { trial: !Entitlements.hadSubscription(S.stripeSubs) });
+      SafeStorage.set(key, JSON.stringify({ plan, url, at: Date.now() }));
+      location.assign(url);
+      return holdBusy();
+    } catch (e) {
+      console.error(e);
+      toast(BILLING_ERRORS[e && e.code] || "The payment page couldn't be opened. Nothing was charged. Please try again.");
+    } finally {
+      checkoutInFlight = false;
+    }
+  },
+  async openPortal() {
+    try { location.assign(await Backend.Billing.portalUrl()); return holdBusy(); }
+    catch (e) { console.error(e); toast("Couldn't open your subscription settings. Try again in a moment."); }
+  },
+  async requestPremium() {
+    const h = S.household;
+    try {
+      await Backend.Repo.requestPremium(S.user, {
+        name: Household.memberName(Household.member(h, S.user.uid)),
+        householdId: h.id,
+        members: h.memberIds.length,
+      });
+      toast("Thanks! You're on the list.");
+    } catch (e) {
+      console.error(e);
+      toast("Couldn't send that. Check your connection and try again.");
+    }
+  },
+  /* cancel a Premium that was given from the admin panel (paid Premium is managed in Stripe) */
+  confirmCancelPremium() { Sheets.confirmCancelPremium(); },
+  async cancelPremium() {
+    S.justCancelled = true;
+    try { await Backend.Repo.cancelPremium(S.user.uid); Sheet.close(); toast('Premium cancelled. Your breakdowns are remembered.'); }
+    catch (e) { S.justCancelled = false; console.error(e); toast("Couldn't cancel. Check your connection and try again."); }
+  },
+
+  /* break a task into parts (organiser saves, partner suggests) */
+  openBreakdown(d) {
+    if (premiumGone()) return;
+    const h = S.household;
+    const r = h.responsibilities.find(x => x.id === d.id);
+    if (!r) return;
+    const current = Household.parts(r).map(p => ({ name: p.name, minutes: p.minutes, frequency: p.frequency, custom: !!p.custom, on: true }));
+    const names = new Set(current.map(p => p.name.toLowerCase()));
+    const offered = Household.defaultParts(r).filter(p => !names.has(p.name.toLowerCase())).map(p => ({ ...p, on: false }));
+    S.breakdown = { respId: r.id, parts: [...current, ...offered], newName: '' };
+    Sheet.close();
+    go('breakdown');
+  },
+  toggleBreakPart(d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p) p.on = !p.on; rerender(); },
+  addBreakPart() {
+    const bd = S.breakdown;
+    if (!bd) return;
+    const name = (bd.newName || '').trim().slice(0, 60);
+    if (!name) return;
+    if (bd.parts.some(p => p.name.toLowerCase() === name.toLowerCase())) { toast('That part is already in the list.'); return; }
+    const r = S.household.responsibilities.find(x => x.id === bd.respId);
+    bd.parts.push({ name, minutes: 10, frequency: Timing.of(r).frequency, custom: true, on: true });
+    bd.newName = '';
+    rerender();
+    const input = document.getElementById('bd-new'); if (input) { input.value = ''; input.focus(); }
+  },
+  saveBreakdown() {
+    if (premiumGone() || !isOrganiser()) return;
+    const h = S.household;
+    const bd = S.breakdown;
+    const r = bd && h.responsibilities.find(x => x.id === bd.respId);
+    const parts = bd ? bd.parts.filter(p => p.on) : [];
+    if (!r || parts.length < 2) return;
+    Household.setBreakdown(h, r.id, parts);
+    commit('responsibilities', 'plan');
+    S.breakdown = null;
+    if (shareNewTasks(true)) { toast(`${r.name} is now ${parts.length} parts. Say how you feel about them, then they're shared out fairly.`); return; }
+    go('inventory');
+    toast(`${r.name} is now ${parts.length} parts.`);
+  },
+  mergeBreakdown() {
+    if (premiumGone() || !isOrganiser()) return;
+    const h = S.household;
+    const r = S.breakdown && h.responsibilities.find(x => x.id === S.breakdown.respId);
+    if (!r) return;
+    Household.setBreakdown(h, r.id, []);
+    commit('responsibilities', 'plan');
+    S.breakdown = null;
+    go('inventory');
+    toast(`${r.name} is one task again.`);
+  },
+  suggestBreakdown() {
+    if (premiumGone()) return;
+    const h = S.household;
+    const bd = S.breakdown;
+    const parts = bd ? bd.parts.filter(p => p.on) : [];
+    if (parts.length < 2) return;
+    Household.suggestBreakdown(h, S.user.uid, bd.respId, parts);
+    save('suggestions');
+    S.breakdown = null;
+    go('inventory');
+    toast(`Suggestion sent to ${Household.memberName(Household.owner(h))}.`);
+  },
+
+  /* sharing out new tasks in a running plan */
+  setResharePref(d) { if (premiumReshareGone()) return; Household.setResharePref(S.household, S.user.uid, d.id, d.key); save('reshare'); rerender(); },
+  finishReshare() { if (premiumReshareGone()) return; Household.finishReshare(S.household, S.user.uid); save('reshare'); rerender(); },
+  acceptReshare() {
+    if (premiumReshareGone()) return;
+    const h = S.household;
+    const done = Household.acceptReshare(h, S.user.uid);
+    save('plan', 'reshare');
+    if (done) { toast('Done! Shared out fairly.'); go('plan'); } else rerender();
+  },
+  declineReshare() {
+    Household.declineReshare(S.household);
+    save('plan', 'reshare');
+    toast('No changes. Anything new that nobody has stays under Needs a home.');
+    go('plan');
+  },
+
+  /* board (Premium) */
   toggleBoard() { S.boardOpen = !S.boardOpen; rerender(); },
   addNote() { if (premiumGone()) return; Sheets.addNote(); },
   noteKind(d) { S.noteDraft = { ...(S.noteDraft || {}), kind: d.key }; Sheets.addNote(); },
@@ -668,34 +864,15 @@ const Actions = {
   gotNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Thanks! Off the board.'); } },
   doneNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Done. Nice one.'); } },
 
-  /* members: agree to the owner's list */
-  agree() {
-    Household.agree(S.household, S.user.uid);
-    save('agreements');
-    S.suggestMode = false;
-    goHome();
-    toast("You've agreed to the list.");
-  },
-
-  /* Premium: members suggest edits, the owner decides */
+  /* Premium: the partner suggests list changes, the organiser decides */
   suggestChanges() {
-    if (!Entitlements.canSuggestChanges(S.subscription)) {
-      Sheets.premium({
-        title: 'Suggest changes',
-        body: 'With Premium you can suggest adding or removing responsibilities, and the person who set up the household decides.',
-      });
-      return;
-    }
+    if (!Entitlements.canSuggestChanges(S.subscription)) { Sheets.premium('suggest'); return; }
     S.suggestMode = true;
-    currentRoute === 'review' ? rerender() : go('review');
+    go('inventory');
   },
-  doneSuggesting() {
-    S.suggestMode = false;
-    const h = S.household;
-    Household.agreementState(h, S.user.uid) === 'agreed' ? go('inventory') : rerender();
-  },
+  doneSuggesting() { S.suggestMode = false; rerender(); },
   suggest(d) {
-    if (!Entitlements.canSuggestChanges(S.subscription)) { Actions.suggestChanges(); return; }
+    if (!Entitlements.canSuggestChanges(S.subscription)) { Sheets.premium('suggest'); return; }
     Household.toggleSuggestion(S.household, S.user.uid, d.type, d.id);
     save('suggestions');
     rerender();
@@ -707,37 +884,82 @@ const Actions = {
     rerender();
   },
   acceptSuggestion(d) {
-    if (!isOwner() || premiumGone()) return;
+    if (!isOrganiser() || premiumGone()) return;
     const sug = Household.suggestions(S.household).find(x => x.id === d.id);
+    if (!sug) return;
     Household.acceptSuggestion(S.household, d.id);
-    save('responsibilities', 'suggestions');
-    maybeBuildPlan(true);
+    commit('responsibilities', 'suggestions', 'plan');
     rerender();
-    if (sug && sug.type !== 'remove' && shareNewTasks(true)) { toast(sug.type === 'add' ? `Added ${sug.name}. Say how you feel about it, then it's shared out fairly.` : `${sug.name} is now broken into parts. Say how you feel about them, then they're shared out fairly.`); return; }
-    if (sug) toast(sug.type === 'add' ? `Added ${sug.name}` : sug.type === 'breakdown' ? `${sug.name} is now broken into parts.` : `Removed ${sug.name}`);
+    if (sug.type !== 'remove' && shareNewTasks(true)) {
+      toast(sug.type === 'add' ? `Added ${sug.name}. Say how you feel about it, then it's shared out fairly.` : `${sug.name} is now broken into parts. Say how you feel about them, then they're shared out fairly.`);
+      return;
+    }
+    toast(sug.type === 'add' ? `Added ${sug.name}` : sug.type === 'breakdown' ? `${sug.name} is now broken into parts.` : `Removed ${sug.name}`);
   },
   declineSuggestion(d) {
-    if (!isOwner()) return;
+    if (!isOrganiser()) return;
     Household.declineSuggestion(S.household, d.id);
     save('suggestions');
     rerender();
   },
 };
 
+/** Keep a button busy while the browser leaves for Stripe (or for 15 s if it doesn't). */
+const holdBusy = () => new Promise(resolve => setTimeout(resolve, 15000));
+
+/** Answers changed on the review / rate screens land in the household in one go. */
+function applyPrefDraft() {
+  const h = S.household;
+  Object.entries(S.prefDraft || {}).forEach(([id, v]) => Household.setPref(h, S.user.uid, id, v));
+  S.prefDraft = null;
+}
+/** A draft only lives while its screen is open. */
+function prefValue(h, userId, unit) {
+  if (S.prefDraft && unit.id in S.prefDraft) return S.prefDraft[unit.id];
+  return Household.prefFor(h, userId, unit);
+}
+
+/** How many tasks I've marked ❤️ or 🙃, counting answers not saved yet. */
+function markedCount(h, userId) {
+  const v = { ...(Household.prefs(h, userId).values || {}) };
+  Object.entries(S.prefDraft || {}).forEach(([k, x]) => { if (x === 'ok') delete v[k]; else v[k] = x; });
+  return Object.keys(v).length;
+}
+
+/** Right after the plan starts: offer the trial once (organiser, Free). */
+function offerPremiumOnce() {
+  const h = S.household;
+  if (!isOrganiser() || !watchers.subLoaded || Entitlements.isPremium(S.subscription)) return;
+  const key = `household-app/premium-offer/${h.id}`;
+  if (SafeStorage.get(key)) return;
+  SafeStorage.set(key, '1');
+  setTimeout(() => { if (!Sheet.isOpen()) Sheets.premiumOffer(); }, 700);
+}
+
 const Changes = {
-  breakFreq(value, d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p) { p.frequency = value; rerender(); } },
-  breakMin(value, d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p) { p.minutes = Number(value); rerender(); } },
-  frequency(value, d) { Household.setTiming(S.household, d.id, { frequency: value }); save('responsibilities'); maybeBuildPlan(true); },
-  minutes(value, d) { Household.setTiming(S.household, d.id, { minutes: Number(value) }); save('responsibilities'); maybeBuildPlan(true); },
+  breakFreq(value, d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p && FREQUENCIES.some(f => f.id === value)) { p.frequency = value; rerender(); } },
+  breakMin(value, d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p) { p.minutes = Number(value) || p.minutes; rerender(); } },
+  frequency(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { frequency: value }); commit('responsibilities'); rerender(); },
+  minutes(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { minutes: Number(value) }); commit('responsibilities'); rerender(); },
+  customCategory(value) { S.customDraft = { ...(S.customDraft || {}), category: value }; },
+  customFrequency(value) { S.customDraft = { ...(S.customDraft || {}), frequency: value }; },
+  customMinutes(value) { S.customDraft = { ...(S.customDraft || {}), minutes: Number(value) }; },
 };
 
 const Inputs = {
   noteText(value) { S.noteDraft = { ...(S.noteDraft || { kind: 'note' }), text: value }; },
   breakNew(value) { if (S.breakdown) S.breakdown.newName = value; },
+  customName(value) { S.customDraft = { ...(S.customDraft || {}), name: value }; },
   myName(value) {
     Household.renameMember(S.household, S.user.uid, value);
     clearTimeout(nameTimer);
     nameTimer = setTimeout(flushName, 600);
+  },
+  partnerName(value) {
+    if (!isOrganiser()) return;
+    S.household.settings.partnerName = value.slice(0, 40);
+    clearTimeout(partnerTimer);
+    partnerTimer = setTimeout(flushPartnerName, 600);
   },
 };
 
@@ -755,9 +977,9 @@ function syncPremium() {
 }
 
 /**
- * Without Premium nothing Premium-only may stay open: a re-share in progress, suggestions
- * waiting for the organiser, a breakdown being edited. (Parts themselves are kept but merge
- * back automatically, so they return as they were if Premium comes back.)
+ * Without Premium nothing Premium-only may stay open: a re-share of parts in progress,
+ * suggestions waiting for the organiser, a breakdown being edited. (Parts themselves are kept
+ * but merge back automatically, so they return as they were if Premium comes back.)
  * Data is only cleared once the subscription has really loaded, never on a slow start.
  */
 function dropPremiumLeftovers() {
@@ -799,7 +1021,8 @@ function shareNewTasks(navigate = false) {
   if (navigate) go('reshare');
   return true;
 }
-const SHARE_FROM = ['today', 'plan', 'inventory'];
+// Not from the Household tab: tasks added there one after another go into one round once you move on.
+const SHARE_FROM = ['today', 'plan'];
 
 /** A Premium re-share (with parts) can't go on once Premium has ended. */
 function premiumReshareGone() {
@@ -826,27 +1049,22 @@ function resolveRoute() {
   if (!h) return 'start';
 
   const me = S.user.uid;
-  const owner = Household.isOwner(h, me);
+  const organiser = Household.isOwner(h, me);
   const stage = Household.stage(h);
-  if (name === 'premium') return 'premium';
+  if (name === 'premium' && stage !== 'setup') return 'premium';
   if (name === 'breakdown' && S.breakdown && Entitlements.canViewDetailedTasks(S.subscription)) return 'breakdown';
   if (name === 'reshare' && Household.activeReshare(h)) return 'reshare';
 
-  // Setting up: the owner walks through the steps, everyone else waits.
-  if (stage === 'setup') {
-    if (!owner) return 'waiting';
-    return SETUP_SCREENS.includes(name) ? name : (h.settings.step || 'members');
-  }
-  // Members look through the owner's list and agree before anything else.
-  if (!owner && stage !== 'active' && Household.agreementState(h, me) !== 'agreed') return 'review';
+  // The organiser sets up alone. (A partner can't be here yet: invites only exist once the plan does.)
+  if (stage === 'setup') return organiser && SETUP_SCREENS.includes(name) ? name : (h.settings.step || 'members');
 
-  let home, allowed;
-  if (stage === 'alone' || stage === 'agreeing') { home = 'inventory'; allowed = ['inventory']; }
-  else if (stage === 'preferences') { home = Household.prefsComplete(h, me) ? 'prefsDone' : 'preferences'; allowed = [home, 'inventory']; }
-  else if (stage === 'plan') { home = 'plan'; allowed = ['plan', 'inventory']; }
-  else { home = 'today'; allowed = ['today', 'plan', 'inventory']; }
-  if (owner) allowed = allowed.concat(SETUP_SCREENS);
-  else allowed = allowed.concat(['review']);
+  // The partner's first look: the plan, with their own answers.
+  const myTurn = !organiser && stage === 'review' && !Household.prefsComplete(h, me);
+  const home = myTurn ? 'review' : stage === 'active' ? 'today' : 'plan';
+  let allowed = ['today', 'plan', 'inventory'];
+  if (myTurn) allowed = ['review', 'inventory'];
+  else if (stage !== 'active') allowed.push('rate');
+  if (organiser) allowed = allowed.concat(['members', 'home', 'responsibilities', 'frequency']);
   // When the household moves on to a new stage, everyone goes to that stage's main screen.
   const moved = S.lastStage !== undefined && S.lastStage !== stage;
   S.lastStage = stage;
@@ -860,12 +1078,16 @@ function render(routeChanged) {
   const routable = name === 'auth' || name === 'welcome' || name === 'start' || HOUSEHOLD_SCREENS.includes(name);
   if (routable && location.hash !== '#/' + name) history.replaceState(null, '', '#/' + name);
   const changed = routeChanged || name !== currentRoute;
-  if (name !== currentRoute && name !== 'review') S.suggestMode = false;
+  if (name !== currentRoute) {
+    if (name !== 'inventory') S.suggestMode = false;
+    if (!['review', 'rate'].includes(name)) S.prefDraft = null;
+  }
   currentRoute = name;
   watchLoading(name);
   if (SHARE_FROM.includes(name)) shareNewTasks();
   $app.innerHTML = Screens[name]();
   fitButtons($app);
+  applyBusy($app);
   if (changed) {
     window.scrollTo(0, 0);
     const heading = $app.querySelector('h1');
@@ -890,8 +1112,18 @@ function watchLoading(name) {
   }, 15000);
 }
 
+/* While a finger or mouse is pressing a button, live updates wait: re-drawing the screen
+   between press and release would swallow the tap (e.g. a save landing as "Continue" is pressed). */
+let pressing = false;
+let rerenderWaiting = false;
+document.addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('[data-action], button, a')) pressing = true; }, true);
+const release = () => setTimeout(() => { pressing = false; if (rerenderWaiting) { rerenderWaiting = false; rerender(); } }, 0);
+document.addEventListener('pointerup', release, true);
+document.addEventListener('pointercancel', release, true);
+
 /** Re-render in place, keeping scroll position, focus, and anything half-typed. */
 function rerender() {
+  if (pressing) { rerenderWaiting = true; return; }
   const a = document.activeElement;
   let sel = null;
   let typing = null;
@@ -925,11 +1157,37 @@ function go(name) {
 
 /* ---------- events ---------- */
 window.addEventListener('hashchange', () => render(true));
+
+/**
+ * Every tap on an action: instant visual feedback (CSS :active + a short "pressed" pulse),
+ * repeated taps on the same button within 350 ms ignored, and async actions locked until they finish.
+ */
+const lastTap = new Map();
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-action]');
-  if (!el || el.disabled) return;
-  const fn = Actions[el.dataset.action];
-  if (fn) { e.preventDefault(); fn({ ...el.dataset }, el); }
+  if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
+  const action = el.dataset.action;
+  const fn = Actions[action];
+  if (!fn) return;
+  e.preventDefault();
+  if (Busy.has(action)) return;
+  const tapKey = JSON.stringify(el.dataset);
+  const now = Date.now();
+  if (now - (lastTap.get(tapKey) || 0) < 350) return;
+  lastTap.set(tapKey, now);
+  el.classList.remove('pressed'); void el.offsetWidth; el.classList.add('pressed');
+  let result;
+  try { result = fn({ ...el.dataset }, el); }
+  catch (err) { console.error(err); toast('Something went wrong. Please try again.'); return; }
+  if (result && typeof result.then === 'function') {
+    Busy.add(action);
+    applyBusy(document);
+    result.catch(err => console.error(err)).finally(() => {
+      Busy.delete(action);
+      document.querySelectorAll(`[data-action="${action}"]`).forEach(b => { b.classList.remove('is-busy'); b.removeAttribute('aria-busy'); b.disabled = false; });
+      rerender();
+    });
+  }
 });
 document.addEventListener('input', e => {
   const authField = e.target.closest('[data-auth-field]');
@@ -946,17 +1204,23 @@ document.addEventListener('submit', e => {
   e.preventDefault();
   if (!S.auth.busy) submitAuth();
 });
-document.addEventListener('focusout', e => { if (e.target.matches && e.target.matches('[data-input="myName"]')) flushName(); });
+document.addEventListener('focusout', e => {
+  if (!e.target.matches) return;
+  if (e.target.matches('[data-input="myName"]')) flushName();
+  if (e.target.matches('[data-input="partnerName"]')) flushPartnerName();
+});
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && Sheet.isOpen()) Sheet.close();
-  if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-input="myName"]')) e.target.blur();
-  if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-input="noteText"]')) { e.preventDefault(); Actions.postNote(); }
+  if (e.key !== 'Enter' || !e.target.matches) return;
+  if (e.target.matches('[data-input="myName"], [data-input="partnerName"]')) e.target.blur();
+  if (e.target.matches('[data-input="noteText"]')) { e.preventDefault(); Actions.postNote(); }
+  if (e.target.matches('[data-input="customName"]')) { e.preventDefault(); Actions.saveCustomTask(); }
 });
 
 /* ---------- boot ---------- */
 (function boot() {
   try {
-    captureInvite();
+    captureParams();
     if (!Backend.sdkLoaded()) {
       S.phase = 'error';
       S.fatal = "Couldn't reach the sign-in service. A content blocker, VPN or DNS filter may be blocking Google's Firebase (gstatic.com, googleapis.com). Allow those sites, or try another network, then reload.";
@@ -965,6 +1229,7 @@ document.addEventListener('keydown', e => {
     }
     if (!Backend.init()) { S.phase = 'setup'; render(true); return; }
     render(true);
+    if (S.checkoutReturn === 'cancel') toast('No worries, nothing was charged.');
 
     Backend.Auth.redirectResult().catch(e => {
       if (!SILENT_AUTH_ERRORS.includes(e && e.code)) { S.auth.error = authMessage(e); if (S.phase === 'signedOut') rerender(); }

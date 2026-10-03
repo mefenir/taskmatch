@@ -19,4 +19,27 @@ const FIREBASE_CONFIG = {
 const APP_CONFIG = Object.freeze({
   inviteValidDays: 14,
   minPasswordLength: 6,
+
+  /* Premium billing through Stripe (Firebase extension "Run Payments with Stripe").
+     Paste the two price IDs from the Stripe dashboard (Products → Premium → prices).
+     While they are empty the Premium page shows "I'm interested" instead of a checkout.
+     The amounts below are only what the app SHOWS: keep them identical to Stripe. */
+  billing: Object.freeze({
+    prices: Object.freeze({
+      monthly: '',          // e.g. 'price_1Q…' — €4.99 per month
+      yearly: '',           // e.g. 'price_1Q…' — €39.99 per year
+    }),
+    display: Object.freeze({ currency: 'EUR', locale: 'en-IE', monthly: 4.99, yearly: 39.99 }),
+    trialDays: 21,          // free trial, yearly plan only (must match firestore.rules)
+    functionsRegion: 'us-central1', // the region you installed the extension in
+    customersCollection: 'customers',
+  }),
+
+  /* Legal pages (legal.html) read these. Fill them in before charging anyone. */
+  legal: Object.freeze({
+    operator: '',           // your full name or company
+    address: '',            // street, postcode, city, country
+    email: '',              // contact email
+    vatId: '',              // optional
+  }),
 });

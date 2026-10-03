@@ -30,7 +30,9 @@ const Split = {
     const start = options.start || {};
     const seed = options.seed || 0;
     const jitter = id => { if (!seed) return 1; let h = seed * 2654435761 >>> 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return 1 + ((h % 1000) / 1000 - 0.5) * 0.4; };
-    const people = memberIds.slice().sort();
+    // The caller's order is the tie-break (organiser first), so a placeholder being replaced by the
+    // real partner gives exactly the same plan. Every phone passes the same order.
+    const people = memberIds.slice();
     const score = (m, r) => { const v = (prefs[m] || {})[r.id]; return v in PREF_SCORE ? PREF_SCORE[v] : 1; };
     const items = responsibilities
       .map(r => ({ r, w: Timing.weeklyMinutes(r), order: Timing.weeklyMinutes(r) * jitter(r.id) }))

@@ -18,7 +18,38 @@ const Icon = {
   sparkSm: svg('<path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/>', 12, 2.4),
 };
 
-const ONBOARDING = ['members', 'home', 'circumstances', 'responsibilities', 'frequency'];
+/* The organiser's setup, in order. The partner never goes through it. */
+const ONBOARDING = ['members', 'home', 'responsibilities', 'frequency', 'rate'];
+
+/* ---------- Instant feedback, no double actions ----------
+   An action that returns a promise is "busy" until it settles: its buttons are disabled
+   and show a spinner, and the same action can't start again (even after a re-render). */
+const Busy = new Set();
+function applyBusy(scope = document) {
+  scope.querySelectorAll('[data-action]').forEach(el => {
+    const on = Busy.has(el.dataset.action);
+    el.classList.toggle('is-busy', on);
+    if (on) { el.disabled = true; el.setAttribute('aria-busy', 'true'); }
+  });
+}
+
+/* ---------- Premium: one look, one destination ---------- */
+const premiumBadge = () => `<span class="badge">${Icon.sparkSm} Premium</span>`;
+/** What each locked feature offers, shown in the same Premium sheet everywhere. */
+const PREMIUM_FEATURES = Object.freeze({
+  parts:   { title: 'Every detail has an owner', body: 'Break big tasks like Clean bathroom into parts, each with its own timing and person.' },
+  custom:  { title: 'Your home, all of it', body: 'Free includes 3 tasks of your own. Premium adds as many as your home needs.' },
+  suggest: { title: 'Both of you shape the list', body: 'With Premium your partner can suggest adding, removing or breaking down tasks, and the organiser decides.' },
+  time:    { title: 'See that it is fair', body: 'Premium shows roughly how much time each of you puts into the household every week.' },
+  board:   { title: 'Stop reminding each other', body: 'A shared board for notes, supplies that are running low and last-minute tasks, sent to the right person.' },
+});
+
+/** Prices as the app shows them (the amounts Stripe charges are set in Stripe). */
+function money(amount) {
+  const d = APP_CONFIG.billing.display;
+  try { return new Intl.NumberFormat(d.locale, { style: 'currency', currency: d.currency }).format(amount); }
+  catch (e) { return `€${amount.toFixed(2)}`; }
+}
 
 function topbar({ back, step }) {
   const backBtn = back
@@ -52,10 +83,10 @@ function switchRow(action, key, label, sub, on) {
 }
 
 function addOwnRow(label, locked) {
-  return `<div class="card"><button class="row add" data-action="addResponsibility">
+  return `<div class="card"><button class="row add" data-action="addCustomTask">
     <span class="plus" aria-hidden="true">${Icon.plus}</span>
     <div class="row-text"><span class="row-title">${label}</span></div>
-    ${locked ? `<span class="badge">${Icon.sparkSm} Premium</span>` : ''}
+    ${locked ? premiumBadge() : ''}
   </button></div>`;
 }
 
@@ -104,7 +135,8 @@ const Sheet = (() => {
       enableDrag(r.querySelector('.sheet'));
       requestAnimationFrame(() => requestAnimationFrame(() => r.classList.add('show')));
       fitButtons(r);
-      const first = r.querySelector('.sheet button');
+      applyBusy(r);
+      const first = r.querySelector('.sheet input, .sheet button');
       if (first) first.focus({ preventScroll: true });
     },
     close() {
@@ -124,7 +156,7 @@ function toast(msg) {
   toast._t = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-/** Bottom navigation once the plan is running. */
+/** Bottom navigation once the organiser has finished setting up. */
 function bottomNav(current, dots = {}) {
   const item = (to, label, icon) => {
     const dot = dots[to] && current !== to;

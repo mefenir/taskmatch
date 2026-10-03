@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Imprint, privacy and terms · Our Household</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/styles.css?v=22">
+<style>
+.legal{max-width:680px;margin:0 auto;padding:24px 20px 64px}
+.legal h1{font-size:28px;margin:8px 0 4px}
+.legal h2{font-size:20px;margin:36px 0 8px;scroll-margin-top:16px}
+.legal h3{font-size:16px;margin:20px 0 6px}
+.legal p, .legal li{color:var(--ink);line-height:1.55;font-size:15px}
+.legal .todo{background:var(--premium-soft);color:var(--premium);border-radius:6px;padding:0 4px;font-weight:600}
+.legal nav a{margin-right:14px;color:var(--accent);font-weight:600;text-decoration:none}
+.legal .muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<main class="legal">
+  <p><a href="./" class="link-btn" style="margin:0;padding:0">← Back to the app</a></p>
+  <h1>Imprint, privacy and terms</h1>
+  <p class="muted">Last updated: <span id="updated">3 October 2026</span></p>
+  <nav><a href="#impressum">Imprint</a><a href="#privacy">Privacy</a><a href="#terms">Terms</a><a href="#withdrawal">Withdrawal</a></nav>
+
+  <h2 id="impressum">Imprint (Impressum)</h2>
+  <p>Information according to § 5 DDG.</p>
+  <p><span data-legal="operator"></span><br><span data-legal="address"></span></p>
+  <p>Email: <span data-legal="email"></span></p>
+  <p data-optional="vatId">VAT ID: <span data-legal="vatId"></span></p>
+  <p>Responsible for content according to § 18 (2) MStV: <span data-legal="operator"></span>, address as above.</p>
+
+  <h2 id="privacy">Privacy policy</h2>
+  <h3>Who is responsible</h3>
+  <p><span data-legal="operator"></span>, <span data-legal="address"></span>, <span data-legal="email"></span>.</p>
+  <h3>What we store and why</h3>
+  <ul>
+    <li><b>Your account:</b> name, email address and sign-in method, to let you sign in (Art. 6 (1) (b) GDPR).</li>
+    <li><b>Your household:</b> the tasks you choose, times, the plan, ticks, notes, and your own answers about tasks. Your answers are shown only to you; the app uses them to work out a fair split (Art. 6 (1) (b) GDPR).</li>
+    <li><b>Premium:</b> if you subscribe, payment is handled by Stripe. We store whether your subscription is active and until when; we never see or store card details (Art. 6 (1) (b) GDPR).</li>
+    <li><b>Usage steps:</b> for each household, the time a few setup steps were reached (for example "plan started") and the days it was used, without names or content, to improve the app (Art. 6 (1) (f) GDPR).</li>
+  </ul>
+  <h3>Service providers</h3>
+  <ul>
+    <li>Google Firebase (Google Ireland Ltd.) for sign-in, database and hosting of app data.</li>
+    <li>Stripe Payments Europe Ltd. for payments, if you subscribe to Premium.</li>
+    <li>GitHub Pages (GitHub Inc.) to deliver the app's files.</li>
+  </ul>
+  <p>Some providers may process data outside the EU on the basis of the EU–US Data Privacy Framework or standard contractual clauses.</p>
+  <h3>How long we keep it</h3>
+  <p>As long as you have an account. Deleting your household removes its data; ask us to delete your account at the email above. Billing records are kept as long as tax law requires.</p>
+  <h3>Your rights</h3>
+  <p>You can ask for access, correction, deletion, restriction, data portability, and object to processing based on legitimate interests. You can complain to a data protection authority.</p>
+  <h3>Storage on your device</h3>
+  <p>The app stores small settings on your device (for example that you've seen a message) so it works offline and doesn't repeat itself. There is no advertising or tracking by third parties.</p>
+
+  <h2 id="terms">Terms</h2>
+  <h3>The service</h3>
+  <p>Our Household helps two people list the work their home needs and share it fairly. The Free plan is free of charge. Premium adds features described in the app.</p>
+  <h3>Premium subscription</h3>
+  <ul>
+    <li><b>Prices:</b> <span data-price="monthly"></span> per month, or <span data-price="yearly"></span> per year, including VAT where it applies.</li>
+    <li><b>Free trial:</b> the yearly plan starts with a <span data-trial></span>-day free trial. If you don't cancel before the trial ends, the yearly price is charged at the end of the trial.</li>
+    <li><b>Renewal:</b> subscriptions renew automatically for the same period until cancelled.</li>
+    <li><b>Cancelling:</b> you can cancel any time in the app (Premium → Manage or cancel subscription). Premium then runs until the end of the period you've paid for.</li>
+    <li><b>Who it covers:</b> the person who set up the household pays; Premium covers everyone in that household.</li>
+  </ul>
+  <h3>Liability</h3>
+  <p>We provide the app with care but can't guarantee it is always available. Liability for slight negligence is limited to foreseeable damage typical for the contract, except for injury to life, body or health.</p>
+
+  <h2 id="withdrawal">Right of withdrawal</h2>
+  <p>As a consumer in the EU you can withdraw from a Premium subscription within 14 days of concluding it, without giving reasons, by telling us at <span data-legal="email"></span>. If you asked for Premium to start during the withdrawal period, you pay a proportionate amount for the time used. During a free trial nothing is charged.</p>
+  <p class="muted">These texts are a template. Have them checked by a lawyer before you charge anyone.</p>
+</main>
+<script src="js/config.js?v=22"></script>
+<script>
+  (function () {
+    var L = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.legal) || {};
+    var B = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.billing) || null;
+    document.querySelectorAll('[data-legal]').forEach(function (el) {
+      var v = L[el.getAttribute('data-legal')];
+      if (v) el.textContent = v; else { el.textContent = '[' + el.getAttribute('data-legal') + ' – fill in js/config.js]'; el.className = 'todo'; }
+    });
+    document.querySelectorAll('[data-optional]').forEach(function (el) { if (!L[el.getAttribute('data-optional')]) el.remove(); });
+    if (B) {
+      var fmt = function (n) { try { return new Intl.NumberFormat(B.display.locale, { style: 'currency', currency: B.display.currency }).format(n); } catch (e) { return '€' + n; } };
+      document.querySelectorAll('[data-price]').forEach(function (el) { el.textContent = fmt(B.display[el.getAttribute('data-price')]); });
+      document.querySelectorAll('[data-trial]').forEach(function (el) { el.textContent = B.trialDays; });
+    }
+  })();
+</script>
+</body>
+</html>

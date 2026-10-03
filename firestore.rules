@@ -75,27 +75,27 @@ service cloud.firestore {
           && request.resource.data.memberIds == resource.data.memberIds;
       }
 
-      // Other members: agree and answer preferences for themselves only; take part in the
-      // plan (say yes, swap, claim, tick off); suggest list changes and use the board
-      // only with the owner's Premium.
+      // The partner: answers for themselves only; takes part in the plan (rebalance with
+      // their answers, say yes, swap, claim, tick off); suggests list changes and uses the
+      // board only with the organiser's Premium.
       function memberEdit() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
-        let agreementsChanged = request.resource.data.get('agreements', {})
-          .diff(resource.data.get('agreements', {})).affectedKeys();
         let preferencesChanged = request.resource.data.get('preferences', {})
           .diff(resource.data.get('preferences', {})).affectedKeys();
         return request.auth.uid in resource.data.memberIds
           && request.auth.uid != resource.data.ownerId
-          && changed.hasOnly(['agreements', 'suggestions', 'preferences', 'plan', 'swaps', 'completions',
-                              'reshare', 'reshuffle', 'prefRound', 'planSeed', 'previousAssignments', 'notes', 'updatedAt'])
-          && agreementsChanged.hasOnly([request.auth.uid])
+          && changed.hasOnly(['suggestions', 'preferences', 'plan', 'swaps', 'completions',
+                              'reshare', 'reshuffle', 'planSeed', 'previousAssignments', 'notes', 'updatedAt'])
           && preferencesChanged.hasOnly([request.auth.uid])
           && (!changed.hasAny(['suggestions', 'notes']) || ownerIsPremium(resource.data.ownerId));
       }
 
+      // Premium given from the admin panel, or paid (see paidPremium below).
       function ownerIsPremium(ownerUid) {
-        return exists(/databases/$(database)/documents/subscriptions/$(ownerUid))
-          && premiumActive(get(/databases/$(database)/documents/subscriptions/$(ownerUid)).data);
+        return (exists(/databases/$(database)/documents/subscriptions/$(ownerUid))
+            && premiumActive(get(/databases/$(database)/documents/subscriptions/$(ownerUid)).data))
+          || (exists(/databases/$(database)/documents/paidPremium/$(ownerUid))
+            && premiumActive(get(/databases/$(database)/documents/paidPremium/$(ownerUid)).data));
       }
 
       function premiumActive(sub) {
@@ -193,6 +193,97 @@ service cloud.firestore {
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.status == 'pending';
       }
+    }
+
+    // ---------------------------------------------------------------
+    // paidPremium/{uid} — a copy of "this organiser has paid", so the rules can
+    // check Premium for the partner too. Only the organiser can write it, and only
+    // while their sign-in token carries the Stripe extension's claim
+    // stripeRole == 'premium' (set from the product's firebaseRole metadata).
+    // It runs out by itself at the end of the paid period.
+    // ---------------------------------------------------------------
+    match /paidPremium/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || organiserOfMyHousehold(uid));
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['plan', 'active', 'expiresAt', 'syncedAt'])
+        && (request.resource.data.active == false
+          || (request.auth.token.get('stripeRole', '') == 'premium'
+            && request.resource.data.plan == 'premium' && request.resource.data.active == true
+            && request.resource.data.expiresAt is timestamp
+            && request.resource.data.expiresAt < request.time + duration.value(380, 'd')));
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // customers/{uid} — the Stripe extension's data. People start a checkout
+    // for themselves only, with the real prices; the trial only comes with
+    // the yearly price and only for the configured number of days.
+    // Everything else here is written by the extension (admin access).
+    // Replace the two price IDs below with the ones in js/config.js.
+    // ---------------------------------------------------------------
+    match /customers/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+
+      match /checkout_sessions/{id} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn() && request.auth.uid == uid && validCheckout(request.resource.data);
+        allow update, delete: if false;
+      }
+      match /subscriptions/{id} {
+        allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || organiserOfMyHousehold(uid));
+        allow write: if false;
+      }
+      match /payments/{id} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow write: if false;
+      }
+      match /invoices/{id} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow write: if false;
+      }
+    }
+
+    function monthlyPrice() { return 'REPLACE_WITH_MONTHLY_PRICE_ID'; }
+    function yearlyPrice() { return 'REPLACE_WITH_YEARLY_PRICE_ID'; }
+    function trialDays() { return 21; }
+
+    function validCheckout(d) {
+      return d.keys().hasOnly(['price', 'success_url', 'cancel_url', 'allow_promotion_codes', 'client_reference_id',
+                               'metadata', 'locale', 'trial_period_days', 'expires_at'])
+        && (!('expires_at' in d) || (d.expires_at is int && d.expires_at <= request.time.toMillis() / 1000 + 3600))
+        && d.price in [monthlyPrice(), yearlyPrice()]
+        && d.success_url is string && d.cancel_url is string
+        && d.client_reference_id == request.auth.uid
+        && (!('trial_period_days' in d) || (d.price == yearlyPrice() && d.trial_period_days == trialDays()));
+    }
+
+    function organiserOfMyHousehold(ownerUid) {
+      let hid = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId;
+      return hid is string
+        && householdDoc(hid).data.ownerId == ownerUid
+        && request.auth.uid in householdDoc(hid).data.memberIds;
+    }
+
+    // Products and prices synced from Stripe: public, read-only.
+    match /products/{id} {
+      allow read: if true;
+      allow write: if false;
+      match /prices/{price} { allow read: if true; allow write: if false; }
+      match /tax_rates/{rate} { allow read: if true; allow write: if false; }
+    }
+
+    // ---------------------------------------------------------------
+    // metrics/{hid} — funnel step times for the admin panel. Members add
+    // steps for their own household; only admins can list or read them all.
+    // ---------------------------------------------------------------
+    match /metrics/{hid} {
+      allow get: if isAdmin() || isMemberOf(hid);
+      allow list: if isAdmin();
+      allow create, update: if signedIn() && isMemberOf(hid)
+        && request.resource.data.keys().hasOnly(['created', 'listed', 'rated', 'invited', 'joined', 'reviewed', 'started', 'checkout', 'activeDays'])
+        && request.resource.data.get('activeDays', []).size() <= 400;
+      allow delete: if false;
     }
 
     // admins/{uid} — only readable by that admin, never writable from the app.
