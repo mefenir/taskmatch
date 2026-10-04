@@ -908,7 +908,12 @@ const Changes = {
 
 const Inputs = {
   noteText(value) { S.noteDraft = { ...(S.noteDraft || { kind: 'note' }), text: value }; },
-  breakNew(value) { if (S.breakdown) S.breakdown.newName = value; },
+  breakNew(value) {
+    if (!S.breakdown) return;
+    S.breakdown.newName = value;
+    const add = document.querySelector('[data-action="addBreakPart"]');
+    if (add) add.disabled = !value.trim();
+  },
   customName(value) { S.customDraft = { ...(S.customDraft || {}), name: value }; },
   myName(value) {
     Household.renameMember(S.household, S.user.uid, value);
@@ -1129,6 +1134,7 @@ document.addEventListener('keydown', e => {
   if (e.target.matches('[data-input="myName"], [data-input="partnerName"]')) e.target.blur();
   if (e.target.matches('[data-input="noteText"]')) { e.preventDefault(); Actions.postNote(); }
   if (e.target.matches('[data-input="customName"]')) { e.preventDefault(); Actions.saveCustomTask(); }
+  if (e.target.matches('[data-input="breakNew"]')) { e.preventDefault(); Actions.addBreakPart(); }
 });
 
 /* ---------- boot ---------- */

@@ -300,14 +300,15 @@ const Screens = {
       ${topbar({ back: 'inventory' })}
       <h1>Break down ${esc(r.name)}</h1>
       <p class="lead" style="margin-bottom:0">${isOwner
-        ? 'Tick the parts you want as separate tasks. Each gets its own time and rhythm, and can go to a different person.'
+        ? 'Tick the parts you want as separate items. Each gets its own time and rhythm, and can go to a different person.'
         : `Pick the parts you'd like as separate tasks. ${ownerName} decides.`}</p>
       <div class="section-head"><h2 class="section-title">Parts</h2><span class="section-meta">${on.length} chosen</span></div>
       <div class="card">${rows}
         <div class="field" style="border-top:1px solid var(--line)"><label for="bd-new">Add your own part</label>
-          <div class="field-line"><input id="bd-new" maxlength="60" placeholder="e.g. Descale the kettle" value="${esc(bd.newName || '')}" data-input="breakNew" enterkeyhint="done">
-          <button class="mini" data-action="addBreakPart">Add</button></div></div>
+          <div class="field-line"><input id="bd-new" maxlength="60" placeholder="e.g. ${esc(Library.partExample(r))}" value="${esc(bd.newName || '')}" data-input="breakNew" enterkeyhint="done" autocomplete="off">
+          <button class="mini add-part" data-action="addBreakPart" ${(bd.newName || '').trim() ? '' : 'disabled'}>Add</button></div></div>
       </div>
+      <p class="fine" style="text-align:left;margin:0 4px 6px">Each part becomes its own item in your plan and is shared out fairly between you.</p>
       <p class="fine" style="text-align:left;margin:0 4px">Together about ${formatMinutes(total)} a week. As one task it was ${formatMinutes(Timing.weeklyMinutes(r))}.</p>
       <div class="bottom-bar">
         ${isOwner

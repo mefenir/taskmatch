@@ -100,10 +100,32 @@ const Library = (() => {
     category: id => LIBRARY.categories.find(c => c.id === id) || { id: String(id), name: String(id) },
     categoryOrder: id => (catOrder.has(id) ? catOrder.get(id) : Infinity),
     relevant: h => LIBRARY.responsibilities.filter(r => r.when(h)),
+    /** An example for "Add your own part": something that belongs to this task (else to its area). */
+    partExample: r => PART_EXAMPLES[r.libraryId] || PART_EXAMPLES[r.category] || 'Something else this needs',
     /** Names of the parts inside a responsibility (shown when you open a task). */
     parts: libId => ((index.get(libId) || {}).item || {}).tasks ? index.get(libId).item.tasks.map(t => (typeof t === 'string' ? t : t.name)) : [],
   };
 })();
+
+/* Examples shown in the "Add your own part" field, by task, then by area. Never one of the task's own parts. */
+const PART_EXAMPLES = Object.freeze({
+  clean_bathroom: 'Clean the grout', clean_floors: 'Clean the skirting boards', tidying: 'Water the plants',
+  clean_windows: 'Clean the blinds', tidy_office: 'Dust the screen', dishes: 'Scrub the pans',
+  clean_kitchen: 'Descale the kettle', laundry: 'Iron shirts', groceries: 'Check the fridge',
+  cooking: 'Plan the week\'s meals', rubbish: 'Clean the bins', recycling: 'Return deposit bottles',
+  supplies: 'Dishwasher tabs', small_repairs: 'Oil squeaky hinges', tradespeople: 'Chimney sweep',
+  appointments: 'Dentist check-ups', documents: 'Tax return', track_todos: 'Plan holidays',
+  kids_ready: 'Check the weather', school_runs: 'Bring the gym bag', kids_meals: 'Pack fruit',
+  bath_bedtime: 'Read a story', toys: 'Give away old toys', kids_admin: 'Sign permission slips',
+  activities: 'Swimming lessons', feed_pet: 'Wash the bowls', walk_pet: 'Midday walk',
+  litter: 'Clean the tray', pet_care: 'Flea treatment', mow: 'Sharpen the blades',
+  water_garden: 'Water the hanging baskets', garden_tidy: 'Trim the hedge', car_care: 'Top up washer fluid',
+  car_service: 'Renew the parking permit',
+  // by area, for your own tasks
+  cleaning: 'Dust the shelves', kitchen: 'Clean the oven', food: 'Check the fridge',
+  waste: 'Clean the bins', maintenance: 'Bleed the radiators', organisation: 'Pay the bills',
+  children: 'Pack the bags', pets: 'Brush the coat', garden: 'Sweep the patio', car: 'Check tyre pressure',
+});
 
 /* =========================================================
    TIMING — default effort per responsibility
