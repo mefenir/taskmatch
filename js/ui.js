@@ -162,8 +162,29 @@ function bottomNav(current, dots = {}) {
   };
   return `<nav class="bottom-nav" aria-label="Main"><div class="inner">
     ${item('today', 'Today', svg('<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>'))}
-    ${item('plan', 'Plan', svg('<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>'))}
-    ${item('inventory', 'Household', svg('<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M10 20v-6h4v6"/>'))}
+    ${item('household', 'Home', svg('<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M10 20v-6h4v6"/>'))}
   </div></nav>`;
+}
+
+/* ---------- Progress block: a big number on a bar that fills by time done ----------
+   The number is drawn twice: dark over the empty part, light over the filled part, clipped
+   at the same edge, so it stays readable at any percentage. It slides from the last value. */
+const meterLast = {};
+function meter(key, pct, label, sub) {
+  const from = key in meterLast ? meterLast[key] : 0;
+  return `<div class="meter-card">
+    <div class="meter-head"><span class="meter-label">${label}</span><span class="meter-sub">${sub}</span></div>
+    <div class="meter" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"
+      data-meter="${esc(key)}" data-pct="${pct}" style="--p:${from}%">
+      <div class="meter-fill"></div>
+      <span class="meter-num" aria-hidden="true">${pct}%</span><span class="meter-num on" aria-hidden="true">${pct}%</span>
+    </div></div>`;
+}
+function animateMeters(root) {
+  root.querySelectorAll('[data-meter]').forEach(m => {
+    const pct = Number(m.dataset.pct);
+    meterLast[m.dataset.meter] = pct;
+    requestAnimationFrame(() => requestAnimationFrame(() => m.style.setProperty('--p', pct + '%')));
+  });
 }
 

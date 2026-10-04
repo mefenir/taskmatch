@@ -5,7 +5,7 @@
    ========================================================= */
 const INVITE_KEY = 'household-app/pending-invite';
 const INVITE_FROM_KEY = 'household-app/pending-invite-from';
-const HOUSEHOLD_SCREENS = ['members', 'home', 'responsibilities', 'frequency', 'rate', 'review', 'plan', 'today', 'inventory',
+const HOUSEHOLD_SCREENS = ['members', 'home', 'responsibilities', 'frequency', 'rate', 'review', 'today', 'household',
   'subscribe', 'breakdown', 'reshare'];
 const SETUP_SCREENS = ONBOARDING;
 
@@ -28,8 +28,7 @@ const S = {
   planChoice: 'yearly',      // plan picked on the plans screen
   checkoutReturn: null,      // 'success' | 'cancel' after coming back from Stripe
   inviteLink: null,          // ready-made invite (so sharing can open straight from the tap)
-  view: 'today',
-  everyone: false,
+  dayOffset: 0,              // the day picked on Today (0 = today … 6)
   pendingInvite: null,
   inviteFrom: null,
   auth: { mode: 'signup', busy: false, error: '', note: '', values: {} },
@@ -582,7 +581,7 @@ const Actions = {
     save('settings', 'preferences', 'plan', 'swaps', 'planSeed');
     mark('rated');
     if (hasAccess()) prepareInvite();
-    go('plan');
+    go('household');
   },
   /** Changing answers later (anyone, before the plan runs). */
   saveAnswers() {
@@ -591,7 +590,7 @@ const Actions = {
     Household.submitPrefs(h, S.user.uid);
     commit('preferences');
     toast('Saved. The plan follows your answers.');
-    go('plan');
+    go('household');
   },
   /** The partner, after looking at the plan: start it, or rebalance with their answers first. */
   submitReview() {
@@ -608,7 +607,7 @@ const Actions = {
     mark('reviewed');
     if (h.plan.status === 'active') { mark('started'); toast("You're all set. Let's go!"); go('today'); return; }
     toast(changes ? "Rebalanced with your answers. Have a look and say yes." : 'Thanks! The plan starts once you both say yes.');
-    go('plan');
+    go('household');
   },
 
   /* plan */
@@ -638,7 +637,7 @@ const Actions = {
     Household.acceptReshuffle(h, S.user.uid);
     save('planSeed', 'previousAssignments', 'plan', 'swaps', 'reshare', 'reshuffle');
     toast("Here's a fresh split. Say yes when it works for you.");
-    go('plan');
+    go('household');
   },
   declineReshuffle() { Household.declineReshuffle(S.household); save('reshuffle'); rerender(); },
   dismissReshuffle() { Household.markReshuffleSeen(S.household); save('reshuffle'); rerender(); },
@@ -669,8 +668,8 @@ const Actions = {
   dismissSwap(d) { Household.markSwapSeen(S.household, d.id); save('swaps'); rerender(); },
 
   /* daily use */
-  setView(d) { S.view = d.key; rerender(); },
-  toggleEveryone() { S.everyone = !S.everyone; rerender(); },
+  shareNow() { if (isOrganiser()) shareNewTasks(true); },
+  setDay(d) { S.dayOffset = clamp(Number(d.key) || 0, 0, 6); rerender(); },
   toggleDone(d) { Household.toggleDone(S.household, d.id, S.user.uid); save('completions'); rerender(); },
 
   /* subscription: one screen, one checkout */
@@ -765,7 +764,7 @@ const Actions = {
     commit('responsibilities', 'plan');
     S.breakdown = null;
     if (shareNewTasks(true)) { toast(`${r.name} is now ${parts.length} parts. Say how you feel about them, then they're shared out fairly.`); return; }
-    go('inventory');
+    go('household');
     toast(`${r.name} is now ${parts.length} parts.`);
   },
   mergeBreakdown() {
@@ -776,7 +775,7 @@ const Actions = {
     Household.setBreakdown(h, r.id, []);
     commit('responsibilities', 'plan');
     S.breakdown = null;
-    go('inventory');
+    go('household');
     toast(`${r.name} is one task again.`);
   },
   suggestBreakdown() {
@@ -787,7 +786,7 @@ const Actions = {
     Household.suggestBreakdown(h, S.user.uid, bd.respId, parts);
     save('suggestions');
     S.breakdown = null;
-    go('inventory');
+    go('household');
     toast(`Suggestion sent to ${Household.memberName(Household.owner(h))}.`);
   },
 
@@ -798,13 +797,13 @@ const Actions = {
     const h = S.household;
     const done = Household.acceptReshare(h, S.user.uid);
     save('plan', 'reshare');
-    if (done) { toast('Done! Shared out fairly.'); go('plan'); } else rerender();
+    if (done) { toast('Done! Shared out fairly.'); go('household'); } else rerender();
   },
   declineReshare() {
     Household.declineReshare(S.household);
     save('plan', 'reshare');
     toast('No changes. Anything new that nobody has stays under Needs a home.');
-    go('plan');
+    go('household');
   },
 
   /* board */
@@ -839,7 +838,7 @@ const Actions = {
   /* the partner suggests list changes, the organiser decides */
   suggestChanges() {
     S.suggestMode = true;
-    go('inventory');
+    go('household');
   },
   doneSuggesting() { S.suggestMode = false; rerender(); },
   suggest(d) {
@@ -952,10 +951,12 @@ function shareNewTasks(navigate = false) {
   return true;
 }
 // Not from the Household tab: tasks added there one after another go into one round once you move on.
-const SHARE_FROM = ['today', 'plan'];
+const SHARE_FROM = ['today', 'household'];
 
+// Old addresses from before Plan and Household became one Home tab.
+const ROUTE_ALIASES = { plan: 'household', inventory: 'household' };
 function resolveRoute() {
-  const name = hashName();
+  const name = ROUTE_ALIASES[hashName()] || hashName();
   if (S.phase === 'setup' || S.phase === 'error' || S.phase === 'loading') return S.phase;
   if (S.phase === 'signedOut') return name === 'auth' ? 'auth' : 'welcome';
   if (S.joining) return 'joining';
@@ -979,10 +980,10 @@ function resolveRoute() {
 
   // The partner's first look: the plan, with their own answers.
   const myTurn = !organiser && stage === 'review' && !Household.prefsComplete(h, me);
-  const home = myTurn ? 'review' : stage === 'active' ? 'today' : 'plan';
-  let allowed = ['today', 'plan', 'inventory'];
-  if (myTurn) allowed = ['review', 'inventory'];
-  else if (stage !== 'active') allowed.push('rate');
+  // Once the plan runs: Today (mine) and Home (ours). Before that, Home is the only screen.
+  const home = myTurn ? 'review' : stage === 'active' ? 'today' : 'household';
+  let allowed = stage === 'active' ? ['today', 'household'] : ['household', 'rate'];
+  if (myTurn) allowed = ['review', 'household'];
   if (organiser) allowed = allowed.concat(['members', 'home', 'responsibilities', 'frequency']);
   // When the household moves on to a new stage, everyone goes to that stage's main screen.
   const moved = S.lastStage !== undefined && S.lastStage !== stage;
@@ -997,16 +998,19 @@ function render(routeChanged) {
   if (routable && location.hash !== '#/' + name) history.replaceState(null, '', '#/' + name);
   const changed = routeChanged || name !== currentRoute;
   if (name !== currentRoute) {
-    if (name !== 'inventory') S.suggestMode = false;
+    if (name !== 'household') S.suggestMode = false;
+    if (name !== 'today') S.dayOffset = 0;
     if (!['review', 'rate'].includes(name)) S.prefDraft = null;
   }
   currentRoute = name;
   watchLoading(name);
-  if (SHARE_FROM.includes(name)) shareNewTasks();
+  // New tasks are shared out when you arrive on Today or Home, so several added in a row go out together.
+  if (SHARE_FROM.includes(name) && changed) shareNewTasks();
   if (name === 'subscribe' && isOrganiser() && !hasAccess()) mark('paywall');
   $app.innerHTML = Screens[name]();
   fitButtons($app);
   applyBusy($app);
+  animateMeters($app);
   if (changed) {
     window.scrollTo(0, 0);
     const heading = $app.querySelector('h1');

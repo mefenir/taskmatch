@@ -149,7 +149,7 @@ const Screens = {
     const setup = !h.settings.onboarded;
     const partner = Household.alone(h) ? null : Household.member(h, Household.partnerId(h));
     return `<main class="screen">
-      ${topbar({ back: setup ? null : 'inventory', step: setup ? 'members' : null })}
+      ${topbar({ back: setup ? null : 'household', step: setup ? 'members' : null })}
       <h1>Who shares your home?</h1>
       <p class="lead">${setup ? "Just first names. You'll invite your partner once the plan is ready." : 'Change how your names show in the app.'}</p>
       <div class="card">
@@ -165,7 +165,7 @@ const Screens = {
               <input id="partner-name" value="${esc(h.settings.partnerName || '')}" placeholder="e.g. Sam" autocomplete="off" maxlength="40" data-input="partnerName">
             </div>`}
       </div>
-      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'home' : 'inventory')}">${setup ? 'Continue' : 'Done'}</button></div>
+      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'home' : 'household')}">${setup ? 'Continue' : 'Done'}</button></div>
     </main>`;
   },
 
@@ -176,7 +176,7 @@ const Screens = {
     const pets = `<button class="chip" data-action="clearPets" aria-pressed="${h.pets.length === 0}">None</button>` +
       petTypes.map(([t, l]) => `<button class="chip" data-action="togglePet" data-key="${esc(t)}" aria-pressed="${h.pets.some(p => p.type === t)}">${l}</button>`).join('');
     return `<main class="screen">
-      ${topbar({ back: setup ? 'members' : 'inventory', step: setup ? 'home' : null })}
+      ${topbar({ back: setup ? 'members' : 'household', step: setup ? 'home' : null })}
       <h1>Your home</h1>
       <p class="lead">So we only suggest what applies to you.</p>
       <div class="card">
@@ -195,7 +195,7 @@ const Screens = {
         ${switchRow('toggleFlag', 'garden', 'Garden or outdoor space', '', !!h.circumstances.garden)}
         ${switchRow('toggleFlag', 'car', 'Car', '', !!h.circumstances.car)}
       </div>
-      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'responsibilities' : 'inventory')}">${setup ? 'Show what needs doing' : 'Done'}</button></div>
+      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'responsibilities' : 'household')}">${setup ? 'Show what needs doing' : 'Done'}</button></div>
     </main>`;
   },
 
@@ -227,7 +227,7 @@ const Screens = {
     const count = h.responsibilities.length;
     const active = Household.stage(h) === 'active';
     return `<main class="screen">
-      ${topbar({ back: setup ? 'home' : 'inventory', step: setup ? 'responsibilities' : null })}
+      ${topbar({ back: setup ? 'home' : 'household', step: setup ? 'responsibilities' : null })}
       <h1>What needs doing in your home?</h1>
       <p class="lead" style="margin-bottom:0">${setup ? "Tick everything that applies. You're not deciding who does it yet."
         : active ? "Tick anything new. You'll both say how you feel about new tasks, and they're shared out fairly."
@@ -238,7 +238,7 @@ const Screens = {
       ${addOwnRow('Add your own task')}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${count ? `${plural(count, 'task')} · about ${formatMinutes(Household.weeklyTotal(h))} a week` : 'Nothing selected yet'}</p>
-        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'frequency' : 'inventory')}" ${count ? '' : 'disabled'}>${setup ? 'Continue' : 'Done'}</button>
+        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'frequency' : 'household')}" ${count ? '' : 'disabled'}>${setup ? 'Continue' : 'Done'}</button>
       </div>
     </main>`;
   },
@@ -263,14 +263,14 @@ const Screens = {
         }).join('')}</div>
       </section>`).join('');
     return `<main class="screen">
-      ${topbar({ back: setup ? 'responsibilities' : 'inventory', step: setup ? 'frequency' : null })}
+      ${topbar({ back: setup ? 'responsibilities' : 'household', step: setup ? 'frequency' : null })}
       <h1>How often, and how long?</h1>
       <p class="lead" style="margin-bottom:0">We've filled in what's typical. Change anything that's different in your home.</p>
       ${stage === 'active' ? `<p class="form-note" style="margin-top:16px">Your plan is running. Changes here affect when tasks come up, not who does them.</p>` : ''}
       ${sections}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">About ${formatMinutes(Household.weeklyTotal(h))} a week in total</p>
-        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'rate' : 'inventory')}">${setup ? 'Continue' : 'Done'}</button>
+        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'rate' : 'household')}">${setup ? 'Continue' : 'Done'}</button>
       </div>
     </main>`;
   },
@@ -297,7 +297,7 @@ const Screens = {
       </div>`).join('');
     const wasSplit = Household.parts(r).length > 0;
     return `<main class="screen">
-      ${topbar({ back: 'inventory' })}
+      ${topbar({ back: 'household' })}
       <h1>Break down ${esc(r.name)}</h1>
       <p class="lead" style="margin-bottom:0">${isOwner
         ? 'Tick the parts you want as separate items. Each gets its own time and rhythm, and can go to a different person.'
@@ -331,7 +331,7 @@ const Screens = {
     const who = id => id === me ? 'You' : esc(Household.memberName(Household.member(h, id) || {}));
     if (rsh.status === 'rating' && !(rsh.done || {})[me]) {
       return `<main class="screen">
-        ${topbar({ back: 'plan' })}
+        ${topbar({ back: 'household' })}
         <h1>How do you feel about the new ${noun}s?</h1>
         <p class="lead" style="margin-bottom:12px">${noun === 'part' ? "Only you see your answers. We've started from how you felt about the whole task." : 'Only you see your answers. Then the app shares them out fairly between you.'}</p>
         <div class="legend">${PREFERENCES.map(p => `<span>${p.emoji} ${p.label}</span>`).join('')}</div>
@@ -344,9 +344,9 @@ const Screens = {
       </main>`;
     }
     if (rsh.status === 'rating') {
-      return `<main class="screen">${topbar({ back: 'plan' })}${houseArt}
+      return `<main class="screen">${topbar({ back: 'household' })}${houseArt}
         <h1>Thanks!</h1><p class="lead">As soon as everyone has rated the new ${noun}s, you'll see how they'd be shared out.</p>
-        <div class="bottom-bar"><button class="btn secondary" data-action="nav" data-to="plan">Back to the plan</button></div></main>`;
+        <div class="bottom-bar"><button class="btn secondary" data-action="nav" data-to="household">Back to Home</button></div></main>`;
     }
     const accepted = (rsh.accepted || {})[me];
     const waiting = h.members.filter(m => !(rsh.accepted || {})[m.uid]).map(m => esc(Household.memberName(m)));
@@ -358,7 +358,7 @@ const Screens = {
         <span class="tag" style="${next === me ? 'background:var(--accent-soft);color:var(--ink)' : ''}">${who(next)}</span></div>`;
     };
     return `<main class="screen">
-      ${topbar({ back: 'plan' })}
+      ${topbar({ back: 'household' })}
       <h1>Here's how the new ${noun}s would be shared</h1>
       <p class="lead" style="margin-bottom:12px">${moved.length
         ? `The new ${noun}s take quite some time, so a few other tasks change hands too, to keep things even.`
@@ -409,7 +409,7 @@ const Screens = {
       }
       action = `<div class="result-card">${status}</div>
         ${isOrg && sub.source === 'stripe' ? `<button class="btn secondary" data-action="openPortal">Manage or cancel subscription</button>` : ''}
-        <button class="btn ghost" data-action="nav" data-to="${draft ? 'plan' : 'today'}">Back to our home</button>`;
+        <button class="btn ghost" data-action="nav" data-to="${draft ? 'household' : 'today'}">Back to our home</button>`;
     } else if (!isOrg) {
       showBenefits = false;
       head = everSubscribed() ? `${orgName}'s subscription has ended` : `${orgName} needs to start the subscription`;
@@ -470,7 +470,7 @@ const Screens = {
       }
     }
 
-    const back = draft ? 'plan' : on ? 'today' : null;
+    const back = draft ? 'household' : on ? 'today' : null;
     return `<main class="screen">
       ${back ? topbar({ back }) : `<div class="topbar"><span class="spacer"></span>
         <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button></div>`}
@@ -498,7 +498,7 @@ const Screens = {
         <div class="card">${items.map(r => prefRow(h, me, r)).join('')}</div>
       </section>`).join('');
     return `<main class="screen">
-      ${topbar({ back: setup ? 'frequency' : 'plan', step: setup ? 'rate' : null })}
+      ${topbar({ back: setup ? 'frequency' : 'household', step: setup ? 'rate' : null })}
       <h1>How do you feel about each task?</h1>
       <p class="lead" style="margin-bottom:12px">Mark what you'd love to do ❤️ and what you'd rather not 🙃. Everything else counts as 🙂 Don't mind. ${otherName} won't see your answers.</p>
       <div class="legend">${PREFERENCES.map(p => `<span>${p.emoji} ${p.label}</span>`).join('')}</div>
@@ -539,46 +539,24 @@ const Screens = {
     </main>`;
   },
 
-  /* ---------- The plan: who does what ---------- */
+  /* ---------- The plan before it runs: draft, partner looking, saying yes ---------- */
   plan() {
     const h = S.household;
     const me = S.user.uid;
     const stage = Household.stage(h);
-    const active = stage === 'active';
     const isOrg = Household.isOwner(h, me);
     const people = Household.people(h);
-    const others = people.filter(m => m.uid !== me);
-    const partner = others[0] || null;
+    const partner = people.find(m => m.uid !== me) || null;
     const partnerName = partner ? esc(Household.memberName(partner)) : 'your partner';
-    const canSwap = !Household.alone(h);
-    const loads = Household.loads(h);
-
-    const row = (r, own) => {
-      const pending = Household.pendingFor(h, r.id);
-      const right = own && canSwap
-        ? (pending ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(r.id)}">Swap</button>`)
-        : '';
-      return `<div class="row static"><button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title">${esc(r.name)}</span>
-        <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${esc(Timing.label(r))}</span></button>${right}</div>`;
-    };
-    const list = (title, items, own) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
-      <div class="card">${items.length ? items.map(r => row(r, own)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
-
-    const balance = `<div class="card"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${people.map(m =>
-        `<div style="display:flex;justify-content:space-between"><span>${esc(m.uid === me ? 'You' : Household.memberName(m))}</span><span class="sub">about ${formatMinutes(loads[m.uid] || 0)} a week</span></div>`).join('')}</div></div>`;
-
-    const sharing = new Set(((Household.activeReshare(h) || {}).unitIds) || []);
-    const unassigned = active ? Household.unassigned(h).filter(u => !sharing.has(u.id)) : [];
     const accepted = Household.hasAccepted(h, me);
     const waiting = h.memberIds.filter(m => !Household.hasAccepted(h, m)).map(m => esc(Household.memberName(Household.member(h, m))));
 
-    // What this screen asks of me, by stage.
     let head, lead, top = '', bottom = '';
     if (stage === 'draft') {
       const invited = !!(h.settings && h.settings.invitedAt);
       head = 'Your plan is ready';
       lead = `Here's a fair split for you and ${partnerName}. Next, send it to ${partnerName}: they can mark anything that doesn't suit them before it starts.`;
-      top = totalCard(h) + baselineCard(h) + balance;
+      top = totalCard(h) + baselineCard(h);
       bottom = `<div class="bottom-bar">${hasAccess()
         ? `${invited ? `<p class="count">${partnerName} hasn't joined yet</p>` : ''}
            <button class="btn primary" data-action="invite">${invited ? 'Send the link again' : `Invite ${partnerName} to see the plan`}</button>`
@@ -587,8 +565,8 @@ const Screens = {
       </div>`;
     } else if (stage === 'review') {
       head = 'Your plan';
-      lead = `${partnerName} is looking at the plan. You'll see a dot here when there's something to say yes to.`;
-    } else if (!active) {
+      lead = `${partnerName} is looking at the plan. You'll see it here when there's something to say yes to.`;
+    } else {
       const by = h.plan && h.plan.rebalancedBy;
       head = "Here's your plan";
       lead = by === me ? 'Rebalanced with your answers. Have a look and say yes if it works for you.'
@@ -599,161 +577,148 @@ const Screens = {
           ? `<p class="count">Waiting for ${waiting.join(' and ')} to say yes</p>`
           : `<button class="btn primary" data-action="acceptPlan">Start this plan</button>`}
       </div>`;
-    } else {
-      head = 'Your plan';
-      lead = 'Who does what. Want to hand something over? Tap Swap.';
     }
 
-    const reshuffle = !Household.alone(h) && !(h.reshuffle && h.reshuffle.status === 'pending')
-      ? `<button class="btn ghost quiet" data-action="askReshuffle">Reshuffle the whole plan</button>` : '';
-
-    return `<main class="screen has-nav">
+    return `<main class="screen">
       <div class="topbar"><span class="spacer"></span>
         <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button>
       </div>
       <h1 style="margin-top:0">${head}</h1>
       <p class="lead" style="margin-bottom:16px">${lead}</p>
       ${swapCards(h)}
+      ${suggestionsCard(h)}
       ${top}
-      ${stage === 'draft' ? '' : balance}
-      ${list('Your tasks', Household.tasksOf(h, me), true)}
-      ${others.map(m => list(`${esc(Household.memberName(m))}'s tasks${m.placeholder ? ' (suggested)' : ''}`, Household.tasksOf(h, m.uid), false)).join('')}
-      ${unassigned.length ? `<div class="section-head"><h2 class="section-title">Needs a home</h2></div>
-        <div class="card">${unassigned.map(r => `<div class="row static"><button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title">${esc(r.name)}</span>
-          <span class="row-sub">${esc(Timing.label(r))}</span></button><button class="mini" data-action="claim" data-id="${esc(r.id)}">I'll take it</button></div>`).join('')}</div>` : ''}
-      ${isOrg && !active ? `<button class="btn ghost" data-action="nav" data-to="frequency">Change times</button>` : ''}
-      ${reshuffle}
+      ${balanceCard(h)}
+      ${whoDoesWhat(h)}
+      ${isOrg ? `<button class="btn ghost" data-action="nav" data-to="frequency">Change times</button>` : ''}
+      ${reshuffleButton(h)}
       ${bottom}
-      ${bottomNav('plan', navDots(h))}
     </main>`;
   },
 
-  /* ---------- Daily use ---------- */
+  /* ---------- Home: the control centre for both of you (once the plan runs) ---------- */
+  household() {
+    const h = S.household;
+    const me = S.user.uid;
+    const isOrg = Household.isOwner(h, me);
+    if (!isOrg && S.suggestMode) return Screens.suggest();
+    if (Household.stage(h) !== 'active') return Screens.plan();
+    const together = Household.dayProgress(h, h.memberIds);
+    const needs = statusBanner(h) + swapCards(h) + suggestionsCard(h) + needsAHome(h);
+    const total = h.responsibilities.length;
+    return `<main class="screen has-nav">
+      <div class="topbar"><span class="spacer"></span>
+        <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button>
+      </div>
+      <h1 style="margin-top:0">Our home</h1>
+      <div class="members">${memberChips(h)}</div>
+      ${together.total
+        ? meter('together', together.pct, 'Today, together', `${formatMinutes(together.done)} of ${formatMinutes(together.total)} done`)
+        : `<div class="card"><div class="note" style="border:0">Nothing due today for either of you.</div></div>`}
+      ${needs ? `<div class="section-head"><h2 class="section-title">Needs you</h2></div>${needs}` : ''}
+      ${boardCard(h)}
+      <div class="section-head"><h2 class="section-title">Who does what</h2></div>
+      <p class="fine" style="text-align:left;margin:-4px 4px 10px">Want to hand something over? Tap Swap.</p>
+      ${balanceCard(h)}
+      ${whoDoesWhat(h)}
+      <div class="section-head"><h2 class="section-title">The home</h2></div>
+      <div class="card"><div class="stats">
+        <div class="stat"><b>${total}</b><span>${total === 1 ? 'Task' : 'Tasks'}</span></div>
+        <div class="stat"><b>${formatMinutes(Household.weeklyTotal(h))}</b><span>A week, together</span></div>
+      </div></div>
+      ${isOrg
+        ? `${addOwnRow('Add your own task')}
+           <div class="btn-pair" style="margin-top:12px">
+             <button class="btn secondary" data-action="nav" data-to="responsibilities">Edit tasks</button>
+             <button class="btn secondary" data-action="nav" data-to="frequency">Edit times</button>
+           </div>`
+        : `<button class="btn secondary" data-action="suggestChanges">Suggest a change</button>`}
+      ${reshuffleButton(h)}
+      <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
+      ${bottomNav('household', navDots(h))}
+    </main>`;
+  },
+
+  /* ---------- Today: your own mission control ---------- */
   today() {
     const h = S.household;
     const me = S.user.uid;
-    const view = S.view || 'today';
-    const everyone = !!S.everyone;
     const now = new Date();
     const today = Schedule.day(now);
-    const pool = Household.units(h).filter(r => everyone || Household.assignee(h, r.id) === me);
-    const who = r => {
-      if (!everyone) return '';
-      const a = Household.assignee(h, r.id);
-      const m = Household.member(h, a);
-      return a === me ? 'You · ' : (m ? esc(Household.memberName(m)) + ' · ' : '');
-    };
+    const offset = S.dayOffset || 0;
+    const day = Schedule.addDays(today, offset);
+    const mine = Household.units(h).filter(r => Household.assignee(h, r.id) === me);
+    const progress = Household.dayProgress(h, [me], now);
+    const first = esc(Household.memberName(Household.member(h, me)).split(' ')[0]);
+    const freqLabel = r => Timing.frequency(Timing.of(r).frequency).label;
     const tick = (r, sub) => {
-      const c = Household.completion(h, r.id);
-      const done = Schedule.doneOn(c, now);
+      const done = Schedule.doneOn(Household.completion(h, r.id), now);
       return `<button class="row ${done ? 'done' : ''}" data-action="toggleDone" data-id="${esc(r.id)}" aria-pressed="${done}">
         <span class="check" aria-hidden="true">${Icon.check}</span>
-        <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${who(r)}${r.parentName ? esc(r.parentName) + ' · ' : ''}${sub}</span></div>
+        <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${sub}</span></div>
       </button>`;
     };
-    const scheduled = pool.filter(r => Timing.isScheduled(r)).map(r => ({ r, due: Household.dueDate(h, r) }));
-    const freqOf = r => Timing.of(r).frequency;
 
-    let body = '';
-    const boardTasks = view === 'today'
-      ? (everyone ? h.memberIds.flatMap(id => Household.myNoteTasks(h, id).map(n => ({ n, id }))) : Household.myNoteTasks(h, me).map(n => ({ n, id: me })))
-          .filter((x, i, all) => all.findIndex(y => y.n.id === x.n.id) === i)
-      : [];
-    const boardTaskRows = boardTasks.length ? `<div class="section-head" style="margin-top:4px"><h2 class="section-title">From the board</h2></div>
-      <div class="card">${boardTasks.map(({ n, id }) => noteTaskRow(h, n, id, everyone)).join('')}</div>` : '';
-    if (view === 'today') {
-      const open = scheduled.filter(x => x.due <= today && !Schedule.doneOn(Household.completion(h, x.r.id), now));
-      const done = pool.filter(r => Timing.isScheduled(r) && Schedule.doneOn(Household.completion(h, r.id), now));
-      const whenNeeded = pool.filter(r => !Timing.isScheduled(r));
-      open.sort((a, b) => a.due - b.due);
-      body = `${boardTaskRows}${open.length || done.length ? `${boardTaskRows ? '<div class="section-head"><h2 class="section-title">Your plan</h2></div>' : ''}<div class="card">
-          ${open.map(x => tick(x.r, x.due < today ? `Was due ${Schedule.relative(x.due, now).toLowerCase()}` : Timing.frequency(freqOf(x.r)).label)).join('')}
-          ${done.map(r => tick(r, 'Done today')).join('')}
-        </div>` : ''}
-        ${!open.length ? `<div class="celebrate">${done.length ? 'All done for today 🎉' : 'Nothing due today. Enjoy it.'}</div>` : ''}
+    let body;
+    if (offset === 0) {
+      const scheduled = mine.filter(r => Timing.isScheduled(r));
+      const open = scheduled.map(r => ({ r, due: Household.dueDate(h, r) }))
+        .filter(x => x.due <= today && !Schedule.doneOn(Household.completion(h, x.r.id), now)).sort((a, b) => a.due - b.due);
+      const done = scheduled.filter(r => Schedule.doneOn(Household.completion(h, r.id), now));
+      const whenNeeded = mine.filter(r => !Timing.isScheduled(r));
+      const board = Household.myNoteTasks(h, me);
+      body = `${progress.total ? meter('me', progress.pct, 'Your day',
+          progress.left ? `${plural(progress.left, 'task')} · ${formatMinutes(progress.total - progress.done)} left` : 'All done') : ''}
+        ${dayStrip(h, mine, today, offset)}
+        ${board.length ? `<div class="section-head"><h2 class="section-title">From the board</h2></div>
+          <div class="card">${board.map(n => noteTaskRow(h, n, me, false)).join('')}</div>` : ''}
+        ${open.length || done.length ? `<div class="section-head"><h2 class="section-title">Your tasks today</h2></div><div class="card">
+            ${open.map(x => tick(x.r, x.due < today ? `Was due ${Schedule.relative(x.due, now).toLowerCase()}` : freqLabel(x.r))).join('')}
+            ${done.map(r => tick(r, 'Done today')).join('')}
+          </div>` : (board.length ? '' : `<div class="celebrate">Nothing due today.</div>`)}
         ${whenNeeded.length ? `<div class="section-head"><h2 class="section-title">When needed</h2></div>
           <div class="card">${whenNeeded.map(r => { const c = Household.completion(h, r.id); return tick(r, c && c.last ? `Last done ${Schedule.relative(c.last, now).toLowerCase()}` : 'Tick it when you do it'); }).join('')}</div>` : ''}`;
     } else {
-      const days = view === 'week' ? 7 : 31;
-      const end = Schedule.addDays(today, days);
-      const frequent = pool.filter(r => ['daily', 'several'].includes(freqOf(r)));
-      const upcoming = scheduled
-        .filter(x => !['daily', 'several'].includes(freqOf(x.r)) && x.due < end)
-        .sort((a, b) => a.due - b.due);
-      const summary = frequent.length ? `<div class="card"><div class="everyday">
-          ${frequent.filter(r => freqOf(r) === 'daily').length ? `<div><b>Every day:</b> ${frequent.filter(r => freqOf(r) === 'daily').map(r => esc(r.name)).join(', ')}</div>` : ''}
-          ${frequent.filter(r => freqOf(r) === 'several').length ? `<div style="margin-top:6px"><b>Several times a week:</b> ${frequent.filter(r => freqOf(r) === 'several').map(r => esc(r.name)).join(', ')}</div>` : ''}
-        </div></div>` : '';
-      body = `${summary}
-        <div class="section-head"><h2 class="section-title">${view === 'week' ? 'Coming up this week' : 'Coming up this month'}</h2></div>
-        ${upcoming.length ? `<div class="card">${upcoming.map(x => tick(x.r, `${x.due <= today ? 'Due now' : Schedule.relative(x.due, now)} · ${Timing.frequency(freqOf(x.r)).label}`)).join('')}</div>`
-          : `<div class="celebrate">Nothing else coming up.</div>`}`;
+      const due = mine.filter(r => Timing.isScheduled(r) && Household.dueOn(h, r, day, today));
+      const name = day.toLocaleDateString(undefined, { weekday: 'long' });
+      body = `${dayStrip(h, mine, today, offset)}
+        <div class="section-head"><h2 class="section-title">${esc(Schedule.relative(day, now) === 'Tomorrow' ? 'Tomorrow' : name)}</h2><span class="section-meta">${due.length ? formatMinutes(due.reduce((t, r) => t + Timing.of(r).minutes, 0)) : ''}</span></div>
+        ${due.length ? `<div class="card">${due.map(r => `<div class="row static"><div class="row-text"><span class="row-title">${esc(r.name)}</span>
+            <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${esc(freqLabel(r))} · ${formatMinutes(Timing.of(r).minutes)}</span></div></div>`).join('')}</div>`
+          : `<div class="celebrate">Nothing due ${esc(name)}.</div>`}`;
     }
 
     return `<main class="screen has-nav">
       <div class="topbar"><span class="spacer"></span>
         <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button>
       </div>
-      <h1 style="margin-top:0">${{ today: 'Today', week: 'This week', month: 'This month' }[view]}</h1>
-      ${statusBanner(h)}
-      ${swapCards(h)}
-      ${boardCard(h)}
-      <div class="seg" role="group" aria-label="Period">
-        <button data-action="setView" data-key="today" aria-pressed="${view === 'today'}">Today</button>
-        <button data-action="setView" data-key="week" aria-pressed="${view === 'week'}">This week</button>
-        <button data-action="setView" data-key="month" aria-pressed="${view === 'month'}">This month</button>
-      </div>
-      <div class="filter-line">
-        <span class="section-meta">${everyone ? 'Everyone\'s tasks' : 'Your tasks'}</span>
-        <button class="chip small" data-action="toggleEveryone" aria-pressed="${everyone}">Show everyone</button>
+      <div class="greeting">
+        <p class="hello">Hello, ${first}</p>
+        <h1 class="mood">${esc(Mood.line(now, progress))}</h1>
       </div>
       ${body}
       ${bottomNav('today', navDots(h))}
     </main>`;
   },
 
-  /* ---------- Household: the list, the people, changes ---------- */
-  inventory() {
+  /* ---------- Partner: suggest adding or removing tasks (the organiser decides) ---------- */
+  suggest() {
     const h = S.household;
     const me = S.user.uid;
-    const isOrg = Household.isOwner(h, me);
     const orgName = esc(Household.memberName(Household.owner(h)));
-    const groups = Household.inventory(h);
-    const total = h.responsibilities.length;
-    const suggesting = !isOrg && S.suggestMode;
-    const whose = r => {
-      const parts = Household.isSplit(r) ? `${plural(Household.parts(r).length, 'part')} · ` : '';
-      const a = Household.ownerOf(h, r);
-      if (a === 'shared') return 'Shared · ' + parts;
-      if (!a || !Household.peopleIds(h).includes(a)) return 'Needs a home · ';
-      return (a === me ? 'Yours · ' : `${esc(Household.memberName(Household.member(h, a)))}'s · `) + parts;
-    };
-
-    const sections = groups.map(({ category, items }) => `<section aria-labelledby="inv-${esc(category.id)}">
-        <div class="section-head">
-          <h2 class="section-title" id="inv-${esc(category.id)}">${esc(category.name)}</h2>
-          <span class="section-meta">${items.length}</span>
-        </div>
+    const sections = Household.inventory(h).map(({ category, items }) => `<section aria-labelledby="sg-${esc(category.id)}">
+        <div class="section-head"><h2 class="section-title" id="sg-${esc(category.id)}">${esc(category.name)}</h2></div>
         <div class="card">${items.map(r => {
-          if (suggesting) {
-            const sug = Household.suggestionFor(h, me, 'remove', r.id);
-            return `<button class="row" data-action="suggest" data-type="remove" data-id="${esc(r.id)}" aria-pressed="${!!sug}">
-                <div class="row-text"><span class="row-title" ${sug ? 'style="text-decoration:line-through;color:var(--muted)"' : ''}>${esc(r.name)}</span></div>
-                <span class="${sug ? 'badge' : 'tag'}">${sug ? 'Suggested: remove' : 'Suggest removing'}</span>
-              </button>`;
-          }
-          return `<button class="row" data-action="peek" data-id="${esc(r.id)}">
-            <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${whose(r)}${esc(Timing.label(r))}</span></div>
-            ${r.mentalLoad ? '<span class="tag">Mental load</span>' : ''}
-            <span class="chev">${Icon.chev}</span>
-          </button>`;
+          const sug = Household.suggestionFor(h, me, 'remove', r.id);
+          return `<button class="row" data-action="suggest" data-type="remove" data-id="${esc(r.id)}" aria-pressed="${!!sug}">
+              <div class="row-text"><span class="row-title" ${sug ? 'style="text-decoration:line-through;color:var(--muted)"' : ''}>${esc(r.name)}</span></div>
+              <span class="${sug ? 'badge' : 'tag'}">${sug ? 'Suggested: remove' : 'Suggest removing'}</span>
+            </button>`;
         }).join('')}</div>
       </section>`).join('');
-
-    // Partner, suggesting: library items the list doesn't have yet.
     const selected = Household.selectedLibraryIds(h);
-    const addable = suggesting ? Household.discoveryGroups(h)
-      .map(g => ({ ...g, items: g.items.filter(i => !selected.has(i.id)) })).filter(g => g.items.length) : [];
+    const addable = Household.discoveryGroups(h)
+      .map(g => ({ ...g, items: g.items.filter(i => !selected.has(i.id)) })).filter(g => g.items.length);
     const addSection = addable.length ? `
       <div class="section-head"><h2 class="section-title">Suggest adding</h2></div>
       ${addable.map(({ category, items }) => `<div class="section-head" style="margin-top:12px"><h3 class="section-meta" style="margin:0">${esc(category.name)}</h3></div>
@@ -765,72 +730,159 @@ const Screens = {
               ${sug ? '<span class="badge">Suggested</span>' : ''}
             </button>`;
         }).join('')}</div>`).join('')}` : '';
-
-    // Suggestions: the organiser decides; the partner sees their own pending ones.
-    const suggestions = Household.suggestions(h);
-    const label = x => x.type === 'breakdown' ? `Break down: ${esc(x.name)}` : `${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}`;
-    let suggestionCard = '';
-    if (isOrg && suggestions.length) {
-      suggestionCard = `<div class="section-head"><h2 class="section-title">Suggestions</h2><span class="section-meta">${suggestions.length}</span></div>
-        <div class="card">${suggestions.map(x => {
-          const by = esc(Household.memberName(Household.member(h, x.by) || {}));
-          return `<div class="row static col">
-            <div class="row-text"><span class="row-title">${label(x)}</span>
-              <span class="row-sub">${x.type === 'breakdown' ? `Into ${esc((x.parts || []).map(p => p.name).join(', '))} · ` : ''}Suggested by ${by}</span></div>
-            <div class="btn-pair">
-              <button class="btn primary" data-action="acceptSuggestion" data-id="${esc(x.id)}">${x.type === 'add' ? 'Add it' : x.type === 'breakdown' ? 'Use these parts' : 'Remove it'}</button>
-              <button class="btn secondary" data-action="declineSuggestion" data-id="${esc(x.id)}">Keep as is</button>
-            </div></div>`;
-        }).join('')}</div>`;
-    } else if (!isOrg) {
-      const mine = suggestions.filter(x => x.by === me);
-      if (mine.length) {
-        suggestionCard = `<div class="section-head"><h2 class="section-title">Your suggestions</h2><span class="section-meta">Waiting for ${orgName}</span></div>
-          <div class="card">${mine.map(x => `<div class="row static">
-            <div class="row-text"><span class="row-title">${label(x)}</span></div>
-            <button class="link-btn" data-action="withdrawSuggestion" data-id="${esc(x.id)}">Withdraw</button></div>`).join('')}</div>`;
-      }
-    }
-
-    const invite = isOrg && Household.alone(h) ? `<div class="card next-card">
-        <h2>${esc(Household.memberName(Household.invitee(h)))} hasn't joined yet</h2>
-        <p>Send the link so they can look at the plan and mark anything that doesn't suit them.</p>
-        <button class="btn primary" data-action="invite">${!hasAccess() ? 'Start and invite' : h.settings.invitedAt ? 'Send the link again' : 'Invite to see the plan'}</button>
-      </div>` : '';
-
-    const actions = suggesting
-      ? `<div class="bottom-bar"><p class="count">${plural(suggestions.filter(x => x.by === me).length, 'suggestion')} for ${orgName}</p>
-          <button class="btn primary" data-action="doneSuggesting">Done</button></div>`
-      : isOrg
-        ? `${addOwnRow('Add your own task')}
-           <div class="btn-pair" style="margin-top:12px">
-             <button class="btn secondary" data-action="nav" data-to="responsibilities">Edit tasks</button>
-             <button class="btn secondary" data-action="nav" data-to="frequency">Edit times</button>
-           </div>`
-        : `<button class="btn secondary" data-action="suggestChanges">Suggest a change</button>`;
-
-    return `<main class="screen ${suggesting ? '' : 'has-nav'}">
-      <div class="topbar"><span class="spacer"></span>
-        <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button>
-      </div>
-      <h1 style="margin-top:0">${suggesting ? 'Suggest changes' : 'Our home'}</h1>
-      ${suggesting ? `<p class="lead">Tap a task to suggest removing it, or suggest adding one below. ${orgName} decides.</p>` : `<div class="members">${memberChips(h)}</div>`}
-      ${invite}
-      ${suggestionCard}
-      ${suggesting ? '' : `<div class="card"><div class="stats">
-          <div class="stat"><b>${total}</b><span>${total === 1 ? 'Task' : 'Tasks'}</span></div>
-          <div class="stat"><b>${formatMinutes(Household.weeklyTotal(h))}</b><span>A week, together</span></div>
-        </div></div>`}
-      ${sections || `<div class="card"><div class="note" style="border:0">No tasks yet.</div></div>`}
+    const count = Household.suggestions(h).filter(x => x.by === me).length;
+    return `<main class="screen">
+      <div class="topbar"><span class="spacer"></span></div>
+      <h1 style="margin-top:0">Suggest changes</h1>
+      <p class="lead">Tap a task to suggest removing it, or suggest adding one below. ${orgName} decides.</p>
+      ${sections}
       ${addSection}
-      ${suggesting ? '' : `<div class="section-head"><h2 class="section-title">Something missing?</h2></div>`}
-      ${actions}
-      <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
-      ${suggesting ? '' : bottomNav('inventory', navDots(h))}
+      <div class="bottom-bar"><p class="count">${plural(count, 'suggestion')} for ${orgName}</p>
+        <button class="btn primary" data-action="doneSuggesting">Done</button></div>
     </main>`;
   },
-
 };
+
+/* ---------- Pieces of the plan and Home screens ---------- */
+/** Each person's planned share of the week (the plan, not who has ticked more). */
+function balanceCard(h) {
+  const me = S.user.uid;
+  const loads = Household.loads(h);
+  return `<div class="card"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${Household.people(h).map(m =>
+    `<div style="display:flex;justify-content:space-between"><span>${esc(m.uid === me ? 'You' : Household.memberName(m))}</span><span class="sub">about ${formatMinutes(loads[m.uid] || 0)} a week</span></div>`).join('')}</div></div>`;
+}
+/** Everyone's tasks; mine can be swapped once both people are in. */
+function whoDoesWhat(h) {
+  const me = S.user.uid;
+  const canSwap = !Household.alone(h);
+  const row = (r, own) => {
+    const pending = Household.pendingFor(h, r.id);
+    const right = own && canSwap
+      ? (pending ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(r.id)}">Swap</button>`)
+      : '';
+    return `<div class="row static"><button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title">${esc(r.name)}</span>
+      <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${esc(Timing.label(r))}</span></button>${right}</div>`;
+  };
+  const list = (title, items, own) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
+    <div class="card">${items.length ? items.map(r => row(r, own)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
+  const others = Household.people(h).filter(m => m.uid !== me);
+  // Added to a running plan and not shared out yet (those left under "Needs a home" are shown there).
+  const skipped = new Set((h.plan && h.plan.skipped) || []);
+  const waiting = Household.stage(h) === 'active'
+    ? Household.units(h).filter(u => !Household.peopleIds(h).includes(Household.assignee(h, u.id)) && !skipped.has(u.id)) : [];
+  const sharing = !!Household.activeReshare(h);
+  const fresh = waiting.length ? `<div class="section-head"><h2 class="section-title">New, waiting to be shared out</h2><span class="section-meta">${waiting.length}</span></div>
+    <div class="card">${waiting.map(r => row(r, false)).join('')}</div>
+    ${!sharing && Household.isOwner(h, me) ? `<button class="btn secondary" data-action="shareNow">Share ${waiting.length === 1 ? 'it' : 'them'} out now</button>` : ''}` : '';
+  return list('Your tasks', Household.tasksOf(h, me), true)
+    + others.map(m => list(`${esc(Household.memberName(m))}'s tasks${m.placeholder ? ' (suggested)' : ''}`, Household.tasksOf(h, m.uid), false)).join('')
+    + fresh;
+}
+/** New tasks nobody has yet (after "not now" in a share-out): anyone can take one. */
+function needsAHome(h) {
+  if (Household.stage(h) !== 'active') return '';
+  const sharing = new Set(((Household.activeReshare(h) || {}).unitIds) || []);
+  const items = Household.unassigned(h).filter(u => !sharing.has(u.id));
+  if (!items.length) return '';
+  return `<div class="card"><div class="row static"><div class="row-text"><span class="row-title">Needs a home</span><span class="row-sub">Nobody has these yet</span></div></div>
+    ${items.map(r => `<div class="row static"><button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title">${esc(r.name)}</span>
+      <span class="row-sub">${esc(Timing.label(r))}</span></button><button class="mini" data-action="claim" data-id="${esc(r.id)}">I'll take it</button></div>`).join('')}</div>`;
+}
+/** Suggestions: the organiser decides; the partner sees their own, waiting. */
+function suggestionsCard(h) {
+  const me = S.user.uid;
+  const isOrg = Household.isOwner(h, me);
+  const orgName = esc(Household.memberName(Household.owner(h)));
+  const all = Household.suggestions(h);
+  const label = x => x.type === 'breakdown' ? `Break down: ${esc(x.name)}` : `${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}`;
+  if (isOrg && all.length) {
+    return `<div class="card">${all.map(x => {
+      const by = esc(Household.memberName(Household.member(h, x.by) || {}));
+      return `<div class="row static col">
+        <div class="row-text"><span class="row-title">${label(x)}</span>
+          <span class="row-sub">${x.type === 'breakdown' ? `Into ${esc((x.parts || []).map(p => p.name).join(', '))} · ` : ''}Suggested by ${by}</span></div>
+        <div class="btn-pair">
+          <button class="btn primary" data-action="acceptSuggestion" data-id="${esc(x.id)}">${x.type === 'add' ? 'Add it' : x.type === 'breakdown' ? 'Use these parts' : 'Remove it'}</button>
+          <button class="btn secondary" data-action="declineSuggestion" data-id="${esc(x.id)}">Keep as is</button>
+        </div></div>`;
+    }).join('')}</div>`;
+  }
+  const mine = isOrg ? [] : all.filter(x => x.by === me);
+  if (!mine.length) return '';
+  return `<div class="card"><div class="row static"><div class="row-text"><span class="row-title">Your suggestions</span><span class="row-sub">Waiting for ${orgName}</span></div></div>
+    ${mine.map(x => `<div class="row static"><div class="row-text"><span class="row-title">${label(x)}</span></div>
+      <button class="link-btn" data-action="withdrawSuggestion" data-id="${esc(x.id)}">Withdraw</button></div>`).join('')}</div>`;
+}
+function reshuffleButton(h) {
+  return !Household.alone(h) && !(h.reshuffle && h.reshuffle.status === 'pending')
+    ? `<button class="btn ghost quiet" data-action="askReshuffle">Reshuffle the whole plan</button>` : '';
+}
+/** The next seven days, starting today. A dot marks days with something of mine due. */
+function dayStrip(h, mine, today, offset) {
+  const scheduled = mine.filter(r => Timing.isScheduled(r));
+  return `<div class="day-strip" role="group" aria-label="Pick a day">${[0, 1, 2, 3, 4, 5, 6].map(i => {
+    const d = Schedule.addDays(today, i);
+    const has = scheduled.some(r => Household.dueOn(h, r, d, today) && !(i === 0 && Schedule.doneOn(Household.completion(h, r.id), new Date())));
+    const name = d.toLocaleDateString(undefined, { weekday: 'short' });
+    return `<button class="day ${i === 0 ? 'is-today' : ''}" data-action="setDay" data-key="${i}" aria-pressed="${i === offset}" aria-label="${esc(d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))}${has ? ', something due' : ''}">
+      <span class="day-num">${d.getDate()}</span><span class="day-name">${esc(name)}</span><span class="day-dot ${has ? 'on' : ''}" aria-hidden="true"></span></button>`;
+  }).join('')}</div>`;
+}
+
+/* ---------- The line under "Hello, Ian": by time of day and how my day is going. Never about the partner. ---------- */
+const Mood = (() => {
+  const LINES = {
+    early: {
+      free: ['Nothing on today. Coffee first, then whatever you like.', 'A free day already? The house is in a good mood.'],
+      fresh: ['Fresh start. One small thing and you\'re off.', 'Early bird gets the clean kitchen.'],
+      going: ['Up early and already ticking. Impressive.', 'Getting things done before most people are awake.'],
+      done: ['All done before breakfast? Legend.', 'Everything ticked. The rest of the day is yours.'],
+    },
+    morning: {
+      free: ['Nothing due today. Enjoy the quiet.', 'No chores on the list. Plan something nice.'],
+      fresh: ['Good morning energy. Start with the easiest one.', 'One tick and the day already feels lighter.'],
+      going: ['Nice rhythm. Keep it rolling.', 'Good momentum before lunch.'],
+      done: ['Done before noon? Show-off.', 'All ticked. Nothing left but the good stuff.'],
+    },
+    midday: {
+      free: ['Lunch, then nothing. Perfect.', 'A chore-free day. Make the most of it.'],
+      fresh: ['Plenty of day left. A quick one after lunch?', 'Easy does it. One at a time.'],
+      going: ['Halfway there. The afternoon looks lighter already.', 'Nice progress. Snack break earned.'],
+      done: ['Everything done by lunchtime. Who are you?', 'All clear. Enjoy the rest of the day.'],
+    },
+    afternoon: {
+      free: ['Nothing on the list. Feet up whenever you like.', 'A free afternoon. Rare and precious.'],
+      fresh: ['Ten minutes now, a calmer evening later.', 'Still plenty of day left. Start small.'],
+      going: ['Getting there. The finish line is in sight.', 'A little more and you\'re done.'],
+      done: ['All done. The evening is officially yours.', 'Ticked it all. Time for something fun.'],
+    },
+    evening: {
+      free: ['Nothing to do tonight. Enjoy it.', 'Quiet evening, clear list.'],
+      fresh: ['Still time. Or tomorrow, we won\'t tell.', 'Just one before the sofa?'],
+      going: ['Almost there. The sofa is waiting.', 'Last stretch. You\'ve got this.'],
+      done: ['Home sorted. Feet up. 🛋️', 'Everything done. A well-earned evening.'],
+    },
+    night: {
+      free: ['Nothing due. Sleep well.', 'All quiet. See you tomorrow.'],
+      fresh: ['It\'s late. Tomorrow is a fine day for chores.', 'Rest now. The list will still be there.'],
+      going: ['Good effort today. The rest can wait.', 'Time to rest. You did plenty.'],
+      done: ['Everything done today. Sleep like a hero.', 'Day complete. Good night.'],
+    },
+  };
+  const slot = hour => hour >= 5 && hour < 9 ? 'early' : hour < 12 && hour >= 9 ? 'morning' : hour >= 12 && hour < 14 ? 'midday'
+    : hour >= 14 && hour < 18 ? 'afternoon' : hour >= 18 && hour < 22 ? 'evening' : 'night';
+  const state = p => !p.total ? 'free' : p.done >= p.total ? 'done' : p.done > 0 ? 'going' : 'fresh';
+  return {
+    LINES,
+    /** Same line all day for the same situation; a different one tomorrow. */
+    line(now, progress) {
+      const options = LINES[slot(now.getHours())][state(progress)];
+      const dayNo = Math.floor((Schedule.day(now) - new Date(now.getFullYear(), 0, 0)) / 864e5);
+      return options[dayNo % options.length];
+    },
+  };
+})();
+
 
 /* ---------- Board ---------- */
 const NOTE_KINDS = {
@@ -894,29 +946,24 @@ function noteTaskRow(h, n, ownerId, everyone) {
 /** "parts" when only task parts are being shared, otherwise "tasks". */
 function reshareNoun(h, rsh) { return (rsh.unitIds || []).every(id => Household.parentOf(h, id)) ? 'part' : 'task'; }
 
-/** Something on the Plan tab is waiting for me to act. */
-function planNeedsMe(h) {
+/** Something on Home is waiting for me: a swap, a share-out, a reshuffle, suggestions, new notes, a payment. */
+function homeNeedsMe(h) {
   const me = S.user.uid;
-  if (Household.incomingSwap(h, me)) return true;
+  if (Household.incomingSwap(h, me) || Household.swapResults(h, me).length) return true;
   const rs = Household.reshuffle(h);
   if (rs && rs.status === 'pending' && rs.by !== me) return true;
+  if (rs && rs.status === 'declined' && rs.by === me && !rs.seen) return true;
   const rsh = Household.activeReshare(h);
   if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) return true;
   if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) return true;
-  if (rs && rs.status === 'declined' && rs.by === me && !rs.seen) return true;   // "They'd rather keep the plan" → OK
-  if (Household.swapResults(h, me).length) return true;                          // my swap was taken or declined → OK
-  const sharing = new Set(((Household.activeReshare(h) || {}).unitIds) || []);
-  if (Household.unassigned(h).some(u => !sharing.has(u.id))) return true;                               // "Needs a home" → someone claims it
-  return false;
-}
-
-/** Something on the Household tab is waiting for me: suggestions the organiser hasn't answered yet. */
-function householdNeedsMe(h) {
-  return Household.isOwner(h, S.user.uid) && Household.suggestions(h).length > 0;
+  if (needsAHome(h)) return true;
+  if (Household.isOwner(h, me) && Household.suggestions(h).length) return true;
+  if (boardUnseen(h).length) return true;
+  return !!statusBanner(h);
 }
 
 /** Red dots on the bottom tabs: every tab where an action is waiting for me. */
-function navDots(h) { return { today: boardUnseen(h).length > 0, plan: planNeedsMe(h), inventory: householdNeedsMe(h) }; }
+function navDots(h) { return { household: homeNeedsMe(h) }; }
 
 /** Incoming swap requests and results of my own requests (on Plan and Today). */
 function swapCards(h) {
@@ -1032,28 +1079,16 @@ function baselineCard(h) {
     ${after ? `<p class="plain" style="margin:4px 0 0">${after}</p>` : ''}
   </div></div>`;
 }
-/** Where the plan stands, on Today, until it runs (and payment reminders after). */
+/** Payment reminders for the organiser (shown under "Needs you" on Home). */
 function statusBanner(h) {
-  const me = S.user.uid;
-  const stage = Household.stage(h);
-  const partner = Household.people(h).find(m => m.uid !== me);
-  const name = partner ? esc(Household.memberName(partner)) : 'your partner';
-  if (stage === 'draft') return `<div class="card next-card">
-      <h2>This is your draft plan</h2><p>It starts once ${name} has looked at it and you've both said yes.</p>
-      <button class="btn primary" data-action="invite">${!hasAccess() ? `Start and invite ${name}` : h.settings.invitedAt ? 'Send the link again' : `Invite ${name}`}</button></div>`;
-  if (stage === 'review') return `<div class="result-card" role="status"><p class="plain" style="margin:0">${name} is looking at the plan. It starts once you've both said yes.</p></div>`;
-  if (stage === 'plan') return Household.hasAccepted(h, me)
-    ? `<div class="result-card" role="status"><p class="plain" style="margin:0">Waiting for ${name} to say yes to the plan.</p></div>`
-    : `<div class="card next-card"><h2>The plan is ready</h2><p>Have a look and say yes, then it starts.</p>
-        <button class="btn primary" data-action="nav" data-to="plan">See the plan</button></div>`;
   const sub = S.subscription;
-  if (Household.isOwner(h, me) && sub && sub.source === 'stripe' && sub.status === 'past_due') {
+  if (!Household.isOwner(h, S.user.uid) || !sub || sub.source !== 'stripe') return '';
+  if (sub.status === 'past_due') {
     return `<div class="card next-card"><h2>Your payment didn't go through</h2>
       <p>Update your card so your plan keeps running for both of you.</p>
       <button class="btn secondary" data-action="openPortal">Fix payment</button></div>`;
   }
-  if (Household.isOwner(h, me) && sub && sub.source === 'stripe' && sub.status === 'trialing' && sub.trialEnd && !sub.cancelAtPeriodEnd
-      && sub.trialEnd - Date.now() < 3 * 864e5) {
+  if (sub.status === 'trialing' && sub.trialEnd && !sub.cancelAtPeriodEnd && sub.trialEnd - Date.now() < 3 * 864e5) {
     const d = new Date(sub.trialEnd).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
     const amount = money(sub.interval === 'month' ? APP_CONFIG.billing.display.monthly : APP_CONFIG.billing.display.yearly);
     return `<div class="card next-card"><h2>Your free trial ends on ${d}</h2>

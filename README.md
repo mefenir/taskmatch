@@ -16,7 +16,10 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 4. **The partner** opens the link, sees "{organiser} made a plan for your home" and marks only what they disagree with, on one screen.
    - Nothing marked → **Looks good, let's start**: the plan is active.
    - Something marked → **Rebalance with my answers**: a fair split from both answers, then both say yes.
-5. **Daily use**: Today / This week / This month, ticks, swaps. New tasks in a running plan are shared out automatically (both rate, fair split, both say yes). **Reshuffle** gives a fresh split after asking the other person.
+5. **Two tabs once the plan runs:**
+   - **Today** (mine): "Hello, Ian" and a playful line for the time of day and how my day is going (48 lines, never about the partner, never guilt), a big progress bar of today's minutes done, the next seven days, my tasks and anything from the board for me.
+   - **Home** (ours): one bar in one colour for what both have done today (no per-person score), everything waiting for me (swaps, share-outs, suggestions, payment), the board, who does what with Swap, and the home's tasks and times.
+   Before the plan runs, Home is the only screen. New tasks in a running plan show under "New, waiting to be shared out" and go out together (both rate, fair split, both say yes). **Reshuffle** gives a fresh split after asking the other person.
 
 The fair split (`js/plan.js`) shares by weekly effort (time × frequency), not by count. Clear oppositions (❤️ vs 🙃) go to the person who likes it; the rest is balanced. The same answers always give the same plan; the organiser is the tie-break, so the plan doesn't change when the partner joins.
 

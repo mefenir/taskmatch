@@ -572,6 +572,34 @@ const Household = {
   dueDate(h, r) {
     return Schedule.nextDue(r, this.completion(h, r.id), h.plan && h.plan.startedAt, this.firstOffset(h, r));
   },
+  /** Is a scheduled unit due on `day`? Anything overdue counts as due today. */
+  dueOn(h, r, day, today = new Date()) {
+    const f = Timing.frequency(Timing.of(r).frequency);
+    let d = this.dueDate(h, r);
+    if (!d) return false;
+    const target = Schedule.day(day).getTime();
+    const start = Schedule.day(today);
+    if (d < start) d = start;
+    for (let i = 0; i < 400 && d.getTime() < target; i++) d = Schedule.advance(d, f);
+    return d.getTime() === target;
+  },
+  /**
+   * Today's progress for some people, by time: minutes of the scheduled work due today (or overdue)
+   * that is ticked, out of all of it. Work ticked today counts as done.
+   * @returns {{ done: number, total: number, left: number, pct: number }} minutes; left = tasks still open
+   */
+  dayProgress(h, userIds, now = new Date()) {
+    const today = Schedule.day(now);
+    let done = 0, open = 0, left = 0;
+    this.units(h).forEach(u => {
+      if (!userIds.includes(this.assignee(h, u.id)) || !Timing.isScheduled(u)) return;
+      const minutes = Timing.of(u).minutes;
+      if (Schedule.doneOn(this.completion(h, u.id), now)) done += minutes;
+      else if (this.dueDate(h, u) <= today) { open += minutes; left += 1; }
+    });
+    const total = done + open;
+    return { done, total, left, pct: total ? Math.round(done / total * 100) : 0 };
+  },
 
   /* ---------- Ticking things off ---------- */
   /** A part starts from when its whole task was last done. */
