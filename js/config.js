@@ -18,7 +18,7 @@ const FIREBASE_CONFIG = {
 };
 const APP_CONFIG = Object.freeze({
   inviteValidDays: 14,
-  minPasswordLength: 6,
+  minPasswordLength: 8,
 
   /* Premium billing through Stripe (Firebase extension "Run Payments with Stripe").
      Paste the two price IDs from the Stripe dashboard (Products → Premium → prices).

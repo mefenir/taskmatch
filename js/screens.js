@@ -69,7 +69,7 @@ const Screens = {
     const note = S.auth.note ? `<p class="form-note" role="status">${esc(S.auth.note)}</p>` : '';
     const field = (name, label, type, auto, extra = '') => `<div class="field">
         <label for="f-${name}">${label}</label>
-        <input id="f-${name}" name="${name}" type="${type}" autocomplete="${auto}" value="${esc(v[name] || '')}" data-auth-field="${name}" ${extra}>
+        <input id="f-${esc(name)}" name="${name}" type="${type}" autocomplete="${auto}" value="${esc(v[name] || '')}" data-auth-field="${name}" ${extra}>
       </div>`;
 
     const google = mode === 'reset' ? '' : `
@@ -150,7 +150,7 @@ const Screens = {
               <input id="partner-name" value="${esc(h.settings.partnerName || '')}" placeholder="e.g. Sam" autocomplete="off" maxlength="40" data-input="partnerName">
             </div>`}
       </div>
-      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${setup ? 'home' : 'inventory'}">${setup ? 'Continue' : 'Done'}</button></div>
+      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'home' : 'inventory')}">${setup ? 'Continue' : 'Done'}</button></div>
     </main>`;
   },
 
@@ -159,7 +159,7 @@ const Screens = {
     const setup = !h.settings.onboarded;
     const petTypes = [['dog', 'Dog'], ['cat', 'Cat'], ['other', 'Other pet']];
     const pets = `<button class="chip" data-action="clearPets" aria-pressed="${h.pets.length === 0}">None</button>` +
-      petTypes.map(([t, l]) => `<button class="chip" data-action="togglePet" data-key="${t}" aria-pressed="${h.pets.some(p => p.type === t)}">${l}</button>`).join('');
+      petTypes.map(([t, l]) => `<button class="chip" data-action="togglePet" data-key="${esc(t)}" aria-pressed="${h.pets.some(p => p.type === t)}">${l}</button>`).join('');
     return `<main class="screen">
       ${topbar({ back: setup ? 'members' : 'inventory', step: setup ? 'home' : null })}
       <h1>Your home</h1>
@@ -180,7 +180,7 @@ const Screens = {
         ${switchRow('toggleFlag', 'garden', 'Garden or outdoor space', '', !!h.circumstances.garden)}
         ${switchRow('toggleFlag', 'car', 'Car', '', !!h.circumstances.car)}
       </div>
-      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${setup ? 'responsibilities' : 'inventory'}">${setup ? 'Show what needs doing' : 'Done'}</button></div>
+      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'responsibilities' : 'inventory')}">${setup ? 'Show what needs doing' : 'Done'}</button></div>
     </main>`;
   },
 
@@ -192,14 +192,14 @@ const Screens = {
     const sections = groups.map(({ category, items }) => {
       const n = items.filter(i => selected.has(i.id)).length;
       const all = n === items.length;
-      const rows = items.map(item => `<button class="row" data-action="toggleResp" data-id="${item.id}" aria-pressed="${selected.has(item.id)}">
+      const rows = items.map(item => `<button class="row" data-action="toggleResp" data-id="${esc(item.id)}" aria-pressed="${selected.has(item.id)}">
           <span class="check" aria-hidden="true">${Icon.check}</span>
           <div class="row-text"><span class="row-title">${esc(item.name)}</span></div>
         </button>`).join('');
-      return `<section aria-labelledby="cat-${category.id}">
+      return `<section aria-labelledby="cat-${esc(category.id)}">
         <div class="section-head">
-          <h2 class="section-title" id="cat-${category.id}">${esc(category.name)}</h2>
-          <button class="link-btn" data-action="toggleCategory" data-cat="${category.id}">${all ? 'Clear' : 'Select all'}</button>
+          <h2 class="section-title" id="cat-${esc(category.id)}">${esc(category.name)}</h2>
+          <button class="link-btn" data-action="toggleCategory" data-cat="${esc(category.id)}">${all ? 'Clear' : 'Select all'}</button>
         </div>
         <div class="card">${rows}</div>
       </section>`;
@@ -208,7 +208,7 @@ const Screens = {
     const ownSection = own.length ? `<div class="section-head"><h2 class="section-title">Your own</h2></div>
       <div class="card">${own.map(r => `<div class="row static"><span class="check" style="color:var(--accent)" aria-hidden="true">${Icon.check}</span>
         <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${esc(Timing.label(r))}</span></div>
-        <button class="link-btn" data-action="removeTask" data-id="${r.id}">Remove</button></div>`).join('')}</div>` : '';
+        <button class="link-btn" data-action="removeTask" data-id="${esc(r.id)}">Remove</button></div>`).join('')}</div>` : '';
     const count = h.responsibilities.length;
     const active = Household.stage(h) === 'active';
     return `<main class="screen">
@@ -223,7 +223,7 @@ const Screens = {
       ${addOwnRow('Add your own task', !Entitlements.canAddCustomTask(S.subscription, Household.customCount(h)))}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${count ? `${plural(count, 'task')} · about ${formatMinutes(Household.weeklyTotal(h))} a week` : 'Nothing selected yet'}</p>
-        <button class="btn primary" data-action="nav" data-to="${setup ? 'frequency' : 'inventory'}" ${count ? '' : 'disabled'}>${setup ? 'Continue' : 'Done'}</button>
+        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'frequency' : 'inventory')}" ${count ? '' : 'disabled'}>${setup ? 'Continue' : 'Done'}</button>
       </div>
     </main>`;
   },
@@ -234,15 +234,15 @@ const Screens = {
     const setup = !h.settings.onboarded;
     const stage = Household.stage(h);
     const groups = Household.inventory(h);
-    const sections = groups.map(({ category, items }) => `<section aria-labelledby="fq-${category.id}">
-        <div class="section-head"><h2 class="section-title" id="fq-${category.id}">${esc(category.name)}</h2></div>
+    const sections = groups.map(({ category, items }) => `<section aria-labelledby="fq-${esc(category.id)}">
+        <div class="section-head"><h2 class="section-title" id="fq-${esc(category.id)}">${esc(category.name)}</h2></div>
         <div class="card">${items.map(r => {
           const t = Timing.of(r);
           return `<div class="timing-row">
-            <span class="row-title" id="t-${r.id}">${esc(r.name)}</span>
+            <span class="row-title" id="t-${esc(r.id)}">${esc(r.name)}</span>
             <div class="timing-controls">
-              <select class="select" data-change="frequency" data-id="${r.id}" aria-label="How often: ${esc(r.name)}">${frequencyOptions(t.frequency)}</select>
-              <select class="select minutes" data-change="minutes" data-id="${r.id}" aria-label="How long each time: ${esc(r.name)}">${minuteOptions(t.minutes)}</select>
+              <select class="select" data-change="frequency" data-id="${esc(r.id)}" aria-label="How often: ${esc(r.name)}">${frequencyOptions(t.frequency)}</select>
+              <select class="select minutes" data-change="minutes" data-id="${esc(r.id)}" aria-label="How long each time: ${esc(r.name)}">${minuteOptions(t.minutes)}</select>
             </div>
           </div>`;
         }).join('')}</div>
@@ -255,7 +255,7 @@ const Screens = {
       ${sections}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">About ${formatMinutes(Household.weeklyTotal(h))} a week in total</p>
-        <button class="btn primary" data-action="nav" data-to="${setup ? 'rate' : 'inventory'}">${setup ? 'Continue' : 'Done'}</button>
+        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'rate' : 'inventory')}">${setup ? 'Continue' : 'Done'}</button>
       </div>
     </main>`;
   },
@@ -271,13 +271,13 @@ const Screens = {
     const on = bd.parts.filter(p => p.on);
     const total = on.reduce((t, p) => t + p.minutes * Timing.frequency(p.frequency).perWeek, 0);
     const rows = bd.parts.map((p, i) => `<div class="timing-row">
-        <button class="row" style="padding:0;min-height:44px" data-action="toggleBreakPart" data-key="${i}" aria-pressed="${p.on}">
+        <button class="row" style="padding:0;min-height:44px" data-action="toggleBreakPart" data-key="${esc(i)}" aria-pressed="${p.on}">
           <span class="check" aria-hidden="true">${Icon.check}</span>
           <div class="row-text"><span class="row-title">${esc(p.name)}</span>${p.custom ? '<span class="row-sub">Your own</span>' : ''}</div>
         </button>
         ${p.on ? `<div class="timing-controls">
-          <select class="select" data-change="breakFreq" data-key="${i}" aria-label="How often: ${esc(p.name)}">${frequencyOptions(p.frequency)}</select>
-          <select class="select minutes" data-change="breakMin" data-key="${i}" aria-label="How long: ${esc(p.name)}">${minuteOptions(p.minutes)}</select>
+          <select class="select" data-change="breakFreq" data-key="${esc(i)}" aria-label="How often: ${esc(p.name)}">${frequencyOptions(p.frequency)}</select>
+          <select class="select minutes" data-change="breakMin" data-key="${esc(i)}" aria-label="How long: ${esc(p.name)}">${minuteOptions(p.minutes)}</select>
         </div>` : ''}
       </div>`).join('');
     const wasSplit = Household.parts(r).length > 0;
@@ -322,7 +322,7 @@ const Screens = {
         <div class="card" style="margin-top:12px">${units.map(u => {
           const v = Household.reshareValue(h, me, u);
           return `<div class="pref-row"><div class="row-text"><span class="row-title">${esc(u.name)}</span><span class="row-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${esc(Timing.label(u))}</span></div>
-            <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn" data-action="setResharePref" data-id="${u.id}" data-key="${p.id}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${p.emoji}</button>`).join('')}</div></div>`;
+            <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn" data-action="setResharePref" data-id="${esc(u.id)}" data-key="${esc(p.id)}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${p.emoji}</button>`).join('')}</div></div>`;
         }).join('')}</div>
         <div class="bottom-bar"><button class="btn primary" data-action="finishReshare">Done</button></div>
       </main>`;
@@ -415,7 +415,7 @@ const Screens = {
       const days = APP_CONFIG.billing.trialDays;
       const save = Math.round((1 - price.yearly / (price.monthly * 12)) * 100);
       const trialEnd = Date.now() + days * 864e5;
-      const card = (key, name, big, small, sub, tag) => `<button class="plan-card" role="radio" aria-checked="${choice === key}" data-action="choosePlan" data-key="${key}">
+      const card = (key, name, big, small, sub, tag) => `<button class="plan-card" role="radio" aria-checked="${choice === key}" data-action="choosePlan" data-key="${esc(key)}">
           ${tag ? `<span class="plan-tag">${tag}</span>` : ''}
           <span class="plan-name">${name}</span>
           <span class="plan-price">${big}<small>${small}</small></span>
@@ -466,8 +466,8 @@ const Screens = {
     const other = Household.people(h).find(m => m.uid !== me);
     const otherName = other ? esc(Household.memberName(other)) : 'Nobody else';
     const groups = Household.inventory(h);
-    const sections = groups.map(({ category, items }) => `<section aria-labelledby="pf-${category.id}">
-        <div class="section-head"><h2 class="section-title" id="pf-${category.id}">${esc(category.name)}</h2></div>
+    const sections = groups.map(({ category, items }) => `<section aria-labelledby="pf-${esc(category.id)}">
+        <div class="section-head"><h2 class="section-title" id="pf-${esc(category.id)}">${esc(category.name)}</h2></div>
         <div class="card">${items.map(r => prefRow(h, me, r)).join('')}</div>
       </section>`).join('');
     return `<main class="screen">
@@ -530,9 +530,9 @@ const Screens = {
     const row = (r, own) => {
       const pending = Household.pendingFor(h, r.id);
       const right = own && canSwap
-        ? (pending ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${r.id}">Swap</button>`)
+        ? (pending ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(r.id)}">Swap</button>`)
         : '';
-      return `<div class="row static"><button class="name-btn" data-action="peek" data-id="${r.id}"><span class="row-title">${esc(r.name)}</span>
+      return `<div class="row static"><button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title">${esc(r.name)}</span>
         <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${esc(Timing.label(r))}</span></button>${right}</div>`;
     };
     const list = (title, items, own) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
@@ -597,8 +597,8 @@ const Screens = {
       ${list('Your tasks', Household.tasksOf(h, me), true)}
       ${others.map(m => list(`${esc(Household.memberName(m))}'s tasks${m.placeholder ? ' (suggested)' : ''}`, Household.tasksOf(h, m.uid), false)).join('')}
       ${unassigned.length ? `<div class="section-head"><h2 class="section-title">Needs a home</h2></div>
-        <div class="card">${unassigned.map(r => `<div class="row static"><button class="name-btn" data-action="peek" data-id="${r.id}"><span class="row-title">${esc(r.name)}</span>
-          <span class="row-sub">${esc(Timing.label(r))}</span></button><button class="mini" data-action="claim" data-id="${r.id}">I'll take it</button></div>`).join('')}</div>` : ''}
+        <div class="card">${unassigned.map(r => `<div class="row static"><button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title">${esc(r.name)}</span>
+          <span class="row-sub">${esc(Timing.label(r))}</span></button><button class="mini" data-action="claim" data-id="${esc(r.id)}">I'll take it</button></div>`).join('')}</div>` : ''}
       ${isOrg && !active ? `<button class="btn ghost" data-action="nav" data-to="frequency">Change times</button>` : ''}
       ${reshuffle}
       ${bottom}
@@ -624,7 +624,7 @@ const Screens = {
     const tick = (r, sub) => {
       const c = Household.completion(h, r.id);
       const done = Schedule.doneOn(c, now);
-      return `<button class="row ${done ? 'done' : ''}" data-action="toggleDone" data-id="${r.id}" aria-pressed="${done}">
+      return `<button class="row ${done ? 'done' : ''}" data-action="toggleDone" data-id="${esc(r.id)}" aria-pressed="${done}">
         <span class="check" aria-hidden="true">${Icon.check}</span>
         <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${who(r)}${r.parentName ? esc(r.parentName) + ' · ' : ''}${sub}</span></div>
       </button>`;
@@ -707,20 +707,20 @@ const Screens = {
       return (a === me ? 'Yours · ' : `${esc(Household.memberName(Household.member(h, a)))}'s · `) + parts;
     };
 
-    const sections = groups.map(({ category, items }) => `<section aria-labelledby="inv-${category.id}">
+    const sections = groups.map(({ category, items }) => `<section aria-labelledby="inv-${esc(category.id)}">
         <div class="section-head">
-          <h2 class="section-title" id="inv-${category.id}">${esc(category.name)}</h2>
+          <h2 class="section-title" id="inv-${esc(category.id)}">${esc(category.name)}</h2>
           <span class="section-meta">${items.length}</span>
         </div>
         <div class="card">${items.map(r => {
           if (suggesting) {
             const sug = Household.suggestionFor(h, me, 'remove', r.id);
-            return `<button class="row" data-action="suggest" data-type="remove" data-id="${r.id}" aria-pressed="${!!sug}">
+            return `<button class="row" data-action="suggest" data-type="remove" data-id="${esc(r.id)}" aria-pressed="${!!sug}">
                 <div class="row-text"><span class="row-title" ${sug ? 'style="text-decoration:line-through;color:var(--muted)"' : ''}>${esc(r.name)}</span></div>
                 <span class="${sug ? 'badge' : 'tag'}">${sug ? 'Suggested: remove' : 'Suggest removing'}</span>
               </button>`;
           }
-          return `<button class="row" data-action="peek" data-id="${r.id}">
+          return `<button class="row" data-action="peek" data-id="${esc(r.id)}">
             <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${whose(r)}${esc(Timing.label(r))}</span></div>
             ${r.mentalLoad ? '<span class="tag">Mental load</span>' : ''}
             <span class="chev">${Icon.chev}</span>
@@ -737,7 +737,7 @@ const Screens = {
       ${addable.map(({ category, items }) => `<div class="section-head" style="margin-top:12px"><h3 class="section-meta" style="margin:0">${esc(category.name)}</h3></div>
         <div class="card">${items.map(i => {
           const sug = Household.suggestionFor(h, me, 'add', i.id);
-          return `<button class="row" data-action="suggest" data-type="add" data-id="${i.id}" aria-pressed="${!!sug}">
+          return `<button class="row" data-action="suggest" data-type="add" data-id="${esc(i.id)}" aria-pressed="${!!sug}">
               <span class="check" aria-hidden="true" ${sug ? '' : 'style="color:var(--muted)"'}>${Icon.plus}</span>
               <div class="row-text"><span class="row-title">${esc(i.name)}</span></div>
               ${sug ? '<span class="badge">Suggested</span>' : ''}
@@ -757,8 +757,8 @@ const Screens = {
             <div class="row-text"><span class="row-title">${label(x)}</span>
               <span class="row-sub">${x.type === 'breakdown' ? `Into ${esc((x.parts || []).map(p => p.name).join(', '))} · ` : ''}Suggested by ${by}</span></div>
             <div class="btn-pair">
-              <button class="btn primary" data-action="acceptSuggestion" data-id="${x.id}">${x.type === 'add' ? 'Add it' : x.type === 'breakdown' ? 'Use these parts' : 'Remove it'}</button>
-              <button class="btn secondary" data-action="declineSuggestion" data-id="${x.id}">Keep as is</button>
+              <button class="btn primary" data-action="acceptSuggestion" data-id="${esc(x.id)}">${x.type === 'add' ? 'Add it' : x.type === 'breakdown' ? 'Use these parts' : 'Remove it'}</button>
+              <button class="btn secondary" data-action="declineSuggestion" data-id="${esc(x.id)}">Keep as is</button>
             </div></div>`;
         }).join('')}</div>`;
     } else if (!isOrg) {
@@ -767,7 +767,7 @@ const Screens = {
         suggestionCard = `<div class="section-head"><h2 class="section-title">Your suggestions</h2><span class="section-meta">Waiting for ${orgName}</span></div>
           <div class="card">${mine.map(x => `<div class="row static">
             <div class="row-text"><span class="row-title">${label(x)}</span></div>
-            ${locked ? '' : `<button class="link-btn" data-action="withdrawSuggestion" data-id="${x.id}">Withdraw</button>`}</div>`).join('')}</div>`;
+            ${locked ? '' : `<button class="link-btn" data-action="withdrawSuggestion" data-id="${esc(x.id)}">Withdraw</button>`}</div>`).join('')}</div>`;
       }
     }
 
@@ -851,11 +851,11 @@ function boardCard(h) {
     if (n.kind === 'low') {
       const t = Household.noteTarget(h, n);
       sub = `${t ? (t.uid === me ? 'For you' : 'For ' + esc(Household.memberName(Household.member(h, t.uid) || {}))) + ' · ' + esc(t.via) : 'For whoever gets there first'} · ${sub}`;
-      act = `<button class="mini" data-action="gotNote" data-id="${n.id}">Got it</button>`;
+      act = `<button class="mini" data-action="gotNote" data-id="${esc(n.id)}">Got it</button>`;
     } else if (n.kind === 'today') {
-      act = `<button class="mini" data-action="claimNote" data-id="${n.id}">I'll do it</button>`;
+      act = `<button class="mini" data-action="claimNote" data-id="${esc(n.id)}">I'll do it</button>`;
     }
-    const del = n.by === me ? `<button class="note-del" data-action="deleteNote" data-id="${n.id}" aria-label="Delete note">×</button>` : '';
+    const del = n.by === me ? `<button class="note-del" data-action="deleteNote" data-id="${esc(n.id)}" aria-label="Delete note">×</button>` : '';
     return `<div class="note-row"><span class="note-kind" aria-label="${k.label}" title="${k.label}">${k.emoji}</span>
       <div class="row-text"><span class="note-text">${esc(n.text)}</span><span class="row-sub">${sub}</span></div>${act}${del}</div>`;
   };
@@ -870,7 +870,7 @@ function noteTaskRow(h, n, ownerId, everyone) {
   const by = n.by === me ? 'your note' : `${esc(Household.memberName(Household.member(h, n.by) || {}))}'s note`;
   const who = everyone ? (ownerId === me ? 'You · ' : esc(Household.memberName(Household.member(h, ownerId) || {})) + ' · ') : '';
   const sub = n.kind === 'low' ? `${who}Running low · ${by}` : `${who}Today only · ${by}`;
-  return `<button class="row" data-action="doneNote" data-id="${n.id}" aria-pressed="false">
+  return `<button class="row" data-action="doneNote" data-id="${esc(n.id)}" aria-pressed="false">
     <span class="check" aria-hidden="true">${Icon.check}</span>
     <div class="row-text"><span class="row-title">${k.emoji} ${n.kind === 'low' ? 'Get ' : ''}${esc(n.text)}</span><span class="row-sub">${sub}</span></div></button>`;
 }
@@ -915,8 +915,8 @@ function swapCards(h) {
       <p class="joke">${SwapMessages.pick('request', incoming.id, { name: Household.memberName(Household.member(h, incoming.from) || {}), task: taskName(incoming.respId) })}</p>
       <p class="plain">If you take it, you pick one of your tasks to give ${name(incoming.from)} in return.</p>
       <div class="btns">
-        <button class="btn primary" data-action="takeSwap" data-id="${incoming.id}">Deal, I'll take it</button>
-        <button class="btn secondary" data-action="declineSwap" data-id="${incoming.id}">Nope, it's yours</button>
+        <button class="btn primary" data-action="takeSwap" data-id="${esc(incoming.id)}">Deal, I'll take it</button>
+        <button class="btn secondary" data-action="declineSwap" data-id="${esc(incoming.id)}">Nope, it's yours</button>
       </div></div>`;
   }
   const rs = Household.reshuffle(h);
@@ -958,7 +958,7 @@ function swapCards(h) {
     html += `<div class="result-card" role="status">
       <p class="joke">${SwapMessages.pick(x.status === 'done' ? 'done' : 'declined', x.id, vars)}</p>
       <p class="plain">${plain}</p>
-      <button class="btn secondary" style="min-height:44px" data-action="dismissSwap" data-id="${x.id}">OK</button></div>`;
+      <button class="btn secondary" style="min-height:44px" data-action="dismissSwap" data-id="${esc(x.id)}">OK</button></div>`;
   });
   return html;
 }
@@ -966,11 +966,11 @@ function swapCards(h) {
 
 /* ---------- Shared pieces ---------- */
 function frequencyOptions(sel) {
-  return FREQUENCIES.map(f => `<option value="${f.id}" ${f.id === sel ? 'selected' : ''}>${f.label}</option>`).join('');
+  return FREQUENCIES.map(f => `<option value="${esc(f.id)}" ${f.id === sel ? 'selected' : ''}>${f.label}</option>`).join('');
 }
 function minuteOptions(sel) {
   const opts = MINUTE_OPTIONS.includes(sel) ? MINUTE_OPTIONS : [...MINUTE_OPTIONS, sel].sort((a, b) => a - b);
-  return opts.map(m => `<option value="${m}" ${m === sel ? 'selected' : ''}>${formatMinutes(m)}</option>`).join('');
+  return opts.map(m => `<option value="${esc(m)}" ${m === sel ? 'selected' : ''}>${formatMinutes(m)}</option>`).join('');
 }
 function legalLine() {
   return `<p class="fine legal-line">By continuing you agree to the <a href="legal.html#terms" target="_blank" rel="noopener">Terms</a> and <a href="legal.html#privacy" target="_blank" rel="noopener">Privacy policy</a>.</p>`;
@@ -978,10 +978,10 @@ function legalLine() {
 /** One task with ❤️ 🙂 🙃. Nothing marked counts as 🙂. */
 function prefRow(h, me, r) {
   const v = prefValue(h, me, r);
-  return `<div class="pref-row" role="group" aria-labelledby="pn-${r.id}">
-    <button class="name-btn" data-action="peek" data-id="${r.id}"><span class="row-title" id="pn-${r.id}">${esc(r.name)}</span>
+  return `<div class="pref-row" role="group" aria-labelledby="pn-${esc(r.id)}">
+    <button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title" id="pn-${esc(r.id)}">${esc(r.name)}</span>
       <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${esc(Timing.label(r))}</span></button>
-    <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn" data-action="setPref" data-id="${r.id}" data-key="${p.id}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${p.emoji}</button>`).join('')}</div>
+    <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn" data-action="setPref" data-id="${esc(r.id)}" data-key="${esc(p.id)}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${p.emoji}</button>`).join('')}</div>
   </div>`;
 }
 /** The whole household's work in one number (free for everyone). */
@@ -1004,7 +1004,7 @@ function baselineCard(h) {
   return `<div class="card"><div class="row static col">
     <div class="row-text"><span class="row-title">Right now, who does most of it?</span></div>
     <div class="chips" role="group" aria-label="Who does most of it today">${options.map(([k, l]) =>
-      `<button class="chip" data-action="setBaseline" data-key="${k}" aria-pressed="${b === k}">${l}</button>`).join('')}</div>
+      `<button class="chip" data-action="setBaseline" data-key="${esc(k)}" aria-pressed="${b === k}">${l}</button>`).join('')}</div>
     ${after ? `<p class="plain" style="margin:4px 0 0">${after}</p>` : ''}
   </div></div>`;
 }
@@ -1089,7 +1089,7 @@ const Sheets = {
       <div class="field"><label for="ct-name">What needs doing?</label>
         <input id="ct-name" data-input="customName" maxlength="60" placeholder="e.g. Clean the aquarium" value="${esc(d.name)}" autocomplete="off" enterkeyhint="done"></div>
       <div class="field"><label for="ct-cat">Area</label>
-        <select id="ct-cat" class="select" data-change="customCategory">${LIBRARY.categories.map(c => `<option value="${c.id}" ${c.id === d.category ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+        <select id="ct-cat" class="select" data-change="customCategory">${LIBRARY.categories.map(c => `<option value="${esc(c.id)}" ${c.id === d.category ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
       <div class="field"><label>How often, and how long?</label>
         <div class="timing-controls">
           <select class="select" data-change="customFrequency" aria-label="How often">${frequencyOptions(d.frequency)}</select>
@@ -1110,14 +1110,14 @@ const Sheets = {
     const removable = isOrg && !r.predefined && !r.parentId;
     Sheet.open(`<h2>${esc(r.name)}</h2>
       <p style="margin-bottom:12px">${who ? esc(who) + ' · ' : ''}${esc(Timing.label(r))}${r.mentalLoad ? ' · Mental load' : ''}</p>
-      ${removable ? `<button class="btn ghost text-danger" data-action="removeTask" data-id="${r.id}">Remove this task</button>` : ''}
+      ${removable ? `<button class="btn ghost text-danger" data-action="removeTask" data-id="${esc(r.id)}">Remove this task</button>` : ''}
       ${parts.length ? `<h3 class="section-title" style="margin:0 0 8px">${unlocked && Household.parts(r).length ? 'Broken into' : 'Includes'}</h3>
         <ul class="part-chips ${unlocked ? '' : 'locked'}">${parts.map(p => `<li>${unlocked ? '' : Icon.lock}${esc(p)}</li>`).join('')}</ul>` : ''}
       ${!parts.length ? `<button class="btn ghost" data-action="closeSheet">Close</button>` : unlocked
         ? (isOrg
-            ? `<button class="btn premium" data-action="openBreakdown" data-id="${r.id}">${Household.parts(r).length ? 'Edit the parts' : 'Break into parts'}</button>
+            ? `<button class="btn premium" data-action="openBreakdown" data-id="${esc(r.id)}">${Household.parts(r).length ? 'Edit the parts' : 'Break into parts'}</button>
                <button class="btn ghost" data-action="closeSheet">Close</button>`
-            : `<button class="btn premium" data-action="openBreakdown" data-id="${r.id}">Suggest a breakdown</button>
+            : `<button class="btn premium" data-action="openBreakdown" data-id="${esc(r.id)}">Suggest a breakdown</button>
                <button class="btn ghost" data-action="closeSheet">Close</button>`)
         : `<p style="margin-bottom:16px">${esc(PREMIUM_FEATURES.parts.body)}</p>
            <button class="btn premium" data-action="sheetNav" data-to="premium">See Premium</button>
@@ -1160,7 +1160,7 @@ const Sheets = {
     const k = NOTE_KINDS[d.kind];
     Sheet.open(`<h2>Add to the board</h2>
       <div class="chips" role="group" aria-label="Kind" style="margin-bottom:10px">${Object.entries(NOTE_KINDS).map(([id, x]) =>
-        `<button class="chip" data-action="noteKind" data-key="${id}" aria-pressed="${d.kind === id}">${x.emoji} ${x.label}</button>`).join('')}</div>
+        `<button class="chip" data-action="noteKind" data-key="${esc(id)}" aria-pressed="${d.kind === id}">${x.emoji} ${x.label}</button>`).join('')}</div>
       <p style="margin-bottom:12px">${esc(k.hint)}</p>
       <div class="field"><input id="note-text" data-input="noteText" maxlength="${Household.NOTE_MAX_LENGTH}" placeholder="${esc(k.placeholder)}" value="${esc(d.text)}" autocomplete="off" enterkeyhint="done"></div>
       <button class="btn primary" data-action="postNote">Add</button>
@@ -1182,7 +1182,7 @@ const Sheets = {
     const r = Household.unit(h, respId) || h.responsibilities.find(x => x.id === respId);
     if (!r) return;
     const others = h.members.filter(m => m.uid !== S.user.uid);
-    const offer = m => `<button class="btn primary" data-action="sendSwap" data-id="${respId}" data-to="${m.uid}">Offer it to ${esc(Household.memberName(m))}</button>`;
+    const offer = m => `<button class="btn primary" data-action="sendSwap" data-id="${esc(respId)}" data-to="${esc(m.uid)}">Offer it to ${esc(Household.memberName(m))}</button>`;
     Sheet.open(`<h2>Hand over ${esc(r.name)}?</h2>
       <p>If ${others.length === 1 ? esc(Household.memberName(others[0])) : 'they'} take${others.length === 1 ? 's' : ''} it, they choose one of their tasks to give you in return. That's the price of a swap.</p>
       ${others.map(offer).join('')}
@@ -1196,10 +1196,10 @@ const Sheets = {
     const mine = Household.tasksOf(h, S.user.uid).filter(r => r.id !== swap.respId);
     Sheet.open(`<h2>${SwapMessages.pick('price', swap.id, { name: fromName })}</h2>
       <p>Pick one of your tasks for ${esc(fromName)}.</p>
-      <div class="card">${mine.map(r => `<button class="row" data-action="completeSwap" data-id="${swap.id}" data-key="${r.id}">
+      <div class="card">${mine.map(r => `<button class="row" data-action="completeSwap" data-id="${esc(swap.id)}" data-key="${esc(r.id)}">
           <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${esc(Timing.label(r))}</span></div>
           <span class="chev">${Icon.chev}</span></button>`).join('') ||
-        `<button class="row" data-action="completeSwap" data-id="${swap.id}" data-key=""><div class="row-text"><span class="row-title">I have nothing to give, just take it</span></div></button>`}</div>
+        `<button class="row" data-action="completeSwap" data-id="${esc(swap.id)}" data-key=""><div class="row-text"><span class="row-title">I have nothing to give, just take it</span></div></button>`}</div>
       <button class="btn ghost" data-action="closeSheet">Back</button>`, 'Pick what to give back');
   },
 
@@ -1211,7 +1211,7 @@ const Sheets = {
     const orgName = Household.memberName(Household.owner(h));
     const plan = premium ? (isOrg ? 'Premium' : `Premium via ${orgName}`) : 'Free';
     const stage = Household.stage(h);
-    const item = (to, label) => `<button class="btn secondary" data-action="sheetNav" data-to="${to}">${label}</button>`;
+    const item = (to, label) => `<button class="btn secondary" data-action="sheetNav" data-to="${esc(to)}">${label}</button>`;
     Sheet.open(`<h2>Our home</h2>
       <div class="plan-line"><span>Plan</span><span>${esc(plan)} · <button class="link-btn" style="margin:0;padding:0" data-action="sheetNav" data-to="premium">${premium ? 'Details' : 'See Premium'}</button></span></div>
       <div class="plan-line"><span>Signed in as</span><span>${esc(S.user.email || '')}</span></div>

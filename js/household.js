@@ -39,7 +39,41 @@ const SUPPLY_ROUTES = [
 /** The partner who hasn't joined yet (plan placeholder). Never a real user id (those are 28 chars, no dashes). */
 const INVITEE = 'invitee';
 
+const SAFE_ID = /^[\w-]{1,64}$/;
+const okId = x => typeof x === 'string' && SAFE_ID.test(x);
+const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
+const NOTE_KIND_IDS = ['note', 'low', 'today'];
+
 const Household = {
+  /**
+   * The other member can write parts of the shared document, so never trust its shape:
+   * drop entries with odd ids or kinds instead of letting them break a screen.
+   * (All values are also escaped when rendered; this is the second line of defence.)
+   */
+  sanitize(h) {
+    const list = (v, ok) => (Array.isArray(v) ? v.filter(x => isObj(x) && ok(x)) : []);
+    h.members = list(h.members, m => okId(m.uid));
+    h.memberIds = (Array.isArray(h.memberIds) ? h.memberIds : []).filter(okId);
+    h.responsibilities = list(h.responsibilities, r => okId(r.id) && typeof r.name === 'string')
+      .map(r => (r.parts == null || Array.isArray(r.parts) ? r : { ...r, parts: [] }))
+      .map(r => (r.parts ? { ...r, parts: r.parts.filter(p => isObj(p) && okId(p.id)) } : r));
+    h.swaps = list(h.swaps, x => okId(x.id));
+    h.notes = list(h.notes, n => okId(n.id) && NOTE_KIND_IDS.includes(n.kind) && typeof n.text === 'string');
+    h.suggestions = list(h.suggestions, x => okId(x.id) && ['add', 'remove', 'breakdown'].includes(x.type))
+      .map(x => (x.parts == null ? x : { ...x, parts: (Array.isArray(x.parts) ? x.parts : []).filter(p => isObj(p) && typeof p.name === 'string') }));
+    const ids = v => (Array.isArray(v) ? v.filter(okId) : []);
+    const known = new Set(LIBRARY.categories.map(c => c.id));
+    h.responsibilities = h.responsibilities.map(r => (known.has(r.category) ? r : { ...r, category: 'organisation' }));
+    if (h.plan != null && !isObj(h.plan)) h.plan = null;
+    if (h.plan && h.plan.skipped != null) h.plan.skipped = ids(h.plan.skipped);
+    if (h.reshare != null && (!isObj(h.reshare) || !okId(h.reshare.id))) h.reshare = null;
+    if (h.reshare) h.reshare.unitIds = ids(h.reshare.unitIds);
+    if (h.reshuffle != null && !isObj(h.reshuffle)) h.reshuffle = null;
+    if (!isObj(h.settings)) h.settings = {};
+    if (!isObj(h.preferences)) h.preferences = {};
+    return h;
+  },
+
   /** Data for a new household document (id is assigned by the backend). */
   create({ ownerId, ownerName }) {
     return {

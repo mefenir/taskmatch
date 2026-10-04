@@ -231,7 +231,7 @@ function watchHousehold(hid, attempt = 0) {
     }
     if (!(h.memberIds || []).includes(S.user.uid)) { forgetHousehold(); return; }
     S.householdLoading = false;
-    S.household = h;
+    S.household = Household.sanitize(h);
     if (h.ownerId !== watchers.ownerId) watchPremium(h.ownerId);
     afterSnapshot(h);
     if (S.joining) {
@@ -323,8 +323,12 @@ function watchPremium(ownerId) {
 function syncPaidMirror(attempt = 0) {
   const sub = S.subscription;
   const paid = sub && sub.source === 'stripe' && Entitlements.isPremium(sub);
-  // A week of grace past the paid period, so a renewal never locks the partner out before the organiser's app catches up.
-  const until = paid ? (Math.max(sub.periodEnd || 0, sub.trialEnd || 0) || Date.now() + 30 * 864e5) + 7 * 864e5 : 0;
+  // A week of grace past the paid period, so a renewal never locks the partner out before the organiser's
+  // app catches up — but never more than 90 days ahead (the rules allow 100), so a refund or a cancelled
+  // trial can't keep the partner's Premium writes open for long. Rounded to the day: at most one write a day.
+  const DAY = 864e5;
+  const cap = Math.floor(Date.now() / DAY) * DAY + 90 * DAY;
+  const until = paid ? Math.min((Math.max(sub.periodEnd || 0, sub.trialEnd || 0) || Date.now() + 30 * DAY) + 7 * DAY, cap) : 0;
   const key = `household-app/paid-mirror/${S.user.uid}`;
   const value = String(until);
   if (SafeStorage.get(key) === value) return;

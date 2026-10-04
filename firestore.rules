@@ -1,6 +1,7 @@
 rules_version = '2';
 
 // Security rules for the household app.
+// Default: everything not matched below is denied.
 // Paste into Firebase console → Firestore Database → Rules → Publish
 // (or deploy with `firebase deploy --only firestore:rules`).
 service cloud.firestore {
@@ -52,6 +53,7 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.memberIds == [request.auth.uid]
         && request.resource.data.members.size() == 1
+        && request.resource.data.members[0].uid == request.auth.uid
         && withinLimits();
 
       allow update: if signedIn() && withinLimits()
@@ -61,8 +63,8 @@ service cloud.firestore {
 
       function withinLimits() {
         return request.resource.data.responsibilities.size() <= 500
-          && request.resource.data.members.size() <= 12
-          && request.resource.data.memberIds.size() <= 12
+          && request.resource.data.members.size() <= 2
+          && request.resource.data.memberIds.size() <= 2
           && request.resource.data.get('suggestions', []).size() <= 200
           && request.resource.data.get('swaps', []).size() <= 300
           && request.resource.data.get('notes', []).size() <= 200;
@@ -103,24 +105,35 @@ service cloud.firestore {
           && (!('expiresAt' in sub) || sub.expiresAt > request.time);
       }
 
-      // A new person adds exactly themselves, in the same batch that marks a
-      // valid invite for this household as used by them.
+      // The partner adds exactly themselves next to the organiser (who stays as is), in
+      // the same batch that marks a valid invite for this household as used by them now.
+      // An invite works once: rejoining later needs a new one.
       function joining(hid) {
         let invite = getAfter(/databases/$(database)/documents/invites/$(request.resource.data.joinInvite)).data;
+        let me = request.resource.data.members[1];
         return !(request.auth.uid in resource.data.memberIds)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberIds', 'joinInvite', 'updatedAt'])
+          && resource.data.members.size() == 1
+          && request.resource.data.members.size() == 2
+          && request.resource.data.members[0] == resource.data.members[0]
           && request.resource.data.memberIds == resource.data.memberIds.concat([request.auth.uid])
-          && request.resource.data.members.size() == resource.data.members.size() + 1
+          && me.keys().hasOnly(['uid', 'name', 'role', 'joinedAt'])
+          && me.uid == request.auth.uid && me.role == 'member'
+          && me.name is string && me.name.size() <= 40
           && invite.householdId == hid
-          && invite.usedBy == request.auth.uid;
+          && invite.usedBy == request.auth.uid
+          && invite.usedAt == request.time;
       }
 
-      // A member who isn't the owner removes themselves.
+      // The partner removes themselves; the organiser's entry stays exactly as it was.
       function leaving() {
         return request.auth.uid in resource.data.memberIds
           && request.auth.uid != resource.data.ownerId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberIds', 'updatedAt'])
-          && request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid]);
+          && request.resource.data.memberIds == [resource.data.ownerId]
+          && request.resource.data.members.size() == 1
+          && request.resource.data.members[0].uid == resource.data.ownerId
+          && resource.data.members.hasAll(request.resource.data.members);
       }
     }
 
@@ -144,6 +157,7 @@ service cloud.firestore {
         && resource.data.usedBy == null
         && resource.data.expiresAt > request.time
         && request.resource.data.usedBy == request.auth.uid
+        && request.resource.data.usedAt == request.time
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt']);
 
       allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
@@ -189,9 +203,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       function validRequest() {
-        return request.resource.data.keys().hasOnly(['uid', 'email', 'name', 'householdId', 'members', 'status', 'requestedAt'])
-          && request.resource.data.uid == request.auth.uid
-          && request.resource.data.status == 'pending';
+        let d = request.resource.data;
+        return d.keys().hasOnly(['uid', 'email', 'name', 'householdId', 'members', 'status', 'requestedAt'])
+          && d.uid == request.auth.uid
+          && d.status == 'pending'
+          && d.requestedAt == request.time
+          && d.get('email', '') is string && d.get('email', '').size() <= 254
+          && d.get('name', '') is string && d.get('name', '').size() <= 60
+          && (d.get('householdId', null) == null || (d.householdId is string && d.householdId.size() <= 64))
+          && (d.get('members', 1) is int && d.get('members', 1) >= 1 && d.get('members', 1) <= 12);
       }
     }
 
@@ -210,7 +230,7 @@ service cloud.firestore {
           || (request.auth.token.get('stripeRole', '') == 'premium'
             && request.resource.data.plan == 'premium' && request.resource.data.active == true
             && request.resource.data.expiresAt is timestamp
-            && request.resource.data.expiresAt < request.time + duration.value(380, 'd')));
+            && request.resource.data.expiresAt < request.time + duration.value(100, 'd')));
       allow delete: if false;
     }
 
@@ -247,13 +267,17 @@ service cloud.firestore {
     function monthlyPrice() { return 'REPLACE_WITH_MONTHLY_PRICE_ID'; }
     function yearlyPrice() { return 'REPLACE_WITH_YEARLY_PRICE_ID'; }
     function trialDays() { return 21; }
+    // Where Stripe may send people back to: the app (and localhost for testing).
+    // Change this if the app moves to another address.
+    function appUrl() { return '^(https://mefenir[.]github[.]io/taskmatch/|http://localhost(:[0-9]+)?/).*'; }
 
     function validCheckout(d) {
       return d.keys().hasOnly(['price', 'success_url', 'cancel_url', 'allow_promotion_codes', 'client_reference_id',
                                'metadata', 'locale', 'trial_period_days', 'expires_at'])
         && (!('expires_at' in d) || (d.expires_at is int && d.expires_at <= request.time.toMillis() / 1000 + 3600))
         && d.price in [monthlyPrice(), yearlyPrice()]
-        && d.success_url is string && d.cancel_url is string
+        && d.success_url is string && d.success_url.matches(appUrl())
+        && d.cancel_url is string && d.cancel_url.matches(appUrl())
         && d.client_reference_id == request.auth.uid
         && (!('trial_period_days' in d) || (d.price == yearlyPrice() && d.trial_period_days == trialDays()));
     }

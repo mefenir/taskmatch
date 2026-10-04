@@ -53,7 +53,7 @@ function money(amount) {
 
 function topbar({ back, step }) {
   const backBtn = back
-    ? `<button class="icon-btn left" data-action="nav" data-to="${back}" aria-label="Back">${Icon.back}</button>`
+    ? `<button class="icon-btn left" data-action="nav" data-to="${esc(back)}" aria-label="Back">${Icon.back}</button>`
     : `<span style="width:34px"></span>`;
   const i = ONBOARDING.indexOf(step);
   const progress = i >= 0
@@ -68,15 +68,15 @@ function stepperRow(key, label, sub, value) {
   return `<div class="row static">
     <div class="row-text"><span class="row-title" id="lbl-${key}">${label}</span>${sub ? `<span class="row-sub">${sub}</span>` : ''}</div>
     <div class="stepper" role="group" aria-labelledby="lbl-${key}">
-      <button class="step-btn" data-action="step" data-key="${key}" data-delta="-1" ${value <= min ? 'disabled' : ''} aria-label="Fewer">${Icon.minus}</button>
+      <button class="step-btn" data-action="step" data-key="${esc(key)}" data-delta="-1" ${value <= min ? 'disabled' : ''} aria-label="Fewer">${Icon.minus}</button>
       <output aria-live="polite">${value}</output>
-      <button class="step-btn" data-action="step" data-key="${key}" data-delta="1" ${value >= max ? 'disabled' : ''} aria-label="More">${Icon.plus}</button>
+      <button class="step-btn" data-action="step" data-key="${esc(key)}" data-delta="1" ${value >= max ? 'disabled' : ''} aria-label="More">${Icon.plus}</button>
     </div>
   </div>`;
 }
 
 function switchRow(action, key, label, sub, on) {
-  return `<button class="row" role="switch" aria-checked="${on}" data-action="${action}" data-key="${key}">
+  return `<button class="row" role="switch" aria-checked="${on}" data-action="${action}" data-key="${esc(key)}">
     <div class="row-text"><span class="row-title">${label}</span>${sub ? `<span class="row-sub">${sub}</span>` : ''}</div>
     <span class="switch" aria-hidden="true"></span>
   </button>`;
@@ -160,7 +160,7 @@ function toast(msg) {
 function bottomNav(current, dots = {}) {
   const item = (to, label, icon) => {
     const dot = dots[to] && current !== to;
-    return `<button data-action="nav" data-to="${to}" ${current === to ? 'aria-current="page"' : ''}${dot ? ` aria-label="${label}, needs your attention"` : ''}>
+    return `<button data-action="nav" data-to="${esc(to)}" ${current === to ? 'aria-current="page"' : ''}${dot ? ` aria-label="${label}, needs your attention"` : ''}>
       <span class="nav-icon">${icon}${dot ? '<span class="nav-dot" aria-hidden="true"></span>' : ''}</span><span>${label}</span></button>`;
   };
   return `<nav class="bottom-nav" aria-label="Main"><div class="inner">

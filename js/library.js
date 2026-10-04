@@ -97,7 +97,7 @@ const Library = (() => {
   return {
     get: id => (index.get(id) || {}).item || null,
     order: id => (index.has(id) ? index.get(id).order : Infinity),
-    category: id => LIBRARY.categories.find(c => c.id === id) || { id, name: id },
+    category: id => LIBRARY.categories.find(c => c.id === id) || { id: String(id), name: String(id) },
     categoryOrder: id => (catOrder.has(id) ? catOrder.get(id) : Infinity),
     relevant: h => LIBRARY.responsibilities.filter(r => r.when(h)),
     /** Names of the parts inside a responsibility (shown as the Premium sneak peek). */

@@ -120,6 +120,17 @@ How it's protected:
 
 Fill in `legal` in [`js/config.js`](js/config.js) (name, address, email, VAT ID if any). [`legal.html`](legal.html) shows the imprint, privacy policy, terms and withdrawal, using the prices and trial from `billing`. It's a template: **have it checked by a lawyer before charging anyone.**
 
+### 8. Security settings in the consoles (once)
+
+- **Firebase → Authentication → Settings → User actions:** turn on **Email enumeration protection**.
+- **Firebase → Authentication → Settings → Password policy:** require at least 8 characters (the app asks for 8).
+- **Google Cloud → APIs & Services → Credentials → the Browser key:** under *Application restrictions* pick *Websites* and add `https://mefenir.github.io/*` and `http://localhost/*`. The key is public by design; this stops other sites from using your quota.
+- **Admin account:** a long random password, and a username that isn't easy to guess.
+- **GitHub → Settings → Code security:** turn on Dependabot alerts and secret scanning. **Settings → Branches:** protect `main` from force pushes.
+- If the app ever moves away from `https://mefenir.github.io/taskmatch/`, update `appUrl()` in `firestore.rules`, or Stripe checkouts will be refused.
+
+What the code already does: every value from the database is escaped before it reaches the page, and data the other person wrote is checked again when it arrives (`Household.sanitize`); a Content-Security-Policy blocks injected scripts; the app refuses to run inside someone else's frame; the rules check who may write what, the shape of joins/leaves, the size of requests and that checkouts go back to this app only. No secret keys are in the repository: the Stripe secret lives only inside the Firebase extension.
+
 ## Running locally
 
 Any static server works (sign-in needs `http://localhost`, not `file://`):
@@ -170,6 +181,7 @@ A responsibility is **not** an assignment: selected responsibilities carry no ow
 ## Known limits of this version
 
 - One household per person.
+- A household has two people (organiser and partner).
 - Preferences are hidden in the app but stored in the shared household data (the split runs on your phones). Making them truly private needs a server function (Firebase Blaze plan).
 - If two people change the *same* list at the *same* second, the last save wins.
 - A trial is refused by the app to anyone who has had a subscription; a deliberately modified app could still ask Stripe for a second trial. Acceptable for now; a server function can close it later.

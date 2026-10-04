@@ -76,18 +76,18 @@ function view() {
   const count = k => A.requests.filter(r => k === 'all' || r.status === k || (k === 'closed' && CLOSED.includes(r.status))).length;
   const buttons = r => {
     const dis = A.busy === r.id ? 'disabled' : '';
-    if (r.status === 'pending') return `<button class="btn primary" data-action="unlock" data-id="${r.id}" ${dis}>Unlock Premium</button>
-      <button class="btn secondary" data-action="deny" data-id="${r.id}" ${dis}>Deny</button>`;
-    if (r.status === 'approved') return `<button class="btn secondary" data-action="revoke" data-id="${r.id}" ${dis}>Revoke Premium</button>`;
-    return `<button class="btn primary" data-action="unlock" data-id="${r.id}" ${dis}>Unlock Premium</button>`;
+    if (r.status === 'pending') return `<button class="btn primary" data-action="unlock" data-id="${esc(r.id)}" ${dis}>Unlock Premium</button>
+      <button class="btn secondary" data-action="deny" data-id="${esc(r.id)}" ${dis}>Deny</button>`;
+    if (r.status === 'approved') return `<button class="btn secondary" data-action="revoke" data-id="${esc(r.id)}" ${dis}>Revoke Premium</button>`;
+    return `<button class="btn primary" data-action="unlock" data-id="${esc(r.id)}" ${dis}>Unlock Premium</button>`;
   };
   return `<main class="screen">${head}
     <p class="lead" style="margin-bottom:12px">Signed in as ${esc(A.user.email || '')}. Unlocking gives the whole household Premium (use it for gifts and tests; paid Premium runs through Stripe).</p>
     <div class="seg" role="group" aria-label="Filter">${FILTERS.map(([k, l]) =>
-      `<button data-action="filter" data-key="${k}" aria-pressed="${A.filter === k}">${l} (${count(k)})</button>`).join('')}</div>
+      `<button data-action="filter" data-key="${esc(k)}" aria-pressed="${A.filter === k}">${l} (${count(k)})</button>`).join('')}</div>
     <div class="card">${list.length ? list.map(r => `<div class="req">
         <div class="top"><span class="who">${esc(r.name || 'No name')}</span><span class="status ${esc(r.status)}">${STATUS_LABEL[r.status] || esc(r.status)}</span></div>
-        <div class="meta">${esc(r.email || '')}<br>${r.members || 1} in household · asked ${when(r.requestedAt)}${r.decidedAt ? ` · changed ${when(r.decidedAt)}` : ''}</div>
+        <div class="meta">${esc(r.email || '')}<br>${esc(Number(r.members) || 1)} in household · asked ${when(r.requestedAt)}${r.decidedAt ? ` · changed ${when(r.decidedAt)}` : ''}</div>
         <div class="btns">${buttons(r)}</div>
       </div>`).join('') : `<div class="note" style="border:0">Nothing here.</div>`}</div>
   </main>`;
@@ -107,7 +107,7 @@ function funnel() {
   const pct = (a, b) => (b ? Math.round(a / b * 100) + '%' : '—');
   const ranges = [[30, '30 days'], [90, '90 days'], [0, 'All time']];
   return `<div class="seg" role="group" aria-label="Period" style="margin-top:12px">${ranges.map(([k, l]) =>
-      `<button data-action="range" data-key="${k}" aria-pressed="${A.range === k}">${l}</button>`).join('')}</div>
+      `<button data-action="range" data-key="${esc(k)}" aria-pressed="${A.range === k}">${l}</button>`).join('')}</div>
     <div class="card">${steps.map((k, i) => {
       const v = n(k); const prev = i ? n(steps[i - 1]) : v;
       return `<div class="row static"><div class="row-text"><span class="row-title">${STEP_LABEL[k]}</span>
