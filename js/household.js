@@ -10,12 +10,12 @@
 
    members[]   people in the household, each linked to an account
    memberIds[] the account ids, used by the security rules
-   ownerId     the organiser; Premium follows this account (entitlements.js)
+   ownerId     the organiser; the subscription follows this account (entitlements.js)
    settings    { step, onboarded, partnerName, baseline, invitedAt }
    responsibilities [{ id, libraryId|null, name, category, minutes, frequency,
                predefined, custom?, parts?[] }] — "tasks" in the app
-   suggestions [{ id, by, type: 'add'|'remove'|'breakdown', … }] — Premium:
-               the partner proposes, the organiser decides
+   suggestions [{ id, by, type: 'add'|'remove'|'breakdown', … }] — the partner
+               proposes, the organiser decides
    preferences { [uid]: { values: { [unitId]: 'love'|'rather_not' }, submittedAt } }
                unmarked = 'ok'; never shown to the other person
    plan        { status: 'proposed'|'active', assignments: { [unitId]: uid|INVITEE },
@@ -132,7 +132,7 @@ const Household = {
     return id;
   },
 
-  /* ---------- Board (Premium): notes, running low, today only ---------- *
+  /* ---------- Board: notes, running low, today only ---------- *
    * notes [{ id, by, kind: 'note'|'low'|'today', text, createdAt (ms), day ('YYYY-MM-DD'), claimedBy? }]
    *  - note:  stays 7 days, the author can delete it any time
    *  - low:   goes to whoever looks after the related task, until someone has got it
@@ -217,14 +217,14 @@ const Household = {
     return this.boardNotes(h).filter(n => n.by !== userId && n.createdAt > (seenAt || 0));
   },
 
-  /* ---------- Suggestions (Premium) ---------- */
+  /* ---------- Suggestions ---------- */
 
   suggestions: h => h.suggestions || [],
   suggestionFor(h, userId, type, key) {
     return this.suggestions(h).find(x => x.by === userId && x.type === type &&
       (type === 'add' ? x.libraryId === key : x.responsibilityId === key)) || null;
   },
-  /** Premium: suggest how to break a task into parts (replaces my earlier suggestion for it). */
+  /** Suggest how to break a task into parts (replaces my earlier suggestion for it). */
   suggestBreakdown(h, userId, respId, parts) {
     const r = h.responsibilities.find(x => x.id === respId); if (!r) return;
     h.suggestions = this.suggestions(h).filter(x => !(x.by === userId && x.type === 'breakdown' && x.responsibilityId === respId));
@@ -315,13 +315,9 @@ const Household = {
   planPref(h, userId, unit) { return this.prefsComplete(h, userId) ? this.prefFor(h, userId, unit) : 'ok'; },
 
   /* ---------- Units: what the plan is made of ----------
-   * Without Premium (or for tasks that aren't broken down) a unit is the whole
-   * responsibility. With Premium, a broken-down task contributes its parts instead.
-   * When Premium ends the parts stay stored, so they come back exactly as they
-   * were when Premium returns. */
-  premium: false, // set by the app from the organiser's subscription
+   * A unit is a whole task, or for a task broken into parts, each of its parts. */
   parts: r => r.parts || [],
-  isSplit(r) { return this.premium && this.parts(r).length > 0; },
+  isSplit(r) { return this.parts(r).length > 0; },
   partUnit(r, p) {
     return { id: p.id, parentId: r.id, parentName: r.name, name: p.name, minutes: p.minutes, frequency: p.frequency,
       category: r.category, libraryId: null, mentalLoad: !!p.mentalLoad, custom: !!p.custom };
@@ -379,15 +375,11 @@ const Household = {
     if (!unchanged) h.swaps = [];
     h.reshare = null;
   },
-  /** Who does a unit. A broken-down task seen without Premium belongs to whoever has most of its parts. */
+  /** Who does a unit (a new part sits with whoever had the whole task until it's shared out). */
   assignee(h, id) { return this.norm(h, this.rawAssignee(h, id)); },
   rawAssignee(h, id) {
     const a = (h.plan && h.plan.assignments) || {};
-    const r = h.responsibilities.find(x => x.id === id);
-    if (r) {
-      if (this.parts(r).length && !this.premium) return ((h.plan && h.plan.merged) || {})[id] || this.majority(h, r) || a[id] || null;
-      return a[id] || null;
-    }
+    if (h.responsibilities.some(x => x.id === id)) return a[id] || null;
     const parent = this.parentOf(h, id);
     return parent ? (a[id] || a[parent.id] || null) : null;
   },
@@ -399,11 +391,7 @@ const Household = {
     if (!people.length) return null;
     return people.sort((x, y) => (load[y] - load[x]) || (x === a[r.id] ? -1 : y === a[r.id] ? 1 : (x < y ? -1 : 1)))[0];
   },
-  setAssignee(h, id, userId) {
-    const r = h.responsibilities.find(x => x.id === id);
-    if (r && this.parts(r).length && !this.premium) h.plan = { ...h.plan, merged: { ...(h.plan.merged || {}), [id]: userId } };
-    else h.plan = { ...h.plan, assignments: { ...(h.plan.assignments || {}), [id]: userId } };
-  },
+  setAssignee(h, id, userId) { h.plan = { ...h.plan, assignments: { ...(h.plan.assignments || {}), [id]: userId } }; },
   tasksOf(h, userId) { return this.units(h).filter(u => this.assignee(h, u.id) === userId); },
   /** Added after the plan started: nobody's yet. */
   unassigned(h) { const ids = this.peopleIds(h); return h.plan ? this.units(h).filter(u => !ids.includes(this.assignee(h, u.id))) : []; },
@@ -445,7 +433,7 @@ const Household = {
   declineReshuffle(h) { h.reshuffle = { ...h.reshuffle, status: 'declined', resolvedAt: new Date().toISOString() }; },
   markReshuffleSeen(h) { h.reshuffle = { ...h.reshuffle, seen: true }; },
 
-  /* ---------- Breaking tasks into parts (Premium) ---------- */
+  /* ---------- Breaking tasks into parts ---------- */
   /** Suggested parts for a task, each with a share of its time and the same rhythm. */
   defaultParts(r) {
     const names = Library.parts(r.libraryId);
@@ -475,7 +463,7 @@ const Household = {
   /** Parts that haven't been shared out yet (they sit with the task's owner for now). */
   newParts(h) { return this.newUnits(h).filter(u => u.parentId); },
   /** Anything new in a running plan that hasn't been shared out yet: tasks added to the list
-   *  (nobody has them) and, with Premium, new parts (still sitting with whoever had the whole
+   *  (nobody has them) and new parts (still sitting with whoever had the whole
    *  task). Tasks the household chose to leave under "Needs a home" are skipped. */
   newUnits(h) {
     if (!h.plan || h.plan.status !== 'active') return [];
@@ -484,19 +472,11 @@ const Household = {
     return this.units(h).filter(u => !skipped.has(u.id) &&
       (u.parentId ? !a[u.id] : !h.memberIds.includes(this.assignee(h, u.id))));
   },
-  /** A re-share that includes task parts only exists with Premium. */
-  reshareHasParts(h, rsh) { return (rsh.unitIds || []).some(id => this.parentOf(h, id)); },
-  activeReshare(h) {
-    const r = h.reshare;
-    if (!r) return null;
-    if (!this.premium && (r.premium || this.reshareHasParts(h, r))) return null;
-    return r;
-  },
+  activeReshare: h => h.reshare || null,
 
   /* ---------- Re-share: rate just some parts, re-divide only those ---------- */
   startReshare(h, by, unitIds) {
     h.reshare = { id: uid(), by, status: 'rating', unitIds, prefs: {}, done: {}, accepted: {}, at: new Date().toISOString() };
-    h.reshare.premium = this.reshareHasParts(h, h.reshare);
   },
   reshareValue(h, userId, unit) {
     const own = ((h.reshare && h.reshare.prefs) || {})[userId] || {};
@@ -594,18 +574,12 @@ const Household = {
   },
 
   /* ---------- Ticking things off ---------- */
-  /** A part starts from when its whole task was last done; a merged task from its latest part. */
+  /** A part starts from when its whole task was last done. */
   completion(h, id) {
     const all = h.completions || {};
     const own = all[id] || null;
     const parent = this.parentOf(h, id);
-    if (parent) return own || all[parent.id] || null;
-    const r = h.responsibilities.find(x => x.id === id);
-    if (r && this.parts(r).length && !this.premium) {
-      return [own, ...this.parts(r).map(p => all[p.id])].filter(c => c && c.last)
-        .sort((x, y) => new Date(y.last) - new Date(x.last))[0] || own;
-    }
-    return own;
+    return parent ? own || all[parent.id] || null : own;
   },
   toggleDone(h, respId, userId, now = new Date()) {
     const c = this.completion(h, respId);

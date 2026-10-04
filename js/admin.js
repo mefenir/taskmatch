@@ -1,7 +1,7 @@
 'use strict';
 
 /* =========================================================
-   ADMIN PANEL — Premium gifts/requests and the signup funnel
+   ADMIN PANEL — access requests/gifts and the signup funnel
    Sign in with the admin account (created in the Firebase
    console). Access is checked twice: here, and by the
    Firestore rules (admins/{uid} must exist).
@@ -20,16 +20,18 @@ const A = {
 };
 let unwatch = null;
 let unwatchMetrics = null;
+// In the order a household goes through them.
 const STEP_LABEL = {
-  created: 'Started setting up', listed: 'Picked their tasks', rated: 'Saw their plan', invited: 'Invited their partner',
-  joined: 'Partner joined', reviewed: 'Partner reviewed', started: 'Plan started', checkout: 'Opened Premium checkout',
+  created: 'Started setting up', listed: 'Picked their tasks', rated: 'Saw their plan', paywall: 'Saw the plans',
+  checkout: 'Opened checkout', subscribed: 'Subscribed or trial', invited: 'Invited their partner',
+  joined: 'Partner joined', reviewed: 'Partner reviewed', started: 'Plan started',
 };
 const millis = t => (!t ? null : typeof t.toMillis === 'function' ? t.toMillis() : typeof t === 'number' ? t : Date.parse(t));
 const $root = document.getElementById('app');
 
-const STATUS_LABEL = { pending: 'Waiting', approved: 'Premium', denied: 'Denied', revoked: 'Revoked', cancelled: 'Cancelled by user' };
+const STATUS_LABEL = { pending: 'Waiting', approved: 'Unlocked', denied: 'Denied', revoked: 'Revoked', cancelled: 'Cancelled by user' };
 const CLOSED = ['denied', 'revoked', 'cancelled'];
-const FILTERS = [['pending', 'Waiting'], ['approved', 'Premium'], ['closed', 'Closed'], ['all', 'All']];
+const FILTERS = [['pending', 'Waiting'], ['approved', 'Unlocked'], ['closed', 'Closed'], ['all', 'All']];
 
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -66,7 +68,7 @@ function view() {
 
   const tabs = `<div class="seg" role="group" aria-label="Section">
       <button data-action="tab" data-key="funnel" aria-pressed="${A.tab === 'funnel'}">Funnel</button>
-      <button data-action="tab" data-key="requests" aria-pressed="${A.tab === 'requests'}">Premium requests</button></div>`;
+      <button data-action="tab" data-key="requests" aria-pressed="${A.tab === 'requests'}">Access requests</button></div>`;
   const head = `<div class="topbar"><span class="spacer"></span><button class="link-btn" style="margin:0" data-action="signOut">Sign out</button></div>
     <h1 style="margin-top:0">Admin</h1>${tabs}`;
   if (A.tab === 'funnel') return `<main class="screen">${head}${funnel()}</main>`;
@@ -76,13 +78,13 @@ function view() {
   const count = k => A.requests.filter(r => k === 'all' || r.status === k || (k === 'closed' && CLOSED.includes(r.status))).length;
   const buttons = r => {
     const dis = A.busy === r.id ? 'disabled' : '';
-    if (r.status === 'pending') return `<button class="btn primary" data-action="unlock" data-id="${esc(r.id)}" ${dis}>Unlock Premium</button>
+    if (r.status === 'pending') return `<button class="btn primary" data-action="unlock" data-id="${esc(r.id)}" ${dis}>Unlock</button>
       <button class="btn secondary" data-action="deny" data-id="${esc(r.id)}" ${dis}>Deny</button>`;
-    if (r.status === 'approved') return `<button class="btn secondary" data-action="revoke" data-id="${esc(r.id)}" ${dis}>Revoke Premium</button>`;
-    return `<button class="btn primary" data-action="unlock" data-id="${esc(r.id)}" ${dis}>Unlock Premium</button>`;
+    if (r.status === 'approved') return `<button class="btn secondary" data-action="revoke" data-id="${esc(r.id)}" ${dis}>Revoke</button>`;
+    return `<button class="btn primary" data-action="unlock" data-id="${esc(r.id)}" ${dis}>Unlock</button>`;
   };
   return `<main class="screen">${head}
-    <p class="lead" style="margin-bottom:12px">Signed in as ${esc(A.user.email || '')}. Unlocking gives the whole household Premium (use it for gifts and tests; paid Premium runs through Stripe).</p>
+    <p class="lead" style="margin-bottom:12px">Signed in as ${esc(A.user.email || '')}. Unlocking gives the whole household access without paying (for gifts and tests; paid subscriptions run through Stripe).</p>
     <div class="seg" role="group" aria-label="Filter">${FILTERS.map(([k, l]) =>
       `<button data-action="filter" data-key="${esc(k)}" aria-pressed="${A.filter === k}">${l} (${count(k)})</button>`).join('')}</div>
     <div class="card">${list.length ? list.map(r => `<div class="req">
@@ -128,7 +130,7 @@ async function act(kind, userId) {
     if (kind === 'unlock') await Backend.Admin.unlock(userId, A.user.uid);
     if (kind === 'deny') await Backend.Admin.deny(userId, A.user.uid);
     if (kind === 'revoke') await Backend.Admin.revoke(userId, A.user.uid);
-    toast({ unlock: 'Premium unlocked.', deny: 'Request denied.', revoke: 'Premium revoked.' }[kind]);
+    toast({ unlock: 'Unlocked.', deny: 'Request denied.', revoke: 'Access revoked.' }[kind]);
   } catch (e) {
     console.error(e);
     toast(`Couldn't do that (${e.code || 'error'}). Check the rules are published.`);
@@ -143,7 +145,7 @@ const Actions = {
   range(d) { A.range = Number(d.key) || 0; render(); },
   unlock(d) { act('unlock', d.id); },
   deny(d) { act('deny', d.id); },
-  revoke(d) { if (confirm('Revoke Premium for this household?')) act('revoke', d.id); },
+  revoke(d) { if (confirm('Revoke access for this household?')) act('revoke', d.id); },
 };
 
 document.addEventListener('click', e => {

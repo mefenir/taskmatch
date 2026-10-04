@@ -8,11 +8,11 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 
 ## How it works
 
-**Discover first. Allocate second. Customise with Premium.**
+**Discover first. Allocate second. Start together with a subscription.**
 
 1. **The organiser sets up alone** (5 short steps): names, your home (rooms, children, pets, garden, car), the tasks your home needs, how often and how long, and the organiser's own answers (❤️ happy to do it · 🙂 don't mind · 🙃 rather not; unmarked = 🙂).
-2. **A draft plan straight away**, with the household's weekly hours and a "who does most of it today" baseline. Nobody waits for anyone.
-3. **Invite only then**: a native share with ready text and a one-time link.
+2. **A draft plan straight away**, with the household's weekly hours, each person's share and a "who does most of it today" baseline. Nobody waits for anyone. All of this is free.
+3. **Subscribe, then invite.** The plans screen comes next (yearly with 21 days free, or monthly). Right after subscribing, the app offers the invite: a native share with ready text and a one-time link.
 4. **The partner** opens the link, sees "{organiser} made a plan for your home" and marks only what they disagree with, on one screen.
    - Nothing marked → **Looks good, let's start**: the plan is active.
    - Something marked → **Rebalance with my answers**: a fair split from both answers, then both say yes.
@@ -20,26 +20,22 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 
 The fair split (`js/plan.js`) shares by weekly effort (time × frequency), not by count. Clear oppositions (❤️ vs 🙃) go to the person who likes it; the rest is balanced. The same answers always give the same plan; the organiser is the tie-break, so the plan doesn't change when the partner joins.
 
-Vocabulary used everywhere: **task**, **part** (Premium breakdown of a task), **organiser** (who created the household and pays for Premium).
+Vocabulary used everywhere: **task**, **part** (a task broken into smaller tasks), **organiser** (who created the household and holds the subscription).
 
 Every button gives instant feedback (press animation); async actions show a spinner and are locked until they finish, and repeated taps are ignored, so nothing — above all a purchase — can run twice.
 
-## Free and Premium
+## Free draft, then one subscription
 
-| | Free | Premium |
-|---|---|---|
-| Discover, plan, fair split, swaps, ticks, reshuffle | ✓ | ✓ |
-| Own tasks | 3 | unlimited |
-| Break tasks into parts | – | ✓ |
-| Partner suggests changes | – | ✓ |
-| Weekly time per person | – | ✓ |
-| Board (note · running low · today only) | – | ✓ |
+There is no Free tier. Setting up and seeing the draft plan is free; inviting the partner and using the plan together needs a subscription, and then everything is on: the plan, swaps, daily lists, weekly time per person, the board, breaking tasks into parts, own tasks, partner suggestions.
 
-- **Price:** € 4.99 / month, or € 39.99 / year (shown as € 3.33 / month, billed yearly). **21-day free trial on the yearly plan only**, once per person.
-- Premium belongs to the **organiser** and covers the whole household. When it ends, everyone is back on Free at once; data is kept and returns with Premium (parts merge back to whoever did most of them).
-- The trial offer is shown once, right after the plan starts. Elsewhere Premium is offered by one shared component (gold badge → sheet → Premium page).
-- The organiser manages or cancels the subscription in the Stripe customer portal (Premium page → Manage or cancel subscription). A failed renewal keeps Premium while Stripe retries and shows "Fix payment".
-- Two sources can make the organiser Premium, merged in `Entitlements.effective()`: a Stripe subscription (`customers/{uid}/subscriptions`) or a gift from the admin panel (`subscriptions/{uid}`). While no Stripe prices are configured, the Premium page shows **I'm interested** (requests go to the admin panel).
+- **Price:** € 4.99 / month (no trial, charged from day one), or € 39.99 / year (shown as € 3.33 / month, billed yearly) with a **21-day free trial**, once per person.
+- The subscription belongs to the **organiser** and covers both people. The partner never pays and never sees a checkout.
+- **When it ends**, the household is paused for both: the plans screen replaces the app (the partner sees "{organiser}'s subscription has ended"). Nothing is deleted; restarting brings everything back as it was, including anything that was half-way.
+- A failed renewal (`past_due`) keeps the household running while Stripe retries and shows "Fix payment".
+- If the subscription can't be read (offline, a hiccup), the app never says "ended": it shows a neutral "checking" screen and retries by itself.
+- The organiser manages or cancels in the Stripe customer portal (⋯ menu → Subscription → Details → Manage or cancel subscription).
+- Two sources give access, merged in `Entitlements.effective()`: a Stripe subscription (`customers/{uid}/subscriptions`) or a gift from the admin panel (`subscriptions/{uid}`). While no Stripe prices are configured, the plans screen shows **Request access** (requests go to the admin panel).
+- The subscription is checked by the app. The security rules protect who may change what; they don't check payment (a modified app could use the plan without paying, but never touch someone else's data).
 
 ## Setup
 
@@ -65,10 +61,10 @@ Every button gives instant feedback (press animation); async actions show a spin
 
 The rules make sure that:
 - only members can read a household, and nobody can change its owner,
-- only the organiser edits the household, its list and the times; the partner can answer their *own* preferences, say yes to the plan, swap and tick tasks off, and (with Premium) suggest changes and write board notes,
+- only the organiser edits the household, its list and the times; the partner can answer their *own* preferences, say yes to the plan, swap and tick tasks off, suggest changes and write board notes,
 - people can only join with a valid, unused, unexpired invite,
 - members can leave; only the owner can delete,
-- nobody can give themselves Premium, and checkouts only use the two configured prices.
+- nobody can give themselves access, and checkouts only use the two configured prices.
 
 ### 4. Turn on GitHub Pages
 
@@ -76,7 +72,7 @@ On GitHub: **Settings → Pages → Build and deployment → Source: Deploy from
 
 The app is live at `https://mefenir.github.io/taskmatch/` a minute or two later. Every push to `main` redeploys it.
 
-### 5. Admin panel (funnel and Premium requests)
+### 5. Admin panel (funnel and access requests)
 
 The panel is at **`https://mefenir.github.io/taskmatch/admin.html`**. It isn't linked from the app.
 
@@ -87,34 +83,32 @@ One-time setup:
 
 Then sign in on `admin.html` with that username and password.
 
-**Funnel** shows, for the last 30 / 90 days or all time, how many households reached each step (started setting up → picked tasks → saw their plan → invited → partner joined → partner reviewed → plan started → opened checkout), with % of the previous step, and how many were still used 7 days after starting. Data comes from `metrics/{hid}` (step times and active days only, no names or content).
+**Funnel** shows, for the last 30 / 90 days or all time, how many households reached each step (started setting up → picked tasks → saw their plan → saw the plans → opened checkout → subscribed or trial → invited → partner joined → partner reviewed → plan started), with % of the previous step, and how many were still used 7 days after starting. Data comes from `metrics/{hid}` (step times and active days only, no names or content).
 
-**Premium requests** shows every request, filtered by **Waiting / Premium / Closed / All**:
-- **Unlock Premium** gives the requester's whole household Premium (writes `subscriptions/{uid}`).
+**Access requests** shows every request, filtered by **Waiting / Unlocked / Closed / All**:
+- **Unlock** gives the requester's household access without paying (writes `subscriptions/{uid}`), for gifts and tests.
 - **Deny** turns the request down; they can ask again later.
-- **Revoke Premium** ends it; everyone in the household drops back to Free at once.
+- **Revoke** ends it; the household is paused for both at once.
 
-Only accounts listed in `admins` can see requests or change Premium; the rules enforce it, not just the page.
+Only accounts listed in `admins` can see requests or give access; the rules enforce it, not just the page.
 
-### 6. Payments with Stripe (Premium)
+### 6. Payments with Stripe
 
 Needs the Firebase **Blaze** plan (pay as you go; the free quota covers a small app).
 
-1. **Stripe → Products → Add product** "Our Household Premium" with two **recurring** prices: **€ 4.99 monthly** and **€ 39.99 yearly**. Don't set a default trial on either price — the app asks for the 21-day trial only on the yearly checkout.
-2. On the product, add **metadata** `firebaseRole` = `premium`. The extension then puts `stripeRole: premium` into the organiser's sign-in token, which the security rules check.
-3. **Firebase → Extensions → Run Payments with Stripe** (`stripe/firestore-stripe-payments`). Settings: customers collection `customers`, products collection `products`, sync new users: yes. Note the **region** you pick.
-4. Copy the webhook URL the extension shows into **Stripe → Developers → Webhooks**, with the events the extension lists (product, price, checkout.session.completed, customer.subscription.*, invoice.*…). Put the signing secret back into the extension.
-5. **Stripe → Settings → Billing → Customer portal**: allow cancelling and updating the payment method.
-6. **Stripe → Settings → Billing → Subscriptions and emails**: turn on the **reminder email before a trial ends** (required in the EU) and emails for failed payments.
-7. Paste the two price IDs in **both** places:
+1. **Stripe → Products → Add product** "Our Household" with two **recurring** prices: **€ 4.99 monthly** and **€ 39.99 yearly**. Don't set a default trial on either price — the app asks for the 21-day trial only on the yearly checkout.
+2. **Firebase → Extensions → Run Payments with Stripe** (`stripe/firestore-stripe-payments`). Settings: customers collection `customers`, products collection `products`, sync new users: yes. Note the **region** you pick.
+3. Copy the webhook URL the extension shows into **Stripe → Developers → Webhooks**, with the events the extension lists (product, price, checkout.session.completed, customer.subscription.*, invoice.*…). Put the signing secret back into the extension.
+4. **Stripe → Settings → Billing → Customer portal**: allow cancelling and updating the payment method.
+5. **Stripe → Settings → Billing → Subscriptions and emails**: turn on the **reminder email before a trial ends** (required in the EU) and emails for failed payments.
+6. Paste the two price IDs in **both** places:
    - [`js/config.js`](js/config.js) → `billing.prices.monthly` / `yearly` (and `functionsRegion` = the extension region),
    - [`firestore.rules`](firestore.rules) → `monthlyPrice()` / `yearlyPrice()` — then **publish the rules again**.
-8. Keep `billing.display` in `config.js` identical to the Stripe prices; the app shows those numbers.
+7. Keep `billing.display` in `config.js` identical to the Stripe prices; the app shows those numbers.
 
 How it's protected:
 - A checkout can only be created by the signed-in person, for one of the two prices, with the trial only on the yearly price and only for 21 days (rules).
 - The app never starts a second checkout while one is open (busy lock, reused session for 25 minutes) or while a subscription exists or needs payment.
-- `paidPremium/{uid}` is a small mirror the organiser's app writes only when the token really has `stripeRole: premium`; it lets the rules allow the partner's Premium writes (notes, suggestions).
 
 ### 7. Legal pages
 
@@ -148,14 +142,14 @@ css/styles.css        Design tokens (light + dark) and components
 js/config.js          Firebase web config + app settings
 js/util.js            Small helpers
 js/library.js         Predefined responsibility library (read-only, versioned)
-js/entitlements.js    Free/Premium rules — the only place plans are checked
+js/entitlements.js    Does the household have a subscription — the only place it's checked
 js/plan.js            The fair split, recurring schedule, swap messages (no DOM, no Firebase)
 js/household.js       Household domain logic (no DOM, no Firebase)
 js/backend.js         All Firebase Auth + Firestore calls
 js/ui.js              Shared UI pieces: rows, steppers, sheets, toast
 js/screens.js         Screens and sheets (HTML from state)
 js/app.js             State, auth flow, live sync, actions, router
-admin.html, js/admin.js  Admin panel: funnel and Premium requests
+admin.html, js/admin.js  Admin panel: funnel and access requests
 legal.html            Imprint, privacy, terms, withdrawal (reads js/config.js)
 firestore.rules       Security rules
 docs/PRODUCT_BRIEF.md Product spec
@@ -166,13 +160,12 @@ docs/PRODUCT_BRIEF.md Product spec
 | Path | What | Who can write |
 |---|---|---|
 | `users/{uid}` | email, display name, which household | that user |
-| `households/{hid}` | organiser, members, partner name, rooms, children, pets, tasks (with times), suggestions, preferences, plan, swaps, completions, notes | organiser; partner only own preferences plus plan, swaps, ticks, (Premium) suggestions and notes |
+| `households/{hid}` | organiser, members, partner name, rooms, children, pets, tasks (with times), suggestions, preferences, plan, swaps, completions, notes | organiser; partner only own preferences plus plan, swaps, ticks, suggestions and notes |
 | `invites/{code}` | household, expiry, who used it | members create; invitee redeems once |
 | `subscriptions/{uid}` | `plan`, `active`, optional `expiresAt` | admin only |
 | `premiumRequests/{uid}` | name, email, household size, status (`pending` / `approved` / `denied` / `revoked`) | the person asks; admin decides |
 | `customers/{uid}/…` | Stripe customer, checkout sessions, subscriptions, payments | the person creates checkout sessions; the rest only the Stripe extension |
 | `products`, `prices` | synced from Stripe | the Stripe extension |
-| `paidPremium/{uid}` | `active`, `expiresAt` mirror of a paid subscription | that person, only with `stripeRole: premium` in the token |
 | `metrics/{hid}` | funnel step times, active days | household members; read by admin |
 | `admins/{uid}` | `role: admin` | Firebase console only |
 

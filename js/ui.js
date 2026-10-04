@@ -33,16 +33,14 @@ function applyBusy(scope = document) {
   });
 }
 
-/* ---------- Premium: one look, one destination ---------- */
-const premiumBadge = () => `<span class="badge">${Icon.sparkSm} Premium</span>`;
-/** What each locked feature offers, shown in the same Premium sheet everywhere. */
-const PREMIUM_FEATURES = Object.freeze({
-  parts:   { title: 'Every detail has an owner', body: 'Break big tasks like Clean bathroom into parts, each with its own timing and person.' },
-  custom:  { title: 'Your home, all of it', body: 'Free includes 3 tasks of your own. Premium adds as many as your home needs.' },
-  suggest: { title: 'Both of you shape the list', body: 'With Premium your partner can suggest adding, removing or breaking down tasks, and the organiser decides.' },
-  time:    { title: 'See that it is fair', body: 'Premium shows roughly how much time each of you puts into the household every week.' },
-  board:   { title: 'Stop reminding each other', body: 'A shared board for notes, supplies that are running low and last-minute tasks, sent to the right person.' },
-});
+/* ---------- What a subscription gives the two of you (the plans screen) ---------- */
+const BENEFITS = Object.freeze([
+  { title: 'A fair plan you both agreed to', body: 'Your partner marks what doesn\'t suit them, the app rebalances, you both say yes.' },
+  { title: 'Daily lists for each of you', body: 'Today, this week, this month. Tick things off, swap when life gets in the way.' },
+  { title: 'See that it stays fair', body: 'How much time each of you puts in every week, shared by effort, not by count.' },
+  { title: 'Stop reminding each other', body: 'A shared board for notes, things running low and last-minute jobs, sent to the right person.' },
+  { title: 'Every detail has an owner', body: 'Break big tasks into parts, add your own, and let your partner suggest changes.' },
+]);
 
 /** Prices as the app shows them (the amounts Stripe charges are set in Stripe). */
 function money(amount) {
@@ -82,11 +80,10 @@ function switchRow(action, key, label, sub, on) {
   </button>`;
 }
 
-function addOwnRow(label, locked) {
+function addOwnRow(label) {
   return `<div class="card"><button class="row add" data-action="addCustomTask">
     <span class="plus" aria-hidden="true">${Icon.plus}</span>
     <div class="row-text"><span class="row-title">${label}</span></div>
-    ${locked ? premiumBadge() : ''}
   </button></div>`;
 }
 

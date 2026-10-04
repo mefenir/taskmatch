@@ -5,8 +5,8 @@
    Kept separate from household data. Households store a
    reference (libraryId) plus a copy of the display name.
    `when(household)` decides whether an item is relevant.
-   `tasks` = detailed breakdown, shown only with the
-   `detailed_tasks` entitlement (Premium, later phase).
+   `tasks` = the usual parts of a task, offered when it's
+   broken into parts.
    ========================================================= */
 const roomCount = (h, type) => (h.rooms.find(r => r.type === type) || {}).count || 0;
 
@@ -38,7 +38,7 @@ const LIBRARY = Object.freeze({
     { id: 'car',          name: 'Car' },
   ]),
   responsibilities: Object.freeze([
-    // Each Free responsibility bundles its parts; Premium (later) splits them into
+    // Each task bundles its usual parts; breaking it down turns them into
     // separate tasks with their own timing and owner. `tasks` lists those parts.
     // Cleaning
     R('cleaning', 'clean_bathroom', 'Clean bathroom', When.room('bathroom'), { tasks: ['Clean toilet', 'Clean sink', 'Clean shower & bath', 'Clean mirror', 'Clean floor', 'Fresh towels', 'Refill toilet paper & soap'] }),
@@ -100,7 +100,7 @@ const Library = (() => {
     category: id => LIBRARY.categories.find(c => c.id === id) || { id: String(id), name: String(id) },
     categoryOrder: id => (catOrder.has(id) ? catOrder.get(id) : Infinity),
     relevant: h => LIBRARY.responsibilities.filter(r => r.when(h)),
-    /** Names of the parts inside a responsibility (shown as the Premium sneak peek). */
+    /** Names of the parts inside a responsibility (shown when you open a task). */
     parts: libId => ((index.get(libId) || {}).item || {}).tasks ? index.get(libId).item.tasks.map(t => (typeof t === 'string' ? t : t.name)) : [],
   };
 })();

@@ -20,9 +20,10 @@ const APP_CONFIG = Object.freeze({
   inviteValidDays: 14,
   minPasswordLength: 8,
 
-  /* Premium billing through Stripe (Firebase extension "Run Payments with Stripe").
-     Paste the two price IDs from the Stripe dashboard (Products → Premium → prices).
-     While they are empty the Premium page shows "I'm interested" instead of a checkout.
+  /* Subscription billing through Stripe (Firebase extension "Run Payments with Stripe").
+     Paste the two price IDs from the Stripe dashboard (Products → Our Household → prices),
+     and the same two into firestore.rules. While they are empty the plans screen shows
+     "Request access" instead of a checkout.
      The amounts below are only what the app SHOWS: keep them identical to Stripe. */
   billing: Object.freeze({
     prices: Object.freeze({

@@ -1,31 +1,23 @@
 'use strict';
 
 /* =========================================================
-   ENTITLEMENTS — single source of truth for Free/Premium
+   ENTITLEMENTS — does this household have a subscription?
    ---------------------------------------------------------
-   Premium belongs to the household's organiser (the person who
-   created it). Everyone in the household gets the organiser's
-   entitlements, and when that subscription ends everyone drops
-   back to Free at the same moment. Data created with Premium is
-   kept and comes back when Premium does.
+   Setting up and seeing the draft plan is free. Inviting the
+   partner and using the plan together needs a subscription.
+   There is no Free tier: with a subscription everything is on.
 
-   Two sources can make the organiser Premium, merged by
-   Entitlements.effective() into one subscription object:
+   The subscription belongs to the household's organiser and
+   covers both people. When it ends, the household is paused:
+   nothing is deleted, and it all comes back on restart.
+
+   Two sources, merged by Entitlements.effective():
      - a paid Stripe subscription (customers/{uid}/subscriptions,
-       written only by the Stripe extension), status trialing/active
+       written only by the Stripe extension)
      - a grant from the admin panel (subscriptions/{uid}), for gifts
-   UI code never checks plan names directly — only these helpers.
    ========================================================= */
-const PLANS = Object.freeze({
-  free: Object.freeze({
-    detailed_tasks: false, custom_task_limit: 3, suggest_changes: false, time_totals: false, board: false,
-  }),
-  premium: Object.freeze({
-    detailed_tasks: true, custom_task_limit: Infinity, suggest_changes: true, time_totals: true, board: true,
-  }),
-});
 
-// past_due: a renewal failed and Stripe is retrying — keep Premium meanwhile (and ask to fix the card).
+// past_due: a renewal failed and Stripe is retrying — keep access meanwhile (and ask to fix the card).
 const PAID_STATUSES = Object.freeze(['trialing', 'active', 'past_due']);
 // A payment that needs the customer: never offer a new checkout on top of it.
 const PROBLEM_STATUSES = Object.freeze(['past_due', 'unpaid', 'incomplete']);
@@ -52,25 +44,16 @@ const Entitlements = {
     if (grant) return { ...grant, source: 'grant' };
     return null;
   },
+
+  /** Is the subscription on right now? */
+  active(sub) {
+    if (!sub || sub.active !== true || sub.plan !== 'premium') return false;
+    const exp = toMillis(sub.expiresAt);
+    return !(exp && exp < Date.now());
+  },
+
   /** Has this person ever had a paid subscription (then no second free trial). Unknown counts as yes. */
   hadSubscription: stripeSubs => !Array.isArray(stripeSubs) || stripeSubs.length > 0,
   /** A subscription whose payment needs fixing (card declined, 3-D Secure not finished…). */
   paymentProblem: stripeSubs => (stripeSubs || []).find(s => PROBLEM_STATUSES.includes(s.status)) || null,
-
-  /** @param {object|null} subscription the effective subscription of the organiser */
-  of(subscription) {
-    const s = subscription;
-    if (!s || s.active !== true || !PLANS[s.plan]) return PLANS.free;
-    const exp = toMillis(s.expiresAt);
-    if (exp && exp < Date.now()) return PLANS.free;
-    return PLANS[s.plan];
-  },
-  isPremium:            sub => Entitlements.of(sub) === PLANS.premium,
-  canViewDetailedTasks: sub => Entitlements.of(sub).detailed_tasks,
-  canAddCustomTask:     (sub, count) => count < Entitlements.of(sub).custom_task_limit,
-  customTaskLimit:      sub => Entitlements.of(sub).custom_task_limit,
-  canSuggestChanges:    sub => Entitlements.of(sub).suggest_changes,
-  /** Per-person weekly time totals. Per-task times and the household total are free. */
-  canSeeTimeTotals:     sub => Entitlements.of(sub).time_totals,
-  canUseBoard:          sub => Entitlements.of(sub).board,
 };

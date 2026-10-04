@@ -118,7 +118,7 @@ button.row:active{background:var(--surface-2)}
 .chip{border:1.5px solid var(--line);background:transparent;border-radius:999px;padding:8px 16px;min-height:40px;cursor:pointer;font-weight:500;font-size:15px}
 .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
 
-/* Premium */
+/* Gold accent: subscription and plans */
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:650;letter-spacing:.02em;padding:3px 8px;border-radius:999px;background:var(--premium-soft);color:var(--premium);flex:none}
 .row.add{color:var(--muted)}
 .row.add .plus{width:24px;height:24px;border-radius:50%;border:2px dashed var(--line);display:grid;place-items:center;flex:none}
@@ -234,30 +234,21 @@ button.row:active{background:var(--surface-2)}
 .nav-dot{position:absolute;top:-2px;right:-5px;width:9px;height:9px;border-radius:50%;background:#E5484D;box-shadow:0 0 0 2px var(--bg)}
 .celebrate{text-align:center;padding:20px 16px;font-size:15px;color:var(--muted)}
 
-.row.locked .row-title{color:var(--muted)}
 .name-btn{border:0;background:none;padding:0;margin:0;text-align:left;font:inherit;color:inherit;cursor:pointer;display:flex;flex-direction:column;min-width:0;flex:1}
 .name-btn .row-title{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
-.nudge{display:flex;gap:12px;align-items:center;background:var(--premium-soft);border-radius:var(--radius);padding:12px 14px;margin:16px 0}
-.nudge p{margin:0;font-size:14px;flex:1}
 
-.member.premium{box-shadow:0 0 0 1.5px var(--premium) inset,var(--shadow)}
-.member.premium .avatar{background:var(--premium-soft);color:var(--premium)}
-.member .gold{color:var(--premium);display:inline-grid;margin-left:2px}
 
 .part-chips{list-style:none;padding:0;margin:0 0 14px;display:flex;flex-wrap:wrap;gap:6px}
 .part-chips li{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:var(--surface);box-shadow:var(--shadow);font-size:13.5px;white-space:nowrap}
-.part-chips.locked li{color:var(--muted);background:var(--surface-2);box-shadow:none}
 .part-chips svg{width:13px;height:13px;flex:none}
 
-/* Board (Premium) */
+/* Board */
 .board{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);margin:0 0 16px;overflow:hidden}
 .board-head{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;padding:12px 14px;min-height:52px;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
-.board-head.locked{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);margin:0 0 16px;color:var(--muted)}
 .board-icon{font-size:18px;line-height:1;flex:none}
 .board-title{font-weight:650;flex:none}
 .board-meta{flex:1;min-width:0;font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
 .board-meta b{color:var(--accent);font-weight:650}
-.board-head.locked .board-title{font-weight:600;flex:1}
 .board-chev{flex:none;width:22px;height:22px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--muted);line-height:1}
 .board-items{border-top:1px solid var(--line)}
 .note-row{display:flex;align-items:center;gap:10px;padding:10px 14px}
@@ -303,7 +294,7 @@ button.row.pressed{animation:row-pressed .35s ease-out}
 .spinner.small{width:20px;height:20px;border-width:2.5px;margin-bottom:8px}
 .timing-controls{display:flex;gap:8px}
 
-/* Premium plans */
+/* Plan cards on the plans screen */
 .plans{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 14px}
 .plan-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:16px 14px 14px;border-radius:16px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;min-height:132px;font:inherit}
 .plan-card[aria-checked="true"]{border-color:var(--premium);box-shadow:0 0 0 1.5px var(--premium) inset}

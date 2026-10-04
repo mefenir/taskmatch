@@ -12,12 +12,11 @@
      households/{hid}       { ownerId, memberIds[], members[], rooms[], children[],
                               pets[], circumstances, responsibilities[], settings }
      invites/{code}         { householdId, createdBy, createdAt, expiresAt, usedBy, usedAt, forName }
-     subscriptions/{uid}    { plan: 'free'|'premium', active, expiresAt? }   ← Premium granted from the admin panel
+     subscriptions/{uid}    { plan: 'premium', active, expiresAt? }   ← access granted from the admin panel
      customers/{uid}        ← Stripe extension: checkout_sessions (created here), subscriptions (synced by Stripe)
-     paidPremium/{uid}      { plan, active, expiresAt }   ← "has paid until", for the security rules
-     metrics/{hid}          { created, listed, rated, invited, joined, reviewed, started, checkout, activeDays[] }
+     metrics/{hid}          { <step>: time, activeDays[] } — see METRIC_STEPS
      premiumRequests/{uid}  { uid, email, name, householdId, members, status, requestedAt, decidedAt? }
-                            status: pending → approved | denied; approved → revoked | cancelled; denied/revoked/cancelled → pending
+                            status: pending → approved | denied; approved → revoked; denied/revoked → pending
      admins/{uid}           { role: 'admin' }   ← created by hand in the Firebase console
    ========================================================= */
 const Backend = (() => {
@@ -111,9 +110,9 @@ const Backend = (() => {
         s => onData(s.exists ? { id: s.id, ...s.data() } : null, { fromCache: s.metadata.fromCache }),
         onError),
 
-    /** Premium status of the household owner. Missing or unreadable → treated as Free. */
-    watchSubscription: (ownerId, onData) =>
-      subscriptions().doc(ownerId).onSnapshot(s => onData(s.exists ? s.data() : null), () => onData(null)),
+    /** Access granted to the household's organiser from the admin panel. Missing → null; unreadable → onError. */
+    watchSubscription: (ownerId, onData, onError) =>
+      subscriptions().doc(ownerId).onSnapshot(s => onData(s.exists ? s.data() : null), onError),
 
     async createHousehold(userId, data) {
       const ref = households().doc();
@@ -191,7 +190,7 @@ const Backend = (() => {
     },
   };
 
-  /* ---------- Premium interest ("I'm interested") ---------- */
+  /* ---------- Requesting access while payments aren't set up ---------- */
   Repo.watchPremiumRequest = (userId, onData) =>
     premiumRequests().doc(userId).onSnapshot(s => onData(s.exists ? s.data() : null), () => onData(null));
   Repo.requestPremium = (user, info) => premiumRequests().doc(user.uid).set({
@@ -204,15 +203,8 @@ const Backend = (() => {
     requestedAt: now(),
   });
 
-  /** The owner ends their own Premium. The household drops back to Free straight away. */
-  Repo.cancelPremium = async userId => {
-    await subscriptions().doc(userId).update({ active: false, cancelledAt: now() });
-    // Premium may have been switched on by hand without a request; then there's nothing to update.
-    await premiumRequests().doc(userId).update({ status: 'cancelled', cancelledAt: now() }).catch(() => {});
-  };
-
   /* ---------- Funnel metrics (no personal data: step times per household) ---------- */
-  const METRIC_STEPS = ['created', 'listed', 'rated', 'invited', 'joined', 'reviewed', 'started', 'checkout'];
+  const METRIC_STEPS = ['created', 'listed', 'rated', 'paywall', 'checkout', 'subscribed', 'invited', 'joined', 'reviewed', 'started'];
   const Metrics = {
     STEPS: METRIC_STEPS,
     mark(hid, step) {
@@ -249,8 +241,8 @@ const Backend = (() => {
       const back = `${location.origin}${location.pathname}`;
       const session = {
         price,
-        success_url: `${back}?checkout=success#/premium`,
-        cancel_url: `${back}?checkout=cancel#/premium`,
+        success_url: `${back}?checkout=success#/subscribe`,
+        cancel_url: `${back}?checkout=cancel#/subscribe`,
         allow_promotion_codes: true,
         client_reference_id: userId,
         metadata: { uid: userId, plan },
@@ -268,21 +260,11 @@ const Backend = (() => {
         }, err => { clearTimeout(timer); reject(err); });
       }));
     },
-    /**
-     * Copy "has paid until …" to paidPremium/{uid} so the security rules can check the partner's
-     * Premium writes. Allowed only while the sign-in token carries stripeRole == 'premium'.
-     */
-    async mirror(userId, untilMs) {
-      const ref = db.collection('paidPremium').doc(userId);
-      if (!untilMs) return ref.set({ active: false, syncedAt: now() }, { merge: true });
-      await auth.currentUser.getIdToken(true);
-      return ref.set({ plan: 'premium', active: true, expiresAt: firebase.firestore.Timestamp.fromMillis(untilMs), syncedAt: now() });
-    },
     /** Stripe customer portal: change plan, update card, cancel. */
     async portalUrl() {
       const fn = firebase.app().functions(APP_CONFIG.billing.functionsRegion)
         .httpsCallable('ext-firestore-stripe-payments-createPortalLink');
-      const { data } = await fn({ returnUrl: `${location.origin}${location.pathname}#/premium`, locale: 'auto' });
+      const { data } = await fn({ returnUrl: `${location.origin}${location.pathname}#/subscribe`, locale: 'auto' });
       return data.url;
     },
   };

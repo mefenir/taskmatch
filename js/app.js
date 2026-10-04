@@ -6,7 +6,7 @@
 const INVITE_KEY = 'household-app/pending-invite';
 const INVITE_FROM_KEY = 'household-app/pending-invite-from';
 const HOUSEHOLD_SCREENS = ['members', 'home', 'responsibilities', 'frequency', 'rate', 'review', 'plan', 'today', 'inventory',
-  'premium', 'breakdown', 'reshare'];
+  'subscribe', 'breakdown', 'reshare'];
 const SETUP_SCREENS = ONBOARDING;
 
 const S = {
@@ -15,17 +15,17 @@ const S = {
   user: null,                // Firebase user
   profile: null,             // users/{uid}
   household: null,           // households/{hid} (live)
-  grant: null,               // subscriptions/{organiser} — Premium given from the admin panel (live)
-  stripeSubs: [],            // customers/{organiser}/subscriptions — paid Premium (live)
+  grant: null,               // subscriptions/{organiser} — access given from the admin panel (live)
+  stripeSubs: [],            // customers/{organiser}/subscriptions — paid subscriptions (live)
   subscription: null,        // the two above merged (Entitlements.effective)
-  premiumRequest: null,      // premiumRequests/{uid} — "I'm interested" while billing isn't set up (live)
+  premiumRequest: null,      // premiumRequests/{uid} — "request access" while billing isn't set up (live)
   householdLoading: false,
   joining: false,
   suggestMode: false,
   breakdown: null,           // { respId, parts: [{ name, minutes, frequency, custom, on }], newName } while editing
   prefDraft: null,           // answers being changed on the review / rate screens, saved in one go
   customDraft: null,         // the "add your own task" form
-  planChoice: 'yearly',      // Premium plan picked on the pricing screen
+  planChoice: 'yearly',      // plan picked on the plans screen
   checkoutReturn: null,      // 'success' | 'cancel' after coming back from Stripe
   inviteLink: null,          // ready-made invite (so sharing can open straight from the tap)
   view: 'today',
@@ -114,10 +114,8 @@ function save(...fields) {
   [...new Set(fields)].forEach(f => { data[f] = h[f] === undefined ? null : h[f]; });
   return Backend.Repo.saveHousehold(h.id, data).catch(e => {
     console.error(e);
-    const premiumWrite = ('notes' in data || 'suggestions' in data) && !Household.isOwner(h, S.user.uid);
     toast(e && e.code === 'permission-denied'
-      ? (premiumWrite ? `Couldn't save. Ask ${Household.memberName(Household.owner(h))} to open the app once to refresh Premium.`
-        : "Couldn't save: the database refused access. Check firestore.rules is published.")
+      ? "Couldn't save: the database refused access. Check firestore.rules is published."
       : "Couldn't save that change. Check your connection and try again.");
   });
 }
@@ -128,7 +126,6 @@ function commit(...fields) {
 }
 /** Work out the plan again if the list, times, parts or answers changed. `by` counts as having said yes. */
 function rebuildPlan(by) {
-  syncPremium();
   const h = S.household;
   if (!h || !Household.needsNewPlan(h)) return false;
   Household.buildPlan(h, by || null);
@@ -155,6 +152,8 @@ function saveResponsibilities() {
   rerender();
 }
 const isOrganiser = () => !!S.household && Household.isOwner(S.household, S.user.uid);
+/** The household's subscription is on (setting up and the draft plan don't need it). */
+const hasAccess = () => Entitlements.active(S.subscription);
 
 /** Funnel steps, written once per household from each device (no personal data). */
 function mark(step) {
@@ -167,7 +166,7 @@ function mark(step) {
 }
 function markActiveDay() {
   const h = S.household;
-  if (!h || !h.settings.onboarded) return;
+  if (!h || !h.settings.onboarded || (Household.stage(h) !== 'draft' && !hasAccess())) return;
   const day = Household.dayKey();
   const key = `household-app/active/${h.id}`;
   if (SafeStorage.get(key) === day) return;
@@ -178,7 +177,7 @@ function markActiveDay() {
 /* ---------- live data ---------- */
 function stop(key) { if (watchers[key]) { watchers[key](); watchers[key] = null; } }
 function teardown() {
-  stop('user'); stop('household'); stop('sub'); stop('stripe'); stop('request'); S.premiumRequest = null; clearTimeout(watchers.retryTimer);
+  stop('user'); stop('household'); stop('sub'); stop('stripe'); clearTimeout(watchers.subRetry); stop('request'); S.premiumRequest = null; clearTimeout(watchers.retryTimer);
   watchers.householdId = undefined; watchers.ownerId = null;
 }
 
@@ -197,7 +196,7 @@ async function onAuth(user) {
   } catch (e) { fail(e); return; }
   S.phase = 'ready';
   watchers.user = Backend.Repo.watchUser(user.uid, onProfile, fail);
-  watchers.request = Backend.Repo.watchPremiumRequest(user.uid, req => { S.premiumRequest = req; if (currentRoute === 'premium') rerender(); });
+  watchers.request = Backend.Repo.watchPremiumRequest(user.uid, req => { S.premiumRequest = req; if (currentRoute === 'subscribe') rerender(); });
 }
 
 function onProfile(profile) {
@@ -232,7 +231,7 @@ function watchHousehold(hid, attempt = 0) {
     if (!(h.memberIds || []).includes(S.user.uid)) { forgetHousehold(); return; }
     S.householdLoading = false;
     S.household = Household.sanitize(h);
-    if (h.ownerId !== watchers.ownerId) watchPremium(h.ownerId);
+    if (h.ownerId !== watchers.ownerId) watchAccess(h.ownerId);
     afterSnapshot(h);
     if (S.joining) {
       // The household can arrive before the join call itself resolves, so it finishes the join.
@@ -258,7 +257,6 @@ function watchHousehold(hid, attempt = 0) {
 /** Housekeeping on every update from the server. */
 function afterSnapshot(h) {
   const me = S.user.uid;
-  syncPremium();
   // The partner takes over what the placeholder had in the plan.
   if (!Household.isOwner(h, me)) {
     mark('joined');
@@ -267,11 +265,9 @@ function afterSnapshot(h) {
       save('plan');
     }
   }
-  // Changes nobody in particular made (e.g. Premium switching parts on or off): the organiser's app updates the plan.
+  // Changes nobody in particular made: the organiser's app keeps a plan that isn't running yet up to date.
   if (Household.isOwner(h, me) && rebuildPlan(null)) save('plan', 'swaps', 'planSeed', 'previousAssignments', 'reshare');
-  if (Household.isOwner(h, me) && Household.stage(h) === 'draft') prepareInvite();
-  // The plan has just started (whoever said the last yes): the organiser's moment for the trial offer.
-  if (Household.isOwner(h, me) && h.plan && h.plan.status === 'active' && Date.now() - Date.parse(h.plan.startedAt || 0) < 10 * 60 * 1000) offerPremiumOnce();
+  if (Household.isOwner(h, me) && Household.stage(h) === 'draft' && hasAccess()) prepareInvite();
   markActiveDay();
 }
 
@@ -283,62 +279,51 @@ function forgetHousehold() {
   render(true);
 }
 
-/** Premium follows the organiser's account: a paid Stripe subscription, or a grant from the admin panel. */
-function watchPremium(ownerId) {
-  stop('sub'); stop('stripe');
+/**
+ * Access follows the organiser's account: a paid Stripe subscription, or a grant from the admin panel.
+ * A read that fails means "unknown", never "ended": both listeners are retried with a growing pause,
+ * and meanwhile the household shows a neutral "checking" screen instead of the plans screen.
+ */
+const READ_FAILED = Symbol('read failed');
+function watchAccess(ownerId, attempt = 0) {
+  stop('sub'); stop('stripe'); clearTimeout(watchers.subRetry);
   watchers.ownerId = ownerId;
-  S.grant = null; S.stripeSubs = []; S.subscription = null;
-  watchers.subLoaded = false;
-  const loaded = { grant: false, stripe: !Backend.Billing.enabled() };
+  if (attempt === 0) { S.grant = null; S.stripeSubs = []; S.subscription = null; S.subUnknown = false; watchers.subLoaded = false; }
+  const read = { grant: undefined, stripe: Backend.Billing.enabled() ? undefined : [] };   // undefined = still waiting
+  const retry = () => {
+    clearTimeout(watchers.subRetry);
+    watchers.subRetry = setTimeout(() => { if (watchers.ownerId === ownerId) watchAccess(ownerId, attempt + 1); },
+      Math.min(60000, 2000 * Math.pow(2, attempt)));
+  };
   const update = () => {
-    const was = Entitlements.isPremium(S.subscription);
+    if (read.grant === undefined || read.stripe === undefined) return;
+    const was = hasAccess();
     const firstLoad = !watchers.subLoaded;
+    S.grant = read.grant === READ_FAILED ? null : read.grant;
+    S.stripeSubs = read.stripe;                       // null = couldn't read (never treated as "none")
     S.subscription = Entitlements.effective(S.grant, S.stripeSubs);
-    if (!(loaded.grant && loaded.stripe)) return;
     watchers.subLoaded = true;
-    const now = Entitlements.isPremium(S.subscription);
-    if (was && !now && !firstLoad) premiumEnded();
-    if (now) {
-      if (S.checkoutReturn === 'success') S.checkoutReturn = null;
-      const sub = S.subscription;
-      const key = `household-app/premium-welcome/${ownerId}/${sub.source}`;
-      if (!SafeStorage.get(key) && S.household && Household.stage(S.household) !== 'setup') {
-        SafeStorage.set(key, '1');
-        setTimeout(() => { if (!Sheet.isOpen()) Sheets.premiumWelcome(); }, 300);
+    const now = hasAccess();
+    S.subUnknown = !now && (read.grant === READ_FAILED || read.stripe === null);
+    if (read.grant === READ_FAILED || read.stripe === null) retry();
+    if (now && S.household && isOrganiser()) {
+      mark('subscribed');
+      if (Household.stage(S.household) === 'draft') {
+        prepareInvite();
+        // Just subscribed (back from Stripe, or a grant arriving while the app is open): straight on to the invite.
+        if (S.checkoutReturn === 'success' || (!was && !firstLoad)) setTimeout(() => { if (!Sheet.isOpen()) Sheets.unlocked(); }, 300);
       }
     }
-    if (S.household && Household.isOwner(S.household, S.user.uid) && Backend.Billing.enabled()) syncPaidMirror();
-    if (was !== now || firstLoad) {
-      if (S.household && Household.isOwner(S.household, S.user.uid) && rebuildPlan(null)) save('plan', 'swaps', 'planSeed', 'previousAssignments', 'reshare');
-    }
+    if (now) { S.checkoutReturn = null; markActiveDay(); }
+    if (was && !now && !firstLoad && Sheet.isOpen()) Sheet.close();
     rerender();
   };
-  watchers.sub = Backend.Repo.watchSubscription(ownerId, grant => { S.grant = grant; loaded.grant = true; update(); });
+  watchers.sub = Backend.Repo.watchSubscription(ownerId,
+    grant => { read.grant = grant; update(); },
+    () => { read.grant = READ_FAILED; update(); });
   if (Backend.Billing.enabled()) {
-    watchers.stripe = Backend.Billing.watchSubscriptions(ownerId, subs => { S.stripeSubs = subs; loaded.stripe = true; update(); });  // null = couldn't read
+    watchers.stripe = Backend.Billing.watchSubscriptions(ownerId, subs => { read.stripe = subs; update(); });
   }
-}
-
-/** Keep paidPremium/{me} in step with my Stripe subscription (the rules read it for my partner). */
-function syncPaidMirror(attempt = 0) {
-  const sub = S.subscription;
-  const paid = sub && sub.source === 'stripe' && Entitlements.isPremium(sub);
-  // A week of grace past the paid period, so a renewal never locks the partner out before the organiser's
-  // app catches up — but never more than 90 days ahead (the rules allow 100), so a refund or a cancelled
-  // trial can't keep the partner's Premium writes open for long. Rounded to the day: at most one write a day.
-  const DAY = 864e5;
-  const cap = Math.floor(Date.now() / DAY) * DAY + 90 * DAY;
-  const until = paid ? Math.min((Math.max(sub.periodEnd || 0, sub.trialEnd || 0) || Date.now() + 30 * DAY) + 7 * DAY, cap) : 0;
-  const key = `household-app/paid-mirror/${S.user.uid}`;
-  const value = String(until);
-  if (SafeStorage.get(key) === value) return;
-  if (!paid && !SafeStorage.get(key)) return; // never mirrored: nothing to switch off
-  clearTimeout(watchers.mirrorRetry);
-  Backend.Billing.mirror(S.user.uid, until).then(() => SafeStorage.set(key, value), e => {
-    // Right after paying, Stripe's role claim can arrive a little after the subscription: try again.
-    console.warn('Premium mirror not written yet', e);
-    if (attempt < 5) watchers.mirrorRetry = setTimeout(() => syncPaidMirror(attempt + 1), [2, 5, 15, 60, 300][attempt] * 1000);
-  });
 }
 
 async function redeemInvite() {
@@ -473,6 +458,7 @@ const Actions = {
   async invite() {
     const h = S.household;
     if (!isOrganiser() || !Household.alone(h)) return;
+    if (!hasAccess()) { Sheet.close(); go('subscribe'); return; }
     const name = Household.memberName(Household.invitee(h));
     const text = inviteText();
     if (!S.inviteLink) {
@@ -543,15 +529,11 @@ const Actions = {
     items.forEach(i => (all ? Household.deselect(h, i.id) : Household.select(h, i.id)));
     saveResponsibilities();
   },
-  addCustomTask() {
-    if (!isOrganiser()) return;
-    if (!Entitlements.canAddCustomTask(S.subscription, Household.customCount(S.household))) { Sheets.premium('custom'); return; }
-    Sheets.customTask();
-  },
+  addCustomTask() { if (isOrganiser()) Sheets.customTask(); },
   saveCustomTask() {
     const h = S.household;
     const d = S.customDraft || {};
-    if (!isOrganiser() || !Entitlements.canAddCustomTask(S.subscription, Household.customCount(h))) return;
+    if (!isOrganiser()) return;
     const r = Household.addCustom(h, d);
     if (!r) { toast('Give the task a name first.'); const i = document.getElementById('ct-name'); if (i) i.focus(); return; }
     S.customDraft = null;
@@ -599,7 +581,7 @@ const Actions = {
     Household.buildPlan(h, me);
     save('settings', 'preferences', 'plan', 'swaps', 'planSeed');
     mark('rated');
-    prepareInvite();
+    if (hasAccess()) prepareInvite();
     go('plan');
   },
   /** Changing answers later (anyone, before the plan runs). */
@@ -639,7 +621,6 @@ const Actions = {
       mark('started');
       toast("You're all set. Let's go!");
       go('today');
-      offerPremiumOnce();
     } else rerender();
   },
   claim(d) { Household.claim(S.household, d.id, S.user.uid); save('plan'); rerender(); },
@@ -692,8 +673,7 @@ const Actions = {
   toggleEveryone() { S.everyone = !S.everyone; rerender(); },
   toggleDone(d) { Household.toggleDone(S.household, d.id, S.user.uid); save('completions'); rerender(); },
 
-  /* Premium: one prompt for every locked feature, one page, one checkout */
-  premiumInfo(d) { Sheets.premium(d.key); },
+  /* subscription: one screen, one checkout */
   peek(d) {
     const h = S.household;
     const r = h.responsibilities.find(x => x.id === d.id) || Household.parentOf(h, d.id);
@@ -702,13 +682,13 @@ const Actions = {
   choosePlan(d) { if (d.key === 'yearly' || d.key === 'monthly') { S.planChoice = d.key; rerender(); } },
   /**
    * Open Stripe Checkout. Guarded four ways against paying twice: the busy button, an in-flight
-   * flag, "already Premium", and re-using the same checkout page for 20 minutes (so even a second
+   * flag, "already subscribed", and re-using the same checkout page for 25 minutes (so even a second
    * tap after a reload lands on the same payment, not a new one).
    */
   async startCheckout() {
     if (checkoutInFlight || !isOrganiser()) return;
     if (!watchers.subLoaded || !Array.isArray(S.stripeSubs)) { toast("We're still checking your plan. Try again in a moment."); return; }
-    if (Entitlements.isPremium(S.subscription)) { toast('You already have Premium.'); return; }
+    if (hasAccess()) { toast('You already have a subscription.'); return; }
     if (Entitlements.paymentProblem(S.stripeSubs)) { toast('Please fix the payment for your subscription first.'); return; }
     const plan = S.planChoice === 'monthly' ? 'monthly' : 'yearly';
     const key = `${CHECKOUT_KEY}${S.user.uid}`;
@@ -748,17 +728,9 @@ const Actions = {
       toast("Couldn't send that. Check your connection and try again.");
     }
   },
-  /* cancel a Premium that was given from the admin panel (paid Premium is managed in Stripe) */
-  confirmCancelPremium() { Sheets.confirmCancelPremium(); },
-  async cancelPremium() {
-    S.justCancelled = true;
-    try { await Backend.Repo.cancelPremium(S.user.uid); Sheet.close(); toast('Premium cancelled. Your breakdowns are remembered.'); }
-    catch (e) { S.justCancelled = false; console.error(e); toast("Couldn't cancel. Check your connection and try again."); }
-  },
 
   /* break a task into parts (organiser saves, partner suggests) */
   openBreakdown(d) {
-    if (premiumGone()) return;
     const h = S.household;
     const r = h.responsibilities.find(x => x.id === d.id);
     if (!r) return;
@@ -783,7 +755,7 @@ const Actions = {
     const input = document.getElementById('bd-new'); if (input) { input.value = ''; input.focus(); }
   },
   saveBreakdown() {
-    if (premiumGone() || !isOrganiser()) return;
+    if (!isOrganiser()) return;
     const h = S.household;
     const bd = S.breakdown;
     const r = bd && h.responsibilities.find(x => x.id === bd.respId);
@@ -797,7 +769,7 @@ const Actions = {
     toast(`${r.name} is now ${parts.length} parts.`);
   },
   mergeBreakdown() {
-    if (premiumGone() || !isOrganiser()) return;
+    if (!isOrganiser()) return;
     const h = S.household;
     const r = S.breakdown && h.responsibilities.find(x => x.id === S.breakdown.respId);
     if (!r) return;
@@ -808,7 +780,6 @@ const Actions = {
     toast(`${r.name} is one task again.`);
   },
   suggestBreakdown() {
-    if (premiumGone()) return;
     const h = S.household;
     const bd = S.breakdown;
     const parts = bd ? bd.parts.filter(p => p.on) : [];
@@ -821,10 +792,9 @@ const Actions = {
   },
 
   /* sharing out new tasks in a running plan */
-  setResharePref(d) { if (premiumReshareGone()) return; Household.setResharePref(S.household, S.user.uid, d.id, d.key); save('reshare'); rerender(); },
-  finishReshare() { if (premiumReshareGone()) return; Household.finishReshare(S.household, S.user.uid); save('reshare'); rerender(); },
+  setResharePref(d) { Household.setResharePref(S.household, S.user.uid, d.id, d.key); save('reshare'); rerender(); },
+  finishReshare() { Household.finishReshare(S.household, S.user.uid); save('reshare'); rerender(); },
   acceptReshare() {
-    if (premiumReshareGone()) return;
     const h = S.household;
     const done = Household.acceptReshare(h, S.user.uid);
     save('plan', 'reshare');
@@ -837,12 +807,11 @@ const Actions = {
     go('plan');
   },
 
-  /* board (Premium) */
+  /* board */
   toggleBoard() { S.boardOpen = !S.boardOpen; rerender(); },
-  addNote() { if (premiumGone()) return; Sheets.addNote(); },
+  addNote() { Sheets.addNote(); },
   noteKind(d) { S.noteDraft = { ...(S.noteDraft || {}), kind: d.key }; Sheets.addNote(); },
   postNote() {
-    if (premiumGone()) return;
     const h = S.household;
     const d = S.noteDraft || {};
     const n = Household.addNote(h, S.user.uid, d.kind || 'note', d.text);
@@ -861,22 +830,19 @@ const Actions = {
   },
   deleteNote(d) { if (Household.deleteNote(S.household, S.user.uid, d.id)) { save('notes'); rerender(); } },
   claimNote(d) {
-    if (premiumGone()) return;
     if (Household.claimNote(S.household, S.user.uid, d.id)) { save('notes'); rerender(); toast("It's on your Today list."); }
     else { toast('Someone already took it.'); rerender(); }
   },
   gotNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Thanks! Off the board.'); } },
   doneNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Done. Nice one.'); } },
 
-  /* Premium: the partner suggests list changes, the organiser decides */
+  /* the partner suggests list changes, the organiser decides */
   suggestChanges() {
-    if (!Entitlements.canSuggestChanges(S.subscription)) { Sheets.premium('suggest'); return; }
     S.suggestMode = true;
     go('inventory');
   },
   doneSuggesting() { S.suggestMode = false; rerender(); },
   suggest(d) {
-    if (!Entitlements.canSuggestChanges(S.subscription)) { Sheets.premium('suggest'); return; }
     Household.toggleSuggestion(S.household, S.user.uid, d.type, d.id);
     save('suggestions');
     rerender();
@@ -888,7 +854,7 @@ const Actions = {
     rerender();
   },
   acceptSuggestion(d) {
-    if (!isOrganiser() || premiumGone()) return;
+    if (!isOrganiser()) return;
     const sug = Household.suggestions(S.household).find(x => x.id === d.id);
     if (!sug) return;
     Household.acceptSuggestion(S.household, d.id);
@@ -930,16 +896,6 @@ function markedCount(h, userId) {
   return Object.keys(v).length;
 }
 
-/** Right after the plan starts: offer the trial once (organiser, Free). */
-function offerPremiumOnce() {
-  const h = S.household;
-  if (!isOrganiser() || !watchers.subLoaded || Entitlements.isPremium(S.subscription)) return;
-  const key = `household-app/premium-offer/${h.id}`;
-  if (SafeStorage.get(key)) return;
-  SafeStorage.set(key, '1');
-  setTimeout(() => { if (!Sheet.isOpen()) Sheets.premiumOffer(); }, 700);
-}
-
 const Changes = {
   breakFreq(value, d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p && FREQUENCIES.some(f => f.id === value)) { p.frequency = value; rerender(); } },
   breakMin(value, d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p) { p.minutes = Number(value) || p.minutes; rerender(); } },
@@ -974,41 +930,6 @@ const $app = document.getElementById('app');
 let currentRoute = null;
 const hashName = () => location.hash.replace(/^#\/?/, '').split('?')[0];
 
-/** Broken-down tasks only count while the household has Premium. */
-function syncPremium() {
-  Household.premium = Entitlements.canViewDetailedTasks(S.subscription);
-  if (!Household.premium) dropPremiumLeftovers();
-}
-
-/**
- * Without Premium nothing Premium-only may stay open: a re-share of parts in progress,
- * suggestions waiting for the organiser, a breakdown being edited. (Parts themselves are kept
- * but merge back automatically, so they return as they were if Premium comes back.)
- * Data is only cleared once the subscription has really loaded, never on a slow start.
- */
-function dropPremiumLeftovers() {
-  S.breakdown = null;
-  S.suggestMode = false;
-  const h = S.household;
-  if (!h || !watchers.subLoaded || !S.user) return;
-  const fields = [];
-  if (h.reshare && (h.reshare.premium || Household.reshareHasParts(h, h.reshare))) { h.reshare = null; fields.push('reshare'); }
-  if (Household.isOwner(h, S.user.uid) && Household.suggestions(h).length) { h.suggestions = []; fields.push('suggestions'); }
-  if (fields.length) save(...fields);
-}
-
-/** Premium just switched off while the app was open: close whatever Premium thing was showing. */
-function premiumEnded() {
-  syncPremium();
-  if (Sheet.isOpen()) Sheet.close();
-  if (S.justCancelled) { S.justCancelled = false; return; }
-  const h = S.household;
-  const hadParts = h && h.plan && h.responsibilities.some(r => Household.parts(r).length);
-  setTimeout(() => Sheets.notice('Premium has ended',
-    (hadParts ? 'Tasks you broke into parts are one task again, with whoever did most of them. ' : 'Your household is back on Free. ')
-    + 'Anything Premium that was still waiting, like suggestions or sharing out new parts, has been cancelled.'), 260);
-}
-
 /** Anything new in a running plan (an added task, a custom task, new parts) is shared out
  *  automatically: both rate it → fair split → both say yes. The organiser's app starts it,
  *  since only the organiser changes the list. A finished re-share clears itself if its tasks
@@ -1028,21 +949,6 @@ function shareNewTasks(navigate = false) {
 // Not from the Household tab: tasks added there one after another go into one round once you move on.
 const SHARE_FROM = ['today', 'plan'];
 
-/** A Premium re-share (with parts) can't go on once Premium has ended. */
-function premiumReshareGone() {
-  const h = S.household;
-  return !!(h && h.reshare && (h.reshare.premium || Household.reshareHasParts(h, h.reshare)) && premiumGone());
-}
-
-/** For actions that only make sense with Premium: stop quietly if it has ended meanwhile. */
-function premiumGone() {
-  if (Entitlements.canViewDetailedTasks(S.subscription)) return false;
-  toast('Premium has ended, so this is no longer available.');
-  S.breakdown = null;
-  goHome();
-  return true;
-}
-
 function resolveRoute() {
   const name = hashName();
   if (S.phase === 'setup' || S.phase === 'error' || S.phase === 'loading') return S.phase;
@@ -1055,12 +961,16 @@ function resolveRoute() {
   const me = S.user.uid;
   const organiser = Household.isOwner(h, me);
   const stage = Household.stage(h);
-  if (name === 'premium' && stage !== 'setup') return 'premium';
-  if (name === 'breakdown' && S.breakdown && Entitlements.canViewDetailedTasks(S.subscription)) return 'breakdown';
-  if (name === 'reshare' && Household.activeReshare(h)) return 'reshare';
 
   // The organiser sets up alone. (A partner can't be here yet: invites only exist once the plan does.)
   if (stage === 'setup') return organiser && SETUP_SCREENS.includes(name) ? name : (h.settings.step || 'members');
+
+  // Past the draft, the household needs its subscription. Without it, it's paused on the plans screen.
+  // While that isn't known yet (still loading, or a read failed) a neutral screen keeps the address as it is.
+  if (stage !== 'draft' && !hasAccess()) { S.lastStage = stage; return !watchers.subLoaded || S.subUnknown ? 'checking' : 'subscribe'; }
+  if (name === 'subscribe') return 'subscribe';
+  if (name === 'breakdown' && S.breakdown) return 'breakdown';
+  if (name === 'reshare' && Household.activeReshare(h)) return 'reshare';
 
   // The partner's first look: the plan, with their own answers.
   const myTurn = !organiser && stage === 'review' && !Household.prefsComplete(h, me);
@@ -1077,7 +987,6 @@ function resolveRoute() {
 }
 
 function render(routeChanged) {
-  syncPremium();
   const name = resolveRoute();
   const routable = name === 'auth' || name === 'welcome' || name === 'start' || HOUSEHOLD_SCREENS.includes(name);
   if (routable && location.hash !== '#/' + name) history.replaceState(null, '', '#/' + name);
@@ -1089,6 +998,7 @@ function render(routeChanged) {
   currentRoute = name;
   watchLoading(name);
   if (SHARE_FROM.includes(name)) shareNewTasks();
+  if (name === 'subscribe' && isOrganiser() && !hasAccess()) mark('paywall');
   $app.innerHTML = Screens[name]();
   fitButtons($app);
   applyBusy($app);

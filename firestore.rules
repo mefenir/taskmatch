@@ -38,9 +38,8 @@ service cloud.firestore {
     // ---------------------------------------------------------------
     // households/{hid}
     //   - only the owner sets up and edits the household and its list
-    //   - other members can agree to the list, answer their own preferences,
-    //     take part in the plan, and (with the owner's Premium) suggest
-    //     changes the owner then accepts or declines
+    //   - the partner answers their own preferences, takes part in the
+    //     plan, uses the board and suggests changes the owner decides on
     //   - nobody can change who owns it
     //   - joining is only possible together with a valid invite
     //   - a non-owner can remove themselves; only the owner can delete
@@ -78,8 +77,9 @@ service cloud.firestore {
       }
 
       // The partner: answers for themselves only; takes part in the plan (rebalance with
-      // their answers, say yes, swap, claim, tick off); suggests list changes and uses the
-      // board only with the organiser's Premium.
+      // their answers, say yes, swap, claim, tick off); suggests list changes; uses the board.
+      // (Whether the household has a subscription is checked by the app: the rules protect
+      // who may change what, not what someone has paid for.)
       function memberEdit() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
         let preferencesChanged = request.resource.data.get('preferences', {})
@@ -88,21 +88,7 @@ service cloud.firestore {
           && request.auth.uid != resource.data.ownerId
           && changed.hasOnly(['suggestions', 'preferences', 'plan', 'swaps', 'completions',
                               'reshare', 'reshuffle', 'planSeed', 'previousAssignments', 'notes', 'updatedAt'])
-          && preferencesChanged.hasOnly([request.auth.uid])
-          && (!changed.hasAny(['suggestions', 'notes']) || ownerIsPremium(resource.data.ownerId));
-      }
-
-      // Premium given from the admin panel, or paid (see paidPremium below).
-      function ownerIsPremium(ownerUid) {
-        return (exists(/databases/$(database)/documents/subscriptions/$(ownerUid))
-            && premiumActive(get(/databases/$(database)/documents/subscriptions/$(ownerUid)).data))
-          || (exists(/databases/$(database)/documents/paidPremium/$(ownerUid))
-            && premiumActive(get(/databases/$(database)/documents/paidPremium/$(ownerUid)).data));
-      }
-
-      function premiumActive(sub) {
-        return sub.plan == 'premium' && sub.active == true
-          && (!('expiresAt' in sub) || sub.expiresAt > request.time);
+          && preferencesChanged.hasOnly([request.auth.uid]);
       }
 
       // The partner adds exactly themselves next to the organiser (who stays as is), in
@@ -164,19 +150,13 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------
-    // subscriptions/{uid} — Premium status of a person.
-    // Premium is attached to the household owner. Everyone in that
-    // owner's household can read it, so they all get (and lose) the
-    // owner's Premium together. Only an admin (the admin panel or the
-    // Firebase console) can write here, never the app itself.
+    // subscriptions/{uid} — access granted by hand from the admin panel
+    // (gifts, tests). It belongs to the household's organiser; everyone in
+    // that household can read it. Only an admin can write here.
     // ---------------------------------------------------------------
     match /subscriptions/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || ownerOfMyHousehold(uid) || isAdmin());
       allow write: if isAdmin();
-      // The owner may switch their own Premium off (cancel), never on.
-      allow update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.active == false
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active', 'cancelledAt']);
 
       function ownerOfMyHousehold(ownerUid) {
         let hid = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId;
@@ -188,7 +168,7 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------
-    // premiumRequests/{uid} — "I'm interested". People create or renew
+    // premiumRequests/{uid} — "Request access" while payments aren't open. People create or renew
     // their own request; only an admin approves, denies or revokes.
     // ---------------------------------------------------------------
     match /premiumRequests/{uid} {
@@ -196,10 +176,7 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if signedIn() && request.auth.uid == uid && validRequest();
       allow update: if isAdmin()
-        || (signedIn() && request.auth.uid == uid && resource.data.status in ['denied', 'revoked', 'cancelled'] && validRequest())
-        || (signedIn() && request.auth.uid == uid && resource.data.status == 'approved'
-            && request.resource.data.status == 'cancelled'
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt']));
+        || (signedIn() && request.auth.uid == uid && resource.data.status in ['denied', 'revoked', 'cancelled'] && validRequest());
       allow delete: if isAdmin();
 
       function validRequest() {
@@ -213,25 +190,6 @@ service cloud.firestore {
           && (d.get('householdId', null) == null || (d.householdId is string && d.householdId.size() <= 64))
           && (d.get('members', 1) is int && d.get('members', 1) >= 1 && d.get('members', 1) <= 12);
       }
-    }
-
-    // ---------------------------------------------------------------
-    // paidPremium/{uid} — a copy of "this organiser has paid", so the rules can
-    // check Premium for the partner too. Only the organiser can write it, and only
-    // while their sign-in token carries the Stripe extension's claim
-    // stripeRole == 'premium' (set from the product's firebaseRole metadata).
-    // It runs out by itself at the end of the paid period.
-    // ---------------------------------------------------------------
-    match /paidPremium/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || organiserOfMyHousehold(uid));
-      allow create, update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['plan', 'active', 'expiresAt', 'syncedAt'])
-        && (request.resource.data.active == false
-          || (request.auth.token.get('stripeRole', '') == 'premium'
-            && request.resource.data.plan == 'premium' && request.resource.data.active == true
-            && request.resource.data.expiresAt is timestamp
-            && request.resource.data.expiresAt < request.time + duration.value(100, 'd')));
-      allow delete: if false;
     }
 
     // ---------------------------------------------------------------
@@ -305,7 +263,8 @@ service cloud.firestore {
       allow get: if isAdmin() || isMemberOf(hid);
       allow list: if isAdmin();
       allow create, update: if signedIn() && isMemberOf(hid)
-        && request.resource.data.keys().hasOnly(['created', 'listed', 'rated', 'invited', 'joined', 'reviewed', 'started', 'checkout', 'activeDays'])
+        && request.resource.data.keys().hasOnly(['created', 'listed', 'rated', 'paywall', 'checkout', 'subscribed',
+                                                 'invited', 'joined', 'reviewed', 'started', 'activeDays'])
         && request.resource.data.get('activeDays', []).size() <= 400;
       allow delete: if false;
     }

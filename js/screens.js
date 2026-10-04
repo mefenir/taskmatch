@@ -51,7 +51,8 @@ const Screens = {
         <li>List what your home needs</li>
         <li>Say what you like doing and what you'd rather not</li>
         <li>Get a fair split, then invite your partner to look at it</li>
-      </ol>`}
+      </ol>
+      <p class="fine" style="text-align:left;margin-top:12px">Setting up and seeing your plan is free.</p>`}
       <div class="bottom-bar">
         <button class="btn primary" data-action="authMode" data-mode="signup">${invited ? 'Create account and see the plan' : 'Get started'}</button>
         <button class="btn ghost" data-action="authMode" data-mode="signin">I already have an account</button>
@@ -119,6 +120,20 @@ const Screens = {
         <button class="btn primary" data-action="createHousehold">Set up our home</button>
         <p class="fine">Has your partner already set it up? Open the invite link they sent you.</p>
       </div>
+    </main>`;
+  },
+
+  /** Past the draft, while we don't know yet whether the subscription is on (never says "ended"). */
+  checking() {
+    if (!S.subUnknown) return `<main class="screen center-screen" aria-busy="true"><div class="spinner" aria-hidden="true"></div>
+      <p class="lead" style="margin-top:16px">Checking your subscription…</p></main>`;
+    return `<main class="screen">
+      <div class="topbar"><span class="spacer"></span>
+        <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button></div>
+      ${houseArt}
+      <h1>We couldn't check your subscription</h1>
+      <p class="lead">Check your connection. We'll keep trying, and your home opens as soon as it works.</p>
+      <div class="bottom-bar"><button class="btn primary" data-action="reload">Try again</button></div>
     </main>`;
   },
 
@@ -220,7 +235,7 @@ const Screens = {
       ${sections}
       ${ownSection}
       <div class="section-head"><h2 class="section-title">Something missing?</h2></div>
-      ${addOwnRow('Add your own task', !Entitlements.canAddCustomTask(S.subscription, Household.customCount(h)))}
+      ${addOwnRow('Add your own task')}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${count ? `${plural(count, 'task')} · about ${formatMinutes(Household.weeklyTotal(h))} a week` : 'Nothing selected yet'}</p>
         <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'frequency' : 'inventory')}" ${count ? '' : 'disabled'}>${setup ? 'Continue' : 'Done'}</button>
@@ -260,7 +275,7 @@ const Screens = {
     </main>`;
   },
 
-  /* ---------- Premium: break a task into parts ---------- */
+  /* ---------- Break a task into parts ---------- */
   breakdown() {
     const h = S.household;
     const bd = S.breakdown;
@@ -296,15 +311,15 @@ const Screens = {
       <p class="fine" style="text-align:left;margin:0 4px">Together about ${formatMinutes(total)} a week. As one task it was ${formatMinutes(Timing.weeklyMinutes(r))}.</p>
       <div class="bottom-bar">
         ${isOwner
-          ? `<button class="btn premium" data-action="saveBreakdown" ${on.length < 2 ? 'disabled' : ''}>${wasSplit ? 'Save the parts' : 'Break it down'}</button>
+          ? `<button class="btn primary" data-action="saveBreakdown" ${on.length < 2 ? 'disabled' : ''}>${wasSplit ? 'Save the parts' : 'Break it down'}</button>
              ${wasSplit ? `<button class="btn ghost" data-action="mergeBreakdown">Put it back together</button>` : ''}`
-          : `<button class="btn premium" data-action="suggestBreakdown" ${on.length < 2 ? 'disabled' : ''}>Suggest this breakdown</button>`}
+          : `<button class="btn primary" data-action="suggestBreakdown" ${on.length < 2 ? 'disabled' : ''}>Suggest this breakdown</button>`}
         ${on.length < 2 ? '<p class="fine">Pick at least two parts.</p>' : ''}
       </div>
     </main>`;
   },
 
-  /* ---------- Premium: rate the new parts, then see how they'd be shared ---------- */
+  /* ---------- Rate new tasks or parts, then see how they'd be shared ---------- */
   reshare() {
     const h = S.household;
     const me = S.user.uid;
@@ -350,9 +365,7 @@ const Screens = {
       <div class="card">${units.map(changeRow).join('')}</div>
       ${moved.length ? `<div class="section-head"><h2 class="section-title">Also changing hands</h2></div>
         <div class="card">${moved.map(changeRow).join('')}</div>` : ''}
-      ${rsh.loads && !Entitlements.canSeeTimeTotals(S.subscription) ? `<div class="card" style="margin-top:16px"><div class="row static"><span class="chev" style="color:var(--accent)">${Icon.check}</span>
-        <div class="row-text"><span class="row-title">${Split.isEven(rsh.loads) ? 'Evenly split' : 'As even as your answers allow'}</span><span class="row-sub">Shared by effort, not by number of tasks</span></div></div></div>` : ''}
-      ${rsh.loads && Entitlements.canSeeTimeTotals(S.subscription) ? `<div class="card" style="margin-top:16px"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${h.members.map(m =>
+      ${rsh.loads ? `<div class="card" style="margin-top:16px"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${h.members.map(m =>
         `<div style="display:flex;justify-content:space-between"><span>${who(m.uid)}</span><span class="sub">about ${formatMinutes(rsh.loads[m.uid] || 0)} a week</span></div>`).join('')}</div></div>` : ''}
       <div class="bottom-bar">${accepted
         ? `<p class="count">Waiting for ${waiting.join(' and ')} to say yes</p>`
@@ -361,98 +374,111 @@ const Screens = {
     </main>`;
   },
 
-  /* ---------- Premium ---------- */
-  premium() {
+  /* ---------- Plans: after the draft, when paused, or to manage the subscription ---------- */
+  subscribe() {
     const h = S.household;
     const me = S.user.uid;
     const isOrg = Household.isOwner(h, me);
     const orgName = esc(Household.memberName(Household.owner(h)));
+    const partnerName = esc(Household.memberName(Household.people(h).find(m => m.uid !== h.ownerId) || Household.invitee(h)));
+    const draft = Household.stage(h) === 'draft';
     const sub = S.subscription;
-    const premium = Entitlements.isPremium(sub);
-    const benefits = ['time', 'parts', 'board', 'suggest', 'custom'].map(k => PREMIUM_FEATURES[k]);
+    const on = Entitlements.active(sub);
     const date = ms => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
     const price = APP_CONFIG.billing.display;
-    let action;
+    const billing = Backend.Billing.enabled();
+    let head, lead, action, showBenefits = true;
 
-    if (premium) {
+    if (on) {
+      showBenefits = false;
+      head = 'Your subscription';
+      lead = isOrg ? 'It covers both of you.' : `You're covered by ${orgName}'s subscription.`;
       let status;
       if (sub.source === 'stripe' && sub.status === 'trialing' && sub.trialEnd) {
         status = `<p class="joke">Free trial until ${date(sub.trialEnd)}</p>
           <p class="plain" style="margin:0">${sub.cancelAtPeriodEnd ? "You've cancelled, so you won't be charged." : `Then ${money(sub.interval === 'month' ? price.monthly : price.yearly)} per ${sub.interval || 'year'}. Cancel any time before ${date(sub.trialEnd)} and you won't be charged.`}</p>`;
-      } else if (sub.source === 'stripe') {
-        status = `<p class="joke">${isOrg ? 'You have Premium. 🎉' : `You have Premium through ${orgName}. 🎉`}</p>
-          <p class="plain" style="margin:0">${sub.periodEnd ? (sub.cancelAtPeriodEnd ? `Ends on ${date(sub.periodEnd)}.` : `${sub.interval === 'month' ? 'Monthly' : 'Yearly'} plan, renews on ${date(sub.periodEnd)}.`) : 'It covers both of you.'}</p>`;
+      } else if (sub.source === 'stripe' && sub.periodEnd) {
+        status = `<p class="joke">${sub.interval === 'month' ? 'Monthly' : 'Yearly'} plan</p>
+          <p class="plain" style="margin:0">${sub.cancelAtPeriodEnd ? `Ends on ${date(sub.periodEnd)}.` : `Renews on ${date(sub.periodEnd)}.`}</p>`;
       } else {
-        status = `<p class="joke">${isOrg ? 'You have Premium. 🎉' : `You have Premium through ${orgName}. 🎉`}</p>
-          <p class="plain" style="margin:0">It covers both of you.</p>`;
+        status = `<p class="joke">Your home is unlocked 🎉</p><p class="plain" style="margin:0">It covers both of you.</p>`;
       }
       if (isOrg && sub.source === 'stripe' && sub.status === 'past_due') {
-        status += `<p class="plain" style="margin:8px 0 0"><b>Your last payment didn't go through.</b> Stripe will try again; update your card to keep Premium.</p>`;
+        status += `<p class="plain" style="margin:8px 0 0"><b>Your last payment didn't go through.</b> Stripe will try again; update your card so nothing stops.</p>`;
       }
       action = `<div class="result-card">${status}</div>
-        <button class="btn primary" data-action="nav" data-to="inventory">Go to our home</button>
-        ${isOrg ? (sub.source === 'stripe'
-          ? `<button class="btn ghost" data-action="openPortal">Manage or cancel subscription</button>`
-          : `<button class="btn ghost text-danger" data-action="confirmCancelPremium">Cancel Premium</button>`) : ''}`;
-    } else if (S.checkoutReturn === 'success') {
-      action = `<div class="result-card" role="status"><div class="spinner small" aria-hidden="true"></div>
-        <p class="joke">Activating Premium…</p><p class="plain" style="margin:0">This usually takes a few seconds.</p></div>`;
+        ${isOrg && sub.source === 'stripe' ? `<button class="btn secondary" data-action="openPortal">Manage or cancel subscription</button>` : ''}
+        <button class="btn ghost" data-action="nav" data-to="${draft ? 'plan' : 'today'}">Back to our home</button>`;
     } else if (!isOrg) {
-      action = `<div class="card next-card"><p style="margin:0">Premium comes with ${orgName}'s account and covers you both. Ask ${orgName} to have a look at this page.</p></div>`;
-    } else if (Backend.Billing.enabled() && (!watchers.subLoaded || !Array.isArray(S.stripeSubs))) {
-      action = !watchers.subLoaded
-        ? `<div class="result-card" role="status"><div class="spinner small" aria-hidden="true"></div><p class="plain" style="margin:0">Checking your plan…</p></div>`
-        : `<div class="result-card" role="status"><p class="joke">We couldn't check your plan</p>
-            <p class="plain" style="margin:0">So nothing is charged twice, buying waits until we can. Check your connection and try again.</p></div>
-           <button class="btn secondary" data-action="reload">Try again</button>`;
-    } else if (Backend.Billing.enabled() && Entitlements.paymentProblem(S.stripeSubs)) {
-      action = `<div class="result-card" role="status"><p class="joke">There's a problem with your payment</p>
-          <p class="plain" style="margin:0">Your bank declined it or it needs confirming. Fix it in your subscription settings; there's nothing new to buy.</p></div>
-        <button class="btn premium" data-action="openPortal">Fix payment</button>`;
-    } else if (Backend.Billing.enabled()) {
-      const choice = S.planChoice || 'yearly';
-      const trial = !Entitlements.hadSubscription(S.stripeSubs);
-      const days = APP_CONFIG.billing.trialDays;
-      const save = Math.round((1 - price.yearly / (price.monthly * 12)) * 100);
-      const trialEnd = Date.now() + days * 864e5;
-      const card = (key, name, big, small, sub, tag) => `<button class="plan-card" role="radio" aria-checked="${choice === key}" data-action="choosePlan" data-key="${esc(key)}">
-          ${tag ? `<span class="plan-tag">${tag}</span>` : ''}
-          <span class="plan-name">${name}</span>
-          <span class="plan-price">${big}<small>${small}</small></span>
-          <span class="plan-sub">${sub}</span></button>`;
-      const cta = choice === 'yearly' ? (trial ? `Start ${days}-day free trial` : 'Subscribe yearly') : 'Subscribe monthly';
-      const fine = choice === 'yearly'
-        ? (trial
-          ? `Free until ${date(trialEnd)}, then ${money(price.yearly)} a year, billed yearly. We'll remind you before the trial ends. Cancel any time before then and you won't be charged.`
-          : `${money(price.yearly)} a year, billed yearly. Renews automatically until you cancel.`)
-        : `${money(price.monthly)} a month, billed monthly. Renews automatically until you cancel.`;
-      action = `${S.checkoutReturn === 'cancel' ? '<p class="form-note" role="status">No worries, nothing was charged.</p>' : ''}
-        <div class="plans" role="radiogroup" aria-label="Choose a plan">
-          ${card('yearly', 'Yearly', money(price.yearly / 12), '/month', `${money(price.yearly)} billed yearly · save ${save}%`, trial ? `${days} days free` : `Save ${save}%`)}
-          ${card('monthly', 'Monthly', money(price.monthly), '/month', 'Billed monthly', '')}
-        </div>
-        <button class="btn premium" data-action="startCheckout">${cta}</button>
-        <p class="fine">${fine} Payment is handled securely by Stripe.</p>
-        ${legalLine()}`;
+      showBenefits = false;
+      head = everSubscribed() ? `${orgName}'s subscription has ended` : `${orgName} needs to start the subscription`;
+      lead = `Your plan, tasks and everything you've ticked off are saved. Once ${orgName} ${everSubscribed() ? 'restarts' : 'starts'} it, you're back where you left off.`;
+      action = '';
     } else {
-      const req = S.premiumRequest;
-      const note = req && req.status === 'denied' ? "Premium isn't available for your home just yet. You can ask again any time."
-        : sub && sub.plan === 'premium' && !premium ? 'Your Premium has ended. Tap below if you would like it back.' : '';
-      action = (note ? `<p class="form-note">${note}</p>` : '') + (req && req.status === 'pending'
-        ? `<div class="result-card"><p class="joke">Thanks, you're on the list! 🙌</p>
-            <p class="plain" style="margin:0">We'll let you know as soon as Premium is ready for your home.</p></div>`
-        : `<button class="btn premium" data-action="requestPremium">I'm interested</button>
-           <p class="fine">Premium isn't on sale yet. Tap the button and we'll get in touch.</p>`);
+      const ended = !draft && everSubscribed();
+      head = ended ? 'Your subscription has ended' : 'Start your plan together';
+      lead = draft ? `One subscription covers you and ${partnerName}. Your draft plan is saved and ready to send.`
+        : ended ? `Your plan, tasks and history are all saved. Restart to pick up where you left off with ${partnerName}.`
+        : `One subscription covers you and ${partnerName}. Everything you've set up is saved.`;
+      if (S.checkoutReturn === 'success') {
+        action = `<div class="result-card" role="status"><div class="spinner small" aria-hidden="true"></div>
+          <p class="joke">Unlocking your home…</p><p class="plain" style="margin:0">This usually takes a few seconds.</p></div>`;
+      } else if (billing && (!watchers.subLoaded || !Array.isArray(S.stripeSubs))) {
+        action = !watchers.subLoaded
+          ? `<div class="result-card" role="status"><div class="spinner small" aria-hidden="true"></div><p class="plain" style="margin:0">Checking your plan…</p></div>`
+          : `<div class="result-card" role="status"><p class="joke">We couldn't check your plan</p>
+              <p class="plain" style="margin:0">So nothing is charged twice, buying waits until we can. Check your connection and try again.</p></div>
+             <button class="btn secondary" data-action="reload">Try again</button>`;
+      } else if (billing && Entitlements.paymentProblem(S.stripeSubs)) {
+        action = `<div class="result-card" role="status"><p class="joke">There's a problem with your payment</p>
+            <p class="plain" style="margin:0">Your bank declined it or it needs confirming. Fix it in your subscription settings; there's nothing new to buy.</p></div>
+          <button class="btn premium" data-action="openPortal">Fix payment</button>`;
+      } else if (billing) {
+        const choice = S.planChoice || 'yearly';
+        const trial = !Entitlements.hadSubscription(S.stripeSubs);
+        const days = APP_CONFIG.billing.trialDays;
+        const saving = Math.round((1 - price.yearly / (price.monthly * 12)) * 100);
+        const trialEnd = Date.now() + days * 864e5;
+        const card = (key, name, big, small, line, tag) => `<button class="plan-card" role="radio" aria-checked="${choice === key}" data-action="choosePlan" data-key="${esc(key)}">
+            ${tag ? `<span class="plan-tag">${tag}</span>` : ''}
+            <span class="plan-name">${name}</span>
+            <span class="plan-price">${big}<small>${small}</small></span>
+            <span class="plan-sub">${line}</span></button>`;
+        const cta = choice === 'yearly' ? (trial ? `Start ${days}-day free trial` : 'Subscribe yearly') : 'Subscribe monthly';
+        const fine = choice === 'yearly'
+          ? (trial
+            ? `Free until ${date(trialEnd)}, then ${money(price.yearly)} a year, billed yearly. We'll remind you before the trial ends. Cancel any time before then and you won't be charged.`
+            : `${money(price.yearly)} a year, billed yearly. Renews automatically until you cancel.`)
+          : `${money(price.monthly)} a month, billed monthly from today. Renews automatically until you cancel.`;
+        action = `${S.checkoutReturn === 'cancel' ? '<p class="form-note" role="status">No worries, nothing was charged.</p>' : ''}
+          <div class="plans" role="radiogroup" aria-label="Choose a plan">
+            ${card('yearly', 'Yearly', money(price.yearly / 12), '/month', `${money(price.yearly)} billed yearly · save ${saving}%`, trial ? `${days} days free` : `Save ${saving}%`)}
+            ${card('monthly', 'Monthly', money(price.monthly), '/month', 'Billed monthly, no trial', '')}
+          </div>
+          <button class="btn premium" data-action="startCheckout">${cta}</button>
+          <p class="fine">${fine} Payment is handled securely by Stripe.</p>
+          ${legalLine()}`;
+      } else {
+        const req = S.premiumRequest;
+        const note = req && req.status === 'denied' ? "We can't unlock your home just yet. You can ask again any time." : '';
+        action = (note ? `<p class="form-note">${note}</p>` : '') + (req && req.status === 'pending'
+          ? `<div class="result-card"><p class="joke">Thanks, you're on the list! 🙌</p>
+              <p class="plain" style="margin:0">We'll let you know as soon as your home is unlocked.</p></div>`
+          : `<button class="btn premium" data-action="requestPremium">Request access</button>
+             <p class="fine">Payments aren't open yet. Ask for access and we'll unlock your home.</p>`);
+      }
     }
 
+    const back = draft ? 'plan' : on ? 'today' : null;
     return `<main class="screen">
-      ${topbar({ back: Household.stage(h) === 'setup' ? 'responsibilities' : 'today' })}
+      ${back ? topbar({ back }) : `<div class="topbar"><span class="spacer"></span>
+        <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button></div>`}
       <div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
-      <h1 style="margin-top:0">Keep your home fair, without the reminders</h1>
-      <p class="lead">One Premium covers both of you.</p>
-      <div class="card">${benefits.map(b => `<div class="row static">
+      <h1 style="margin-top:0">${head}</h1>
+      <p class="lead">${lead}</p>
+      ${showBenefits ? `<div class="card">${BENEFITS.map(b => `<div class="row static">
           <span class="chev" style="color:var(--premium)">${Icon.check}</span>
-          <div class="row-text"><span class="row-title">${b.title}</span><span class="row-sub">${b.body}</span></div></div>`).join('')}</div>
+          <div class="row-text"><span class="row-title">${b.title}</span><span class="row-sub">${b.body}</span></div></div>`).join('')}</div>` : ''}
       <div style="margin-top:8px">${action}</div>
       <div style="height:calc(32px + env(safe-area-inset-bottom))"></div>
     </main>`;
@@ -494,7 +520,6 @@ const Screens = {
     const marked = markedCount(h, me);
     const list = (title, items) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
       <div class="card">${items.length ? items.map(r => prefRow(h, me, r)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
-    const locked = !Entitlements.canSuggestChanges(S.subscription);
     return `<main class="screen">
       <div class="topbar"><span class="spacer"></span>
         <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button>
@@ -505,7 +530,7 @@ const Screens = {
       <div class="legend">${PREFERENCES.map(p => `<span>${p.emoji} ${p.label}</span>`).join('')}</div>
       ${list('Suggested for you', mine)}
       ${list(`Suggested for ${orgName}`, theirs)}
-      <button class="btn ghost" data-action="suggestChanges">Suggest a change to the list ${locked ? premiumBadge() : ''}</button>
+      <button class="btn ghost" data-action="suggestChanges">Suggest a change to the list</button>
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${marked ? `${plural(marked, 'task')} marked. The app will rebalance with your answers.` : 'Happy with it as it is?'}</p>
         <button class="btn primary" data-action="submitReview">${marked ? 'Rebalance with my answers' : "Looks good, let's start"}</button>
@@ -538,14 +563,8 @@ const Screens = {
     const list = (title, items, own) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
       <div class="card">${items.length ? items.map(r => row(r, own)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
 
-    const balance = Entitlements.canSeeTimeTotals(S.subscription)
-      ? `<div class="card"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${people.map(m =>
-          `<div style="display:flex;justify-content:space-between"><span>${esc(m.uid === me ? 'You' : Household.memberName(m))}</span><span class="sub">about ${formatMinutes(loads[m.uid] || 0)} a week</span></div>`).join('')}</div></div>`
-      : `<div class="card"><button class="row" data-action="premiumInfo" data-key="time">
-          <span class="chev" style="color:var(--accent)">${Icon.check}</span>
-          <div class="row-text"><span class="row-title">${Split.isEven(loads) ? 'Evenly split' : 'As even as your answers allow'}</span>
-          <span class="row-sub">Shared by effort, not by number of tasks</span></div>
-          ${premiumBadge()}</button></div>`;
+    const balance = `<div class="card"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${people.map(m =>
+        `<div style="display:flex;justify-content:space-between"><span>${esc(m.uid === me ? 'You' : Household.memberName(m))}</span><span class="sub">about ${formatMinutes(loads[m.uid] || 0)} a week</span></div>`).join('')}</div></div>`;
 
     const sharing = new Set(((Household.activeReshare(h) || {}).unitIds) || []);
     const unassigned = active ? Household.unassigned(h).filter(u => !sharing.has(u.id)) : [];
@@ -558,10 +577,12 @@ const Screens = {
       const invited = !!(h.settings && h.settings.invitedAt);
       head = 'Your plan is ready';
       lead = `Here's a fair split for you and ${partnerName}. Next, send it to ${partnerName}: they can mark anything that doesn't suit them before it starts.`;
-      top = totalCard(h) + baselineCard(h);
-      bottom = `<div class="bottom-bar">
-        ${invited ? `<p class="count">${partnerName} hasn't joined yet</p>` : ''}
-        <button class="btn primary" data-action="invite">${invited ? 'Send the link again' : `Invite ${partnerName} to see the plan`}</button>
+      top = totalCard(h) + baselineCard(h) + balance;
+      bottom = `<div class="bottom-bar">${hasAccess()
+        ? `${invited ? `<p class="count">${partnerName} hasn't joined yet</p>` : ''}
+           <button class="btn primary" data-action="invite">${invited ? 'Send the link again' : `Invite ${partnerName} to see the plan`}</button>`
+        : `<p class="count">${trialOffer() ? `${APP_CONFIG.billing.trialDays} days free, then ${money(APP_CONFIG.billing.display.yearly)}/year` : 'One subscription covers you both'}</p>
+           <button class="btn premium" data-action="nav" data-to="subscribe">${trialOffer() ? 'Start free and invite ' + partnerName : 'Unlock and invite ' + partnerName}</button>`}
       </div>`;
     } else if (stage === 'review') {
       head = 'Your plan';
@@ -633,7 +654,7 @@ const Screens = {
     const freqOf = r => Timing.of(r).frequency;
 
     let body = '';
-    const boardTasks = Household.premium && view === 'today'
+    const boardTasks = view === 'today'
       ? (everyone ? h.memberIds.flatMap(id => Household.myNoteTasks(h, id).map(n => ({ n, id }))) : Household.myNoteTasks(h, me).map(n => ({ n, id: me })))
           .filter((x, i, all) => all.findIndex(y => y.n.id === x.n.id) === i)
       : [];
@@ -698,7 +719,7 @@ const Screens = {
     const orgName = esc(Household.memberName(Household.owner(h)));
     const groups = Household.inventory(h);
     const total = h.responsibilities.length;
-    const suggesting = !isOrg && S.suggestMode && Entitlements.canSuggestChanges(S.subscription);
+    const suggesting = !isOrg && S.suggestMode;
     const whose = r => {
       const parts = Household.isSplit(r) ? `${plural(Household.parts(r).length, 'part')} · ` : '';
       const a = Household.ownerOf(h, r);
@@ -745,8 +766,7 @@ const Screens = {
         }).join('')}</div>`).join('')}` : '';
 
     // Suggestions: the organiser decides; the partner sees their own pending ones.
-    const locked = !Entitlements.canSuggestChanges(S.subscription);
-    const suggestions = Household.premium ? Household.suggestions(h) : [];
+    const suggestions = Household.suggestions(h);
     const label = x => x.type === 'breakdown' ? `Break down: ${esc(x.name)}` : `${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}`;
     let suggestionCard = '';
     if (isOrg && suggestions.length) {
@@ -767,26 +787,26 @@ const Screens = {
         suggestionCard = `<div class="section-head"><h2 class="section-title">Your suggestions</h2><span class="section-meta">Waiting for ${orgName}</span></div>
           <div class="card">${mine.map(x => `<div class="row static">
             <div class="row-text"><span class="row-title">${label(x)}</span></div>
-            ${locked ? '' : `<button class="link-btn" data-action="withdrawSuggestion" data-id="${esc(x.id)}">Withdraw</button>`}</div>`).join('')}</div>`;
+            <button class="link-btn" data-action="withdrawSuggestion" data-id="${esc(x.id)}">Withdraw</button></div>`).join('')}</div>`;
       }
     }
 
     const invite = isOrg && Household.alone(h) ? `<div class="card next-card">
         <h2>${esc(Household.memberName(Household.invitee(h)))} hasn't joined yet</h2>
         <p>Send the link so they can look at the plan and mark anything that doesn't suit them.</p>
-        <button class="btn primary" data-action="invite">${h.settings.invitedAt ? 'Send the link again' : 'Invite to see the plan'}</button>
+        <button class="btn primary" data-action="invite">${!hasAccess() ? 'Start and invite' : h.settings.invitedAt ? 'Send the link again' : 'Invite to see the plan'}</button>
       </div>` : '';
 
     const actions = suggesting
       ? `<div class="bottom-bar"><p class="count">${plural(suggestions.filter(x => x.by === me).length, 'suggestion')} for ${orgName}</p>
           <button class="btn primary" data-action="doneSuggesting">Done</button></div>`
       : isOrg
-        ? `${addOwnRow('Add your own task', !Entitlements.canAddCustomTask(S.subscription, Household.customCount(h)))}
+        ? `${addOwnRow('Add your own task')}
            <div class="btn-pair" style="margin-top:12px">
              <button class="btn secondary" data-action="nav" data-to="responsibilities">Edit tasks</button>
              <button class="btn secondary" data-action="nav" data-to="frequency">Edit times</button>
            </div>`
-        : `<button class="btn secondary" data-action="suggestChanges">Suggest a change ${locked ? premiumBadge() : ''}</button>`;
+        : `<button class="btn secondary" data-action="suggestChanges">Suggest a change</button>`;
 
     return `<main class="screen ${suggesting ? '' : 'has-nav'}">
       <div class="topbar"><span class="spacer"></span>
@@ -811,7 +831,7 @@ const Screens = {
 
 };
 
-/* ---------- Board (Premium) ---------- */
+/* ---------- Board ---------- */
 const NOTE_KINDS = {
   note:  { emoji: '💬', label: 'Note',        hint: 'Stays on the board for 7 days.',                               placeholder: 'e.g. Plumber comes Thursday at 10' },
   low:   { emoji: '🧴', label: 'Running low', hint: 'Goes to whoever looks after it, until someone has got it.',     placeholder: 'e.g. Dishwasher tabs' },
@@ -819,18 +839,13 @@ const NOTE_KINDS = {
 };
 function boardSeenKey(h) { return `household-app/board-seen/${h.id}/${S.user.uid}`; }
 function boardSeenAt(h) { return Number(SafeStorage.get(boardSeenKey(h)) || 0); }
-function boardUnseen(h) { return Household.premium ? Household.unseenNotes(h, S.user.uid, boardSeenAt(h)) : []; }
+function boardUnseen(h) { return Household.unseenNotes(h, S.user.uid, boardSeenAt(h)); }
 
-/** One line at the top of Today; opens in place. On Free, a quiet locked line. */
+/** One line at the top of Today; opens in place. */
 function boardCard(h) {
   const me = S.user.uid;
   const partner = h.members.find(m => m.uid !== me);
   const partnerName = partner ? Household.memberName(partner) : '';
-  if (!Household.premium) {
-    return `<button class="board-head locked" data-action="premiumInfo" data-key="board">
-      <span class="board-icon" aria-hidden="true">📝</span><span class="board-title">Notes for each other</span>
-      <span class="badge">${Icon.sparkSm} Premium</span></button>`;
-  }
   const items = Household.boardNotes(h);
   if (S.boardOpen) SafeStorage.set(boardSeenKey(h), String(Date.now()));
   const unseen = S.boardOpen ? [] : boardUnseen(h);
@@ -896,7 +911,7 @@ function planNeedsMe(h) {
 
 /** Something on the Household tab is waiting for me: suggestions the organiser hasn't answered yet. */
 function householdNeedsMe(h) {
-  return Household.premium && Household.isOwner(h, S.user.uid) && Household.suggestions(h).length > 0;
+  return Household.isOwner(h, S.user.uid) && Household.suggestions(h).length > 0;
 }
 
 /** Red dots on the bottom tabs: every tab where an action is waiting for me. */
@@ -972,6 +987,14 @@ function minuteOptions(sel) {
   const opts = MINUTE_OPTIONS.includes(sel) ? MINUTE_OPTIONS : [...MINUTE_OPTIONS, sel].sort((a, b) => a - b);
   return opts.map(m => `<option value="${esc(m)}" ${m === sel ? 'selected' : ''}>${formatMinutes(m)}</option>`).join('');
 }
+/** Has this household's organiser ever had a subscription or a grant (to say "ended" rather than "start")? */
+function everSubscribed() {
+  return !!S.grant || !Array.isArray(S.stripeSubs) || S.stripeSubs.length > 0;
+}
+/** Will a yearly checkout start with the free trial? (Unknown counts as no, so we never promise it wrongly.) */
+function trialOffer() {
+  return Backend.Billing.enabled() && watchers.subLoaded && !Entitlements.hadSubscription(S.stripeSubs);
+}
 function legalLine() {
   return `<p class="fine legal-line">By continuing you agree to the <a href="legal.html#terms" target="_blank" rel="noopener">Terms</a> and <a href="legal.html#privacy" target="_blank" rel="noopener">Privacy policy</a>.</p>`;
 }
@@ -984,7 +1007,7 @@ function prefRow(h, me, r) {
     <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn" data-action="setPref" data-id="${esc(r.id)}" data-key="${esc(p.id)}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${p.emoji}</button>`).join('')}</div>
   </div>`;
 }
-/** The whole household's work in one number (free for everyone). */
+/** The whole household's work in one number. */
 function totalCard(h) {
   return `<div class="card hero-card">
     <span class="hero-num">${formatMinutes(Household.weeklyTotal(h))}</span>
@@ -1008,7 +1031,7 @@ function baselineCard(h) {
     ${after ? `<p class="plain" style="margin:4px 0 0">${after}</p>` : ''}
   </div></div>`;
 }
-/** Where the plan stands, on Today, until it runs (and trial reminders after). */
+/** Where the plan stands, on Today, until it runs (and payment reminders after). */
 function statusBanner(h) {
   const me = S.user.uid;
   const stage = Household.stage(h);
@@ -1016,7 +1039,7 @@ function statusBanner(h) {
   const name = partner ? esc(Household.memberName(partner)) : 'your partner';
   if (stage === 'draft') return `<div class="card next-card">
       <h2>This is your draft plan</h2><p>It starts once ${name} has looked at it and you've both said yes.</p>
-      <button class="btn primary" data-action="invite">${h.settings.invitedAt ? 'Send the link again' : `Invite ${name}`}</button></div>`;
+      <button class="btn primary" data-action="invite">${!hasAccess() ? `Start and invite ${name}` : h.settings.invitedAt ? 'Send the link again' : `Invite ${name}`}</button></div>`;
   if (stage === 'review') return `<div class="result-card" role="status"><p class="plain" style="margin:0">${name} is looking at the plan. It starts once you've both said yes.</p></div>`;
   if (stage === 'plan') return Household.hasAccepted(h, me)
     ? `<div class="result-card" role="status"><p class="plain" style="margin:0">Waiting for ${name} to say yes to the plan.</p></div>`
@@ -1024,8 +1047,8 @@ function statusBanner(h) {
         <button class="btn primary" data-action="nav" data-to="plan">See the plan</button></div>`;
   const sub = S.subscription;
   if (Household.isOwner(h, me) && sub && sub.source === 'stripe' && sub.status === 'past_due') {
-    return `<div class="card next-card"><h2>Your Premium payment didn't go through</h2>
-      <p>Update your card so Premium keeps running for both of you.</p>
+    return `<div class="card next-card"><h2>Your payment didn't go through</h2>
+      <p>Update your card so your plan keeps running for both of you.</p>
       <button class="btn secondary" data-action="openPortal">Fix payment</button></div>`;
   }
   if (Household.isOwner(h, me) && sub && sub.source === 'stripe' && sub.status === 'trialing' && sub.trialEnd && !sub.cancelAtPeriodEnd
@@ -1033,7 +1056,7 @@ function statusBanner(h) {
     const d = new Date(sub.trialEnd).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
     const amount = money(sub.interval === 'month' ? APP_CONFIG.billing.display.monthly : APP_CONFIG.billing.display.yearly);
     return `<div class="card next-card"><h2>Your free trial ends on ${d}</h2>
-      <p>Then Premium continues for ${amount} per ${sub.interval || 'year'}. Nothing to do if you'd like to keep it.</p>
+      <p>Then it continues for ${amount} per ${sub.interval || 'year'}. Nothing to do if you'd like to keep it.</p>
       <button class="btn secondary" data-action="openPortal">Manage subscription</button></div>`;
   }
   return '';
@@ -1043,8 +1066,7 @@ function memberChips(h) {
   return Household.people(h).map(m => {
     const n = Household.memberName(m);
     const you = m.uid === S.user.uid ? ' <span class="you">(you)</span>' : m.placeholder ? ' <span class="you">(invited)</span>' : '';
-    const gold = Entitlements.isPremium(S.subscription) ? ' premium' : '';
-    return `<span class="member${gold}"><span class="avatar" aria-hidden="true">${esc(n.charAt(0).toUpperCase())}</span>${esc(n)}${you}${gold ? ` <span class="gold" aria-label="Premium">${Icon.sparkSm}</span>` : ''}</span>`;
+    return `<span class="member"><span class="avatar" aria-hidden="true">${esc(n.charAt(0).toUpperCase())}</span>${esc(n)}${you}</span>`;
   }).join('');
 }
 
@@ -1052,39 +1074,20 @@ function memberChips(h) {
    SHEETS
    ========================================================= */
 const Sheets = {
-  /** The one Premium prompt, for every locked feature. The partner is pointed to the organiser. */
-  premium(key) {
-    const f = PREMIUM_FEATURES[key] || PREMIUM_FEATURES.parts;
+  /** Right after subscribing: the next step is the invite (a tap, so the share sheet can open). */
+  unlocked() {
     const h = S.household;
-    const isOrg = Household.isOwner(h, S.user.uid);
-    const orgName = esc(Household.memberName(Household.owner(h)));
-    const trial = Backend.Billing.enabled() && !Entitlements.hadSubscription(S.stripeSubs);
-    const cta = isOrg
-      ? `<button class="btn premium" data-action="sheetNav" data-to="premium">${trial ? `Try it free for ${APP_CONFIG.billing.trialDays} days` : 'See Premium'}</button>
-         <button class="btn ghost" data-action="closeSheet">Not now</button>`
-      : `<p style="margin-top:-8px">Premium comes with ${orgName}'s account and covers you both.</p>
-         <button class="btn secondary" data-action="closeSheet">Got it</button>
-         <button class="btn ghost" data-action="sheetNav" data-to="premium">What's in Premium?</button>`;
+    const name = esc(Household.memberName(Household.invitee(h)));
     Sheet.open(`<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
-      <h2>${esc(f.title)}</h2>
-      <p>${esc(f.body)}</p>
-      ${cta}`, f.title);
+      <h2>You're all set 🎉</h2>
+      <p>Now send the plan to ${name}. They mark anything that doesn't suit them, and you start together.</p>
+      <button class="btn primary" data-action="invite">Invite ${name}</button>
+      <button class="btn ghost" data-action="closeSheet">Later</button>`, "You're all set");
   },
 
-  /** Once, when the plan starts: the best moment to offer the trial (organiser only). */
-  premiumOffer() {
-    const days = APP_CONFIG.billing.trialDays;
-    Sheet.open(`<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
-      <h2>Your plan has started 🎉</h2>
-      <p>Want to see that it stays fair? Premium shows each person's weekly time, puts every detail in someone's hands and adds a board so nobody has to remind anyone.</p>
-      <button class="btn premium" data-action="sheetNav" data-to="premium">Try Premium free for ${days} days</button>
-      <button class="btn ghost" data-action="closeSheet">Not now</button>`, 'Premium');
-  },
-
-  /** A task of your own. Free has a few; Premium has as many as you need. */
+  /** A task of your own. */
   customTask() {
     const d = S.customDraft || (S.customDraft = { name: '', category: 'organisation', frequency: 'weekly', minutes: 15 });
-    const left = Entitlements.customTaskLimit(S.subscription) - Household.customCount(S.household);
     Sheet.open(`<h2>Add your own task</h2>
       <div class="field"><label for="ct-name">What needs doing?</label>
         <input id="ct-name" data-input="customName" maxlength="60" placeholder="e.g. Clean the aquarium" value="${esc(d.name)}" autocomplete="off" enterkeyhint="done"></div>
@@ -1096,14 +1099,13 @@ const Sheets = {
           <select class="select minutes" data-change="customMinutes" aria-label="How long each time">${minuteOptions(d.minutes)}</select>
         </div></div>
       <button class="btn primary" data-action="saveCustomTask">Add task</button>
-      ${Number.isFinite(left) ? `<p class="fine">${left === 1 ? 'This is your last one on Free.' : `${left} left on Free.`}</p>` : ''}
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Add your own task');
   },
 
-  /** What a task includes. On Free the parts are a locked preview of Premium. */
+  /** What a task includes, and breaking it into parts. */
   taskPeek(r) {
-    const unlocked = Entitlements.canViewDetailedTasks(S.subscription);
-    const parts = unlocked && Household.parts(r).length ? Household.parts(r).map(p => p.name) : Library.parts(r.libraryId);
+    const split = Household.parts(r).length > 0;
+    const parts = split ? Household.parts(r).map(p => p.name) : Library.parts(r.libraryId);
     const assignee = Household.assignee(S.household, r.id);
     const who = assignee ? (assignee === S.user.uid ? 'Yours' : `${Household.memberName(Household.member(S.household, assignee))}'s`) : '';
     const isOrg = Household.isOwner(S.household, S.user.uid);
@@ -1111,17 +1113,11 @@ const Sheets = {
     Sheet.open(`<h2>${esc(r.name)}</h2>
       <p style="margin-bottom:12px">${who ? esc(who) + ' · ' : ''}${esc(Timing.label(r))}${r.mentalLoad ? ' · Mental load' : ''}</p>
       ${removable ? `<button class="btn ghost text-danger" data-action="removeTask" data-id="${esc(r.id)}">Remove this task</button>` : ''}
-      ${parts.length ? `<h3 class="section-title" style="margin:0 0 8px">${unlocked && Household.parts(r).length ? 'Broken into' : 'Includes'}</h3>
-        <ul class="part-chips ${unlocked ? '' : 'locked'}">${parts.map(p => `<li>${unlocked ? '' : Icon.lock}${esc(p)}</li>`).join('')}</ul>` : ''}
-      ${!parts.length ? `<button class="btn ghost" data-action="closeSheet">Close</button>` : unlocked
-        ? (isOrg
-            ? `<button class="btn premium" data-action="openBreakdown" data-id="${esc(r.id)}">${Household.parts(r).length ? 'Edit the parts' : 'Break into parts'}</button>
-               <button class="btn ghost" data-action="closeSheet">Close</button>`
-            : `<button class="btn premium" data-action="openBreakdown" data-id="${esc(r.id)}">Suggest a breakdown</button>
-               <button class="btn ghost" data-action="closeSheet">Close</button>`)
-        : `<p style="margin-bottom:16px">${esc(PREMIUM_FEATURES.parts.body)}</p>
-           <button class="btn premium" data-action="sheetNav" data-to="premium">See Premium</button>
-           <button class="btn ghost" data-action="closeSheet">Not now</button>`}`, r.name);
+      ${parts.length ? `<h3 class="section-title" style="margin:0 0 8px">${split ? 'Broken into' : 'Includes'}</h3>
+        <ul class="part-chips">${parts.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+      ${parts.length && !r.parentId && Household.stage(S.household) !== 'setup'
+        ? `<button class="btn secondary" data-action="openBreakdown" data-id="${esc(r.id)}">${isOrg ? (split ? 'Edit the parts' : 'Break into parts') : 'Suggest a breakdown'}</button>` : ''}
+      <button class="btn ghost" data-action="closeSheet">Close</button>`, r.name);
   },
 
   /** The invite link, when the phone's share sheet isn't available (or was closed). */
@@ -1145,15 +1141,6 @@ const Sheets = {
       <button class="btn ghost" data-action="closeSheet">Keep my plan</button>`, 'Reshuffle');
   },
 
-  /** Shown once on each device when Premium switches on. */
-  premiumWelcome() {
-    Sheet.open(`<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
-      <h2>Premium is on 🎉</h2>
-      <p>It covers both of you. Nothing in your plan has changed: you decide what to break into smaller parts.</p>
-      <button class="btn premium" data-action="sheetNav" data-to="premium">See what's new</button>
-      <button class="btn ghost" data-action="closeSheet">Later</button>`, 'Premium is on');
-  },
-
   /** Add something to the board. */
   addNote() {
     const d = S.noteDraft || (S.noteDraft = { kind: 'note', text: '' });
@@ -1167,13 +1154,6 @@ const Sheets = {
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Add to the board');
     const input = document.getElementById('note-text');
     if (input) { input.focus({ preventScroll: true }); input.setSelectionRange(input.value.length, input.value.length); }
-  },
-
-  confirmCancelPremium() {
-    Sheet.open(`<h2>Cancel Premium?</h2>
-      <p>Premium ends straight away for both of you. Tasks you broke into parts go back to being one task each. Your breakdowns are remembered, so they come back if you get Premium again.</p>
-      <button class="btn danger" data-action="cancelPremium">Cancel Premium</button>
-      <button class="btn ghost" data-action="closeSheet">Keep Premium</button>`, 'Cancel Premium');
   },
 
   /** Offering one of my tasks to someone else. */
@@ -1207,16 +1187,16 @@ const Sheets = {
     const h = S.household;
     const me = S.user.uid;
     const isOrg = Household.isOwner(h, me);
-    const premium = Entitlements.isPremium(S.subscription);
+    const on = Entitlements.active(S.subscription);
     const orgName = Household.memberName(Household.owner(h));
-    const plan = premium ? (isOrg ? 'Premium' : `Premium via ${orgName}`) : 'Free';
     const stage = Household.stage(h);
+    const plan = on ? (isOrg ? 'Active' : `Through ${orgName}`) : stage === 'draft' || !everSubscribed() ? 'Not started' : 'Ended';
     const item = (to, label) => `<button class="btn secondary" data-action="sheetNav" data-to="${esc(to)}">${label}</button>`;
     Sheet.open(`<h2>Our home</h2>
-      <div class="plan-line"><span>Plan</span><span>${esc(plan)} · <button class="link-btn" style="margin:0;padding:0" data-action="sheetNav" data-to="premium">${premium ? 'Details' : 'See Premium'}</button></span></div>
+      <div class="plan-line"><span>Subscription</span><span>${esc(plan)}${stage === 'setup' || (!on && !isOrg) ? '' : ` · <button class="link-btn" style="margin:0;padding:0" data-action="sheetNav" data-to="subscribe">${on ? 'Details' : 'See plans'}</button>`}</span></div>
       <div class="plan-line"><span>Signed in as</span><span>${esc(S.user.email || '')}</span></div>
-      ${isOrg ? item('members', 'Names') + item('home', 'Your home') : ''}
-      ${stage !== 'active' && stage !== 'setup' ? item('rate', 'Change my answers') : ''}
+      ${isOrg && (on || stage === 'draft') ? item('members', 'Names') + item('home', 'Your home') : ''}
+      ${stage !== 'active' && stage !== 'setup' && (on || stage === 'draft') ? item('rate', 'Change my answers') : ''}
       ${isOrg && Household.alone(h) && h.settings.onboarded ? `<button class="btn secondary" data-action="invite">Invite ${esc(Household.memberName(Household.invitee(h)))}</button>` : ''}
       <button class="btn ghost" data-action="signOut">Sign out</button>
       ${isOrg
