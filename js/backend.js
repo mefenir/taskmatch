@@ -8,7 +8,7 @@
    swapped without touching UI or domain logic.
 
    Firestore layout
-     users/{uid}            { email, displayName, householdId, createdAt }
+     users/{uid}            { email, displayName, householdId, createdAt, inviteCodes[] }
      households/{hid}       { ownerId, memberIds[], members[], rooms[], children[],
                               pets[], circumstances, responsibilities[], settings }
      invites/{code}         { householdId, createdBy, createdAt, expiresAt, usedBy, usedAt, forName }
@@ -84,6 +84,12 @@ const Backend = (() => {
     },
     resetPassword: email => auth.sendPasswordResetEmail(email),
     signOut: () => auth.signOut(),
+    /** Firebase only allows deleting an account shortly after signing in. */
+    signedInRecently: () => {
+      const u = auth.currentUser;
+      const at = u && u.metadata && Date.parse(u.metadata.lastSignInTime);
+      return !!at && Date.now() - at < 4 * 60 * 1000;
+    },
   };
 
   /* ---------- Data ---------- */
@@ -140,6 +146,8 @@ const Backend = (() => {
         usedAt: null,
         forName: String(forName || '').slice(0, 40),
       });
+      // Remembered on the profile, so deleting the account can remove these too.
+      await users().doc(userId).update({ inviteCodes: firebase.firestore.FieldValue.arrayUnion(code) }).catch(() => {});
       return code;
     },
 
@@ -169,16 +177,21 @@ const Backend = (() => {
       return invite.householdId;
     },
 
-    /** A non-owner leaves. The household and everyone else's data stay. */
-    async leaveHousehold(h, userId) {
+    /** Someone leaves; `fields` (Household.departure) also removes their answers and notes and,
+     *  when the organiser leaves, makes the other person the organiser. */
+    async leaveHousehold(h, userId, fields) {
       const batch = db.batch();
-      batch.update(households().doc(h.id), {
-        memberIds: firebase.firestore.FieldValue.arrayRemove(userId),
-        members: (h.members || []).filter(m => m.uid !== userId),
-        updatedAt: now(),
-      });
+      batch.update(households().doc(h.id), { ...fields, updatedAt: now() });
       batch.update(users().doc(userId), { householdId: null });
       await batch.commit();
+      await Repo.forgetInvites(userId);
+    },
+    /** Delete the invites I created (an old link must never bring anyone back in). */
+    async forgetInvites(userId) {
+      const profile = await users().doc(userId).get().catch(() => null);
+      const codes = (profile && profile.exists && profile.data().inviteCodes) || [];
+      await Promise.all(codes.map(code => invites().doc(code).delete().catch(() => {})));
+      if (codes.length) await users().doc(userId).update({ inviteCodes: [] }).catch(() => {});
     },
 
     /** Owner deletes the household for everyone. */
@@ -188,6 +201,18 @@ const Backend = (() => {
       batch.update(users().doc(userId), { householdId: null });
       await batch.commit();
     },
+  };
+
+  /**
+   * Delete everything stored about a person (after they've left or deleted their household):
+   * the invites they made, their access request, their profile, then the sign-in itself.
+   * Stripe keeps payment records that tax law requires; the extension removes the rest.
+   */
+  Repo.deleteAccount = async user => {
+    await Repo.forgetInvites(user.uid);
+    await premiumRequests().doc(user.uid).delete().catch(() => {});
+    await users().doc(user.uid).delete();
+    await auth.currentUser.delete();
   };
 
   /* ---------- Requesting access while payments aren't set up ---------- */
@@ -259,6 +284,14 @@ const Backend = (() => {
           else if (d.url) { clearTimeout(timer); off(); resolve(d.url); }
         }, err => { clearTimeout(timer); reject(err); });
       }));
+    },
+    /** Does this person have a subscription of their own that will renew? true / false / null (couldn't check). */
+    async ownSubscriptionRunning(userId) {
+      if (!Billing.enabled()) return false;
+      try {
+        const q = await Billing.customers().doc(userId).collection('subscriptions').get();
+        return q.docs.some(d => { const x = d.data(); return ['trialing', 'active', 'past_due'].includes(x.status) && !x.cancel_at_period_end; });
+      } catch (e) { return null; }
     },
     /** Stripe customer portal: change plan, update card, cancel. */
     async portalUrl() {

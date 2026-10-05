@@ -119,6 +119,7 @@ const Screens = {
       <div class="bottom-bar">
         <button class="btn primary" data-action="createHousehold">Set up our home</button>
         <p class="fine">Has your partner already set it up? Open the invite link they sent you.</p>
+        <button class="link-btn" data-action="confirmDeleteAccount" style="margin-top:8px;color:var(--muted)">Delete my account</button>
       </div>
     </main>`;
   },
@@ -764,9 +765,12 @@ const Screens = {
       <h1>Settings</h1>
       ${you}${ours}${subscription}${help}
       <div class="card" style="margin-top:24px"><button class="row" data-action="signOut"><div class="row-text"><span class="row-title">Sign out</span></div></button></div>
-      <div class="card danger-zone">${isOrg
-        ? `<button class="row" data-action="confirmDelete"><div class="row-text"><span class="row-title text-danger">Delete household</span><span class="row-sub">Removes it for both of you</span></div></button>`
-        : `<button class="row" data-action="confirmLeave"><div class="row-text"><span class="row-title text-danger">Leave household</span><span class="row-sub">You'd need a new invite to come back</span></div></button>`}</div>
+      <div class="card danger-zone">
+        ${!isOrg || !alone ? `<button class="row" data-action="confirmLeave"><div class="row-text"><span class="row-title text-danger">Leave household</span>
+          <span class="row-sub">${isOrg ? `${esc(partnerName)} becomes the organiser` : "You'd need a new invite to come back"}</span></div></button>` : ''}
+        ${isOrg ? `<button class="row" data-action="confirmDelete"><div class="row-text"><span class="row-title text-danger">Delete household</span><span class="row-sub">${alone ? 'Removes it and everything in it' : 'Removes it for both of you'}</span></div></button>` : ''}
+        <button class="row" data-action="confirmDeleteAccount"><div class="row-text"><span class="row-title text-danger">Delete my account</span><span class="row-sub">Your name, email, sign-in and data</span></div></button>
+      </div>
       <div style="height:calc(32px + env(safe-area-inset-bottom))"></div>
     </main>`;
   },
@@ -1285,21 +1289,82 @@ const Sheets = {
       <button class="btn ghost" data-action="closeSheet">Back</button>`, 'Pick what to give back');
   },
 
-  confirmDelete() {
+  /** Delete the household. With a subscription still renewing, cancelling comes first (recommended). */
+  confirmDelete(subRunning) {
     const others = S.household.members.filter(m => m.uid !== S.user.uid).map(m => esc(Household.memberName(m)));
+    const sub = subRunning ? `<p style="margin-bottom:12px"><b style="color:var(--ink)">Your subscription keeps running</b> unless you cancel it. Deleting the household doesn't stop it.</p>` : '';
     Sheet.open(`<h2>There's no way back</h2>
       <p style="margin-bottom:12px">Deleting the household removes its tasks, your plan, everything you've ticked off${others.length ? ` and ${others.join(' and ')}'s place in it` : ''}. It's gone for good, for everyone.</p>
+      ${sub}
       <p><b style="color:var(--ink)">Do you still want to delete the household?</b></p>
-      <button class="btn danger" data-action="deleteHousehold">Yes, delete household</button>
-      <button class="btn secondary" data-action="closeSheet">No, keep it</button>`, 'Delete household');
+      ${subRunning
+        ? `<button class="btn danger" data-action="cancelThen" data-key="deleteHousehold">Cancel subscription, then delete</button>
+           <button class="btn secondary" data-action="deleteHousehold">Delete and keep my subscription</button>`
+        : `<button class="btn danger" data-action="deleteHousehold">Yes, delete household</button>`}
+      <button class="btn ghost" data-action="closeSheet">No, keep it</button>`, 'Delete household');
   },
 
-  confirmLeave() {
-    const ownerName = Household.memberName(Household.owner(S.household));
-    Sheet.open(`<h2>Leave this household?</h2>
-      <p>Everything stays as it is for the others. You'd need a new invite from ${esc(ownerName)} to come back.</p>
-      <button class="btn danger" data-action="leaveHousehold">Leave household</button>
-      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Leave household');
+  /** Leave. The partner just goes; the organiser hands over to the partner. */
+  confirmLeave(subRunning) {
+    const h = S.household;
+    const me = S.user.uid;
+    if (!Household.isOwner(h, me)) {
+      const ownerName = esc(Household.memberName(Household.owner(h)));
+      Sheet.open(`<h2>Leave this household?</h2>
+        <p>Your answers and notes are removed. Your ticks stay as household history, without your name. You'd need a new invite from ${ownerName} to come back.</p>
+        <button class="btn danger" data-action="leaveHousehold">Leave household</button>
+        <button class="btn ghost" data-action="closeSheet">Stay</button>`, 'Leave household');
+      return;
+    }
+    const partner = esc(Household.memberName(Household.member(h, Household.partnerId(h))));
+    Sheet.open(`<h2>Leave the household?</h2>
+      <p>${partner} becomes the organiser and keeps the plan, tasks and history. Your answers and notes are removed.</p>
+      ${subRunning ? `<p><b style="color:var(--ink)">Your subscription is yours</b>, so it doesn't move to ${partner}. If you leave without cancelling, you keep paying for a home you're no longer in.</p>` : ''}
+      ${subRunning
+        ? `<button class="btn danger" data-action="cancelThen" data-key="leave">Cancel my subscription, then leave</button>
+           <button class="btn secondary" data-action="leaveHousehold">Leave and keep my subscription</button>`
+        : `<button class="btn danger" data-action="leaveHousehold">Leave household</button>`}
+      <button class="btn ghost" data-action="closeSheet">Stay</button>`, 'Leave household');
+  },
+
+  /** Delete my account: what happens to the household, and the subscription first. */
+  deleteAccount(running) {
+    const h = S.household;
+    const me = S.user.uid;
+    if (running) {
+      Sheet.open(`<h2>Cancel your subscription first</h2>
+        <p>You have a subscription that renews. Cancel it first so you're not charged again after your account is gone. You'll come straight back here.</p>
+        <button class="btn danger" data-action="cancelThen" data-key="deleteAccount">Cancel my subscription</button>
+        <button class="btn secondary" data-action="confirmDeleteAccount">I've cancelled, check again</button>
+        <button class="btn ghost" data-action="closeSheet">Keep my account</button>`, 'Delete my account');
+      return;
+    }
+    let household = '';
+    if (h && Household.isOwner(h, me) && Household.alone(h)) household = 'Your household is deleted with it.';
+    else if (h && Household.isOwner(h, me)) household = `You leave the household and ${esc(Household.memberName(Household.member(h, Household.partnerId(h))))} becomes the organiser.`;
+    else if (h) household = 'You leave the household; your answers and notes are removed.';
+    Sheet.open(`<h2>Delete your account?</h2>
+      <p style="margin-bottom:12px">This removes your name, email and sign-in. ${household} Payment records that tax law requires stay with Stripe.</p>
+      <p><b style="color:var(--ink)">There's no way back.</b></p>
+      <button class="btn danger" data-action="deleteAccount">Delete my account</button>
+      <button class="btn ghost" data-action="closeSheet">Keep my account</button>`, 'Delete my account');
+  },
+
+  /** Back from Stripe: finish leaving / deleting, or say the subscription is still running. */
+  afterCancel(then, stillRunning) {
+    if (then === 'deleteAccount') { Sheets.deleteAccount(); return; }
+    const leave = then === 'leave';
+    const what = leave ? 'Leave the household' : 'Delete the household';
+    Sheet.open(stillRunning
+      ? `<h2>Your subscription is still running</h2>
+         <p>It looks like it wasn't cancelled. You can try again, or go ahead anyway.</p>
+         <button class="btn secondary" data-action="cancelThen" data-key="${leave ? 'leave' : 'deleteHousehold'}">Cancel my subscription</button>
+         <button class="btn danger" data-action="${leave ? 'leaveHousehold' : 'deleteHousehold'}">${what} anyway</button>
+         <button class="btn ghost" data-action="closeSheet">Not now</button>`
+      : `<h2>Subscription cancelled</h2>
+         <p>You won't be charged again. ${what} now?</p>
+         <button class="btn danger" data-action="${leave ? 'leaveHousehold' : 'deleteHousehold'}">${what}</button>
+         <button class="btn ghost" data-action="closeSheet">Not now</button>`, what);
   },
 
   notice(title, body) {

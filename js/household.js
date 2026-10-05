@@ -132,6 +132,38 @@ const Household = {
     return id;
   },
 
+  /**
+   * What changes when someone leaves (or deletes their account): their answers, notes and
+   * suggestions go; their ticks stay as history without a name; the plan goes back to a draft
+   * for whoever stays. When the organiser leaves, the other person becomes the organiser.
+   * @returns the household fields to write
+   */
+  departure(h, userId) {
+    const stays = (h.memberIds || []).filter(m => m !== userId);
+    const preferences = { ...(h.preferences || {}) };
+    delete preferences[userId];
+    const completions = Object.fromEntries(Object.entries(h.completions || {})
+      .map(([id, c]) => [id, c && c.by === userId ? { ...c, by: null } : c]));
+    const out = {
+      members: (h.members || []).filter(m => m.uid !== userId),
+      memberIds: stays,
+      preferences,
+      completions,
+      notes: (h.notes || []).filter(n => n.by !== userId).map(n => (n.claimedBy === userId ? { ...n, claimedBy: null } : n)),
+      suggestions: (h.suggestions || []).filter(x => x.by !== userId),
+      swaps: (h.swaps || []).filter(x => x.status !== 'pending' || (x.from !== userId && x.to !== userId)),
+      plan: h.plan ? { ...h.plan, status: 'proposed', accepted: {}, rebalancedBy: null } : null,
+      reshare: null,
+      reshuffle: null,
+    };
+    if (h.ownerId === userId && stays.length) {
+      out.ownerId = stays[0];
+      out.members = out.members.map(m => ({ ...m, role: 'owner' }));
+      out.settings = { ...h.settings, partnerName: '', invitedAt: null };
+    }
+    return out;
+  },
+
   /* ---------- Board: notes, running low, today only ---------- *
    * notes [{ id, by, kind: 'note'|'low'|'today', text, createdAt (ms), day ('YYYY-MM-DD'), claimedBy? }]
    *  - note:  stays 7 days, the author can delete it any time

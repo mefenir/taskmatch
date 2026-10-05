@@ -30,9 +30,11 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['email', 'displayName', 'householdId', 'createdAt'])
-        && (request.resource.data.householdId == null || request.resource.data.householdId is string);
-      allow delete: if false;
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'householdId', 'createdAt', 'inviteCodes'])
+        && (request.resource.data.householdId == null || request.resource.data.householdId is string)
+        && request.resource.data.get('inviteCodes', []).size() <= 100;
+      // Deleting your account removes your profile.
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     // ---------------------------------------------------------------
@@ -56,7 +58,7 @@ service cloud.firestore {
         && withinLimits();
 
       allow update: if signedIn() && withinLimits()
-        && (ownerEdit() || memberEdit() || joining(hid) || leaving());
+        && (ownerEdit() || memberEdit() || joining(hid) || leaving() || handover());
 
       allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
 
@@ -107,19 +109,40 @@ service cloud.firestore {
           && me.uid == request.auth.uid && me.role == 'member'
           && me.name is string && me.name.size() <= 40
           && invite.householdId == hid
+          && invite.createdBy in resource.data.memberIds   // the person who invited is still here
           && invite.usedBy == request.auth.uid
           && invite.usedAt == request.time;
       }
 
-      // The partner removes themselves; the organiser's entry stays exactly as it was.
+      // The partner removes themselves (with their answers and notes); the organiser's entry
+      // stays exactly as it was.
       function leaving() {
         return request.auth.uid in resource.data.memberIds
           && request.auth.uid != resource.data.ownerId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberIds', 'updatedAt'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberIds', 'preferences', 'completions',
+               'notes', 'suggestions', 'swaps', 'plan', 'reshare', 'reshuffle', 'updatedAt'])
+          && request.resource.data.get('preferences', {}).diff(resource.data.get('preferences', {})).affectedKeys().hasOnly([request.auth.uid])
           && request.resource.data.memberIds == [resource.data.ownerId]
           && request.resource.data.members.size() == 1
           && request.resource.data.members[0].uid == resource.data.ownerId
           && resource.data.members.hasAll(request.resource.data.members);
+      }
+
+      // The organiser leaves while the partner stays: the partner becomes the organiser,
+      // with their own entry (name kept) as the only member.
+      function handover() {
+        let next = resource.data.memberIds.removeAll([request.auth.uid]);
+        return request.auth.uid == resource.data.ownerId
+          && next.size() == 1
+          && resource.data.members.size() == 2
+          && request.resource.data.ownerId == next[0]
+          && request.resource.data.memberIds == next
+          && request.resource.data.members.size() == 1
+          && request.resource.data.members[0].keys().hasOnly(['uid', 'name', 'role', 'joinedAt'])
+          && request.resource.data.members[0].uid == next[0]
+          && request.resource.data.members[0].name
+             == (resource.data.members[0].uid == next[0] ? resource.data.members[0].name : resource.data.members[1].name)
+          && request.resource.data.members[0].role == 'owner';
       }
     }
 
@@ -177,7 +200,7 @@ service cloud.firestore {
       allow create: if signedIn() && request.auth.uid == uid && validRequest();
       allow update: if isAdmin()
         || (signedIn() && request.auth.uid == uid && resource.data.status in ['denied', 'revoked', 'cancelled'] && validRequest());
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
 
       function validRequest() {
         let d = request.resource.data;

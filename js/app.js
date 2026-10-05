@@ -177,7 +177,7 @@ function markActiveDay() {
 function stop(key) { if (watchers[key]) { watchers[key](); watchers[key] = null; } }
 function teardown() {
   stop('user'); stop('household'); stop('sub'); stop('stripe'); clearTimeout(watchers.subRetry); stop('request'); S.premiumRequest = null; clearTimeout(watchers.retryTimer);
-  watchers.householdId = undefined; watchers.ownerId = null;
+  watchers.householdId = undefined; watchers.ownerId = null; watchers.lastOwner = null; watchers.lastNames = null;
 }
 
 async function onAuth(user) {
@@ -210,11 +210,21 @@ function onProfile(profile) {
   }
   if (hid !== watchers.householdId) watchHousehold(hid);
   render(false);
+  // Signed in again to delete the account (same person, recently): carry on.
+  let resume = null;
+  try { resume = JSON.parse(SafeStorage.get(RESUME_DELETE_KEY) || 'null'); } catch (e) {}
+  if (resume) {
+    SafeStorage.remove(RESUME_DELETE_KEY);
+    if (resume.uid === S.user.uid && Date.now() - resume.at < 30 * 60 * 1000) {
+      setTimeout(() => { if (hid) go('settings'); Actions.confirmDeleteAccount(); }, 600);
+    }
+  }
+  if (!hid) afterPortal();
 }
 
 function watchHousehold(hid, attempt = 0) {
   stop('household');
-  if (attempt === 0) { stop('sub'); stop('stripe'); watchers.ownerId = null; S.household = null; S.grant = null; S.stripeSubs = []; S.subscription = null; }
+  if (attempt === 0) { stop('sub'); stop('stripe'); watchers.ownerId = null; watchers.lastOwner = null; watchers.lastNames = null; S.household = null; S.grant = null; S.stripeSubs = []; S.subscription = null; }
   watchers.householdId = hid;
   clearTimeout(watchers.retryTimer);
   if (!hid) { S.householdLoading = false; return; }
@@ -256,6 +266,14 @@ function watchHousehold(hid, attempt = 0) {
 /** Housekeeping on every update from the server. */
 function afterSnapshot(h) {
   const me = S.user.uid;
+  // The organiser left and I'm the organiser now.
+  const was = watchers.lastOwner;
+  if (was && was !== h.ownerId && h.ownerId === me) {
+    const name = (watchers.lastNames || {})[was] || 'Your partner';
+    setTimeout(() => Sheets.notice(`${name} left the household`, "You're the organiser now. Your plan, tasks and history are all here."), 300);
+  }
+  watchers.lastOwner = h.ownerId;
+  watchers.lastNames = Object.fromEntries((h.members || []).map(m => [m.uid, Household.memberName(m)]));
   // The partner takes over what the placeholder had in the plan.
   if (!Household.isOwner(h, me)) {
     mark('joined');
@@ -271,6 +289,13 @@ function afterSnapshot(h) {
 }
 
 function forgetHousehold() {
+  // Gone without my doing (the organiser deleted it): say so, once.
+  const before = S.household;
+  if (before && !S.selfLeaving && !Household.isOwner(before, S.user.uid)) {
+    const who = Household.memberName(Household.owner(before));
+    setTimeout(() => Sheets.notice(`${who} deleted the household`, "It's gone for both of you. You can set up your own home any time."), 300);
+  }
+  S.selfLeaving = false;
   S.household = null; S.grant = null; S.stripeSubs = []; S.subscription = null;
   stop('household'); stop('sub'); stop('stripe');
   watchers.householdId = null;
@@ -314,6 +339,7 @@ function watchAccess(ownerId, attempt = 0) {
       }
     }
     if (now) { S.checkoutReturn = null; markActiveDay(); }
+    afterPortal();
     if (was && !now && !firstLoad && Sheet.isOpen()) Sheet.close();
     rerender();
   };
@@ -323,6 +349,28 @@ function watchAccess(ownerId, attempt = 0) {
   if (Backend.Billing.enabled()) {
     watchers.stripe = Backend.Billing.watchSubscriptions(ownerId, subs => { read.stripe = subs; update(); });
   }
+}
+
+/** Deleting an account needs a fresh sign-in: sign out, ask for it, then carry on (see onProfile). */
+function askToSignInAgain() {
+  SafeStorage.set(RESUME_DELETE_KEY, JSON.stringify({ uid: S.user.uid, at: Date.now() }));
+  Sheet.close();
+  Backend.Auth.signOut().then(() => {
+    S.auth = { mode: 'signin', busy: false, error: '', note: 'For your security, sign in again to delete your account.', values: {} };
+    if (S.phase === 'signedOut') render(true);   // otherwise the sign-out itself renders it (see resolveRoute)
+  });
+}
+
+/** Back from Stripe after "cancel, then leave / delete": finish what was started. */
+function afterPortal() {
+  let pending = null;
+  try { pending = JSON.parse(SafeStorage.get(AFTER_PORTAL_KEY + S.user.uid) || 'null'); } catch (e) {}
+  if (!pending) return;
+  const forAccount = pending.then === 'deleteAccount';      // needs no household
+  if (!forAccount && (!S.household || !watchers.subLoaded)) return;
+  SafeStorage.remove(AFTER_PORTAL_KEY + S.user.uid);
+  if (Date.now() - pending.at > 60 * 60 * 1000) return;
+  setTimeout(async () => (forAccount ? Actions.confirmDeleteAccount() : Sheets.afterCancel(pending.then, await ownSubscriptionRenews())), 300);
 }
 
 async function redeemInvite() {
@@ -409,6 +457,13 @@ async function submitAuth() {
    (see the click handler), so nothing can run twice.
    ========================================================= */
 let checkoutInFlight = false;
+const AFTER_PORTAL_KEY = 'household-app/after-portal/';
+const RESUME_DELETE_KEY = 'household-app/resume-delete-account';
+/** The organiser's own paid subscription will still renew (so leaving would keep charging). Unknown → true. */
+async function ownSubscriptionRenews() {
+  if (!isOrganiser()) return false;
+  return (await Backend.Billing.ownSubscriptionRunning(S.user.uid)) !== false;
+}
 const CHECKOUT_KEY = 'household-app/checkout/';
 
 const Actions = {
@@ -445,12 +500,65 @@ const Actions = {
     }
   },
   async deleteHousehold() {
-    try { await Backend.Repo.deleteHousehold(S.household.id, S.user.uid); Sheet.close(); }
-    catch (e) { console.error(e); toast("Couldn't delete the household. Try again."); }
+    S.selfLeaving = true;
+    try { await Backend.Repo.deleteHousehold(S.household.id, S.user.uid); Sheet.close(); toast('Household deleted.'); }
+    catch (e) { S.selfLeaving = false; console.error(e); toast("Couldn't delete the household. Try again."); }
   },
   async leaveHousehold() {
-    try { await Backend.Repo.leaveHousehold(S.household, S.user.uid); Sheet.close(); }
-    catch (e) { console.error(e); toast("Couldn't leave the household. Try again."); }
+    const h = S.household;
+    S.selfLeaving = true;
+    try { await Backend.Repo.leaveHousehold(h, S.user.uid, Household.departure(h, S.user.uid)); Sheet.close(); toast('You left the household.'); }
+    catch (e) { S.selfLeaving = false; console.error(e); toast("Couldn't leave the household. Try again."); }
+  },
+  /** Cancel in Stripe first, then come back to finish leaving / deleting (see afterPortal). */
+  cancelThen(d) {
+    if (!['leave', 'deleteHousehold', 'deleteAccount'].includes(d.key)) return;
+    SafeStorage.set(AFTER_PORTAL_KEY + S.user.uid, JSON.stringify({ then: d.key, at: Date.now() }));
+    return Actions.openPortal();
+  },
+  /** Before deleting an account: does this person still have a subscription that renews? */
+  async confirmDeleteAccount() {
+    const running = await Backend.Billing.ownSubscriptionRunning(S.user.uid);
+    if (running === null) { toast("We couldn't check your subscription. Check your connection and try again."); return; }
+    Sheets.deleteAccount(running);
+  },
+  /**
+   * Delete my account: leave (or hand over, or delete) the household, then erase my data and
+   * my sign-in. Firebase needs a recent sign-in for this, so after a while it asks for one first.
+   */
+  async deleteAccount() {
+    const running = await Backend.Billing.ownSubscriptionRunning(S.user.uid);
+    if (running !== false) { if (running) Sheets.deleteAccount(true); else toast("We couldn't check your subscription. Try again in a moment."); return; }
+    if (!Backend.Auth.signedInRecently()) {
+      askToSignInAgain();
+      return;
+    }
+    const h = S.household;
+    const me = S.user.uid;
+    let left = false;
+    S.selfLeaving = true;
+    try {
+      if (h && Household.isOwner(h, me) && Household.alone(h)) await Backend.Repo.deleteHousehold(h.id, me);
+      else if (h) await Backend.Repo.leaveHousehold(h, me, Household.departure(h, me));
+      left = !!h;
+      teardown();
+      await Backend.Repo.deleteAccount(S.user);
+      Sheet.close();
+      history.replaceState(null, '', '#/');
+      toast('Your account and your data have been deleted.');
+    } catch (e) {
+      S.selfLeaving = false;
+      console.error(e);
+      if (e && e.code === 'auth/requires-recent-login') {
+        askToSignInAgain();
+        return;
+      }
+      // Still signed in: pick up where things are now, rather than leaving the app frozen.
+      const user = Backend.Auth.current();
+      if (user) onAuth(user);
+      toast(left ? "You've left the household, but your account couldn't be deleted yet. Try again in Settings."
+        : "Couldn't delete your account. Check your connection and try again.");
+    }
   },
 
   /* invite: the phone's share sheet straight away; a sheet with the link otherwise */
@@ -500,8 +608,10 @@ const Actions = {
   sheetNav(d) { Sheet.close(); go(d.to); },
   closeSheet() { Sheet.close(); },
   menu() { go('settings'); },
-  confirmDelete() { Sheets.confirmDelete(); },
-  confirmLeave() { Sheets.confirmLeave(); },
+  // Leaving or deleting: if the organiser's own subscription still renews, offer to cancel it first.
+  // (Unknown counts as "renews", so the safe option is always shown when in doubt.)
+  async confirmDelete() { Sheets.confirmDelete(await ownSubscriptionRenews()); },
+  async confirmLeave() { Sheets.confirmLeave(await ownSubscriptionRenews()); },
 
   /* household setup (organiser) */
   step(d) {
@@ -716,7 +826,11 @@ const Actions = {
   },
   async openPortal() {
     try { location.assign(await Backend.Billing.portalUrl()); return holdBusy(); }
-    catch (e) { console.error(e); toast("Couldn't open your subscription settings. Try again in a moment."); }
+    catch (e) {
+      console.error(e);
+      if (S.user) SafeStorage.remove(AFTER_PORTAL_KEY + S.user.uid);   // nothing to come back to
+      toast("Couldn't open your subscription settings. Try again in a moment.");
+    }
   },
   async requestPremium() {
     const h = S.household;
@@ -963,7 +1077,8 @@ const ROUTE_ALIASES = { plan: 'household', inventory: 'household' };
 function resolveRoute() {
   const name = ROUTE_ALIASES[hashName()] || hashName();
   if (S.phase === 'setup' || S.phase === 'error' || S.phase === 'loading') return S.phase;
-  if (S.phase === 'signedOut') return name === 'auth' ? 'auth' : 'welcome';
+  // A note to read (e.g. "sign in again to delete your account") always comes with the sign-in form.
+  if (S.phase === 'signedOut') return name === 'auth' || (S.auth.note && name !== 'welcome') ? 'auth' : 'welcome';
   if (S.joining) return 'joining';
   if (!S.profile || S.householdLoading) return 'loading';
   const h = S.household;

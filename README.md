@@ -19,7 +19,14 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 5. **Two tabs once the plan runs:**
    - **Today** (mine): "Hello, Ian" and a playful line for the time of day and how my day is going (48 lines, never about the partner, never guilt), a big progress bar of today's minutes done, the next seven days, my tasks and anything from the board for me.
    - **Home** (ours): one bar in one colour for what both have done today (no per-person score), everything waiting for me (swaps, share-outs, suggestions, payment), the board, who does what with Swap, and the home's tasks and times.
-   - **Settings** (gear, top right): You (name, sign-in, my answers), Our home (people and invite, your home, tasks, times, reshuffle; the partner gets "Suggest a change"), Subscription, Help & legal, then Sign out and, apart, Delete / Leave household. Every row shows its current state.
+   - **Settings** (gear, top right): You (name, sign-in, my answers), Our home (people and invite, your home, tasks, times, reshuffle; the partner gets "Suggest a change"), Subscription, Help & legal, then Sign out and, apart, Leave household / Delete household / Delete my account. Every row shows its current state.
+
+**Leaving and deleting**
+- *Partner leaves:* their answers, notes, suggestions and pending swaps are removed; their ticks stay without a name; the organiser is back to a draft and can invite again.
+- *Organiser leaves while the partner stays:* the partner becomes the organiser (handover) and is told so. The subscription belongs to a person, so it doesn't move; if it still renews, the app offers "Cancel my subscription, then leave" (Stripe portal, then straight back to finish) or "Leave and keep my subscription".
+- *Delete household* (organiser): gone for both; the partner is told. Same subscription choice.
+- *Delete my account* (anyone, also from the start screen): leaves or hands over (or deletes the household if alone), deletes the invites they made, their access request, their profile and their sign-in. A renewing subscription must be cancelled first. Firebase needs a recent sign-in, so after a few minutes the app asks to sign in again and then continues.
+- Invites stop working once the person who made them has left, and leaving deletes their unused invites.
    Before the plan runs, Home is the only screen. New tasks in a running plan show under "New, waiting to be shared out" and go out together (both rate, fair split, both say yes). **Reshuffle** gives a fresh split after asking the other person.
 
 The fair split (`js/plan.js`) shares by weekly effort (time × frequency), not by count. Clear oppositions (❤️ vs 🙃) go to the person who likes it; the rest is balanced. The same answers always give the same plan; the organiser is the tie-break, so the plan doesn't change when the partner joins.
@@ -101,7 +108,7 @@ Only accounts listed in `admins` can see requests or give access; the rules enfo
 Needs the Firebase **Blaze** plan (pay as you go; the free quota covers a small app).
 
 1. **Stripe → Products → Add product** "Our Household" with two **recurring** prices: **€ 4.99 monthly** and **€ 39.99 yearly**. Don't set a default trial on either price — the app asks for the 21-day trial only on the yearly checkout.
-2. **Firebase → Extensions → Run Payments with Stripe** (`stripe/firestore-stripe-payments`). Settings: customers collection `customers`, products collection `products`, sync new users: yes. Note the **region** you pick.
+2. **Firebase → Extensions → Run Payments with Stripe** (`stripe/firestore-stripe-payments`). Settings: customers collection `customers`, products collection `products`, sync new users: yes. If the extension offers it, turn on **deleting Stripe customer data when a user is deleted** (so "Delete my account" also clears the customer in Stripe). Note the **region** you pick.
 3. Copy the webhook URL the extension shows into **Stripe → Developers → Webhooks**, with the events the extension lists (product, price, checkout.session.completed, customer.subscription.*, invoice.*…). Put the signing secret back into the extension.
 4. **Stripe → Settings → Billing → Customer portal**: allow cancelling and updating the payment method.
 5. **Stripe → Settings → Billing → Subscriptions and emails**: turn on the **reminder email before a trial ends** (required in the EU) and emails for failed payments.
@@ -163,7 +170,7 @@ docs/PRODUCT_BRIEF.md Product spec
 
 | Path | What | Who can write |
 |---|---|---|
-| `users/{uid}` | email, display name, which household | that user |
+| `users/{uid}` | email, display name, which household, codes of invites they made | that user (and deletes it with their account) |
 | `households/{hid}` | organiser, members, partner name, rooms, children, pets, tasks (with times), suggestions, preferences, plan, swaps, completions, notes | organiser; partner only own preferences plus plan, swaps, ticks, suggestions and notes |
 | `invites/{code}` | household, expiry, who used it | members create; invitee redeems once |
 | `subscriptions/{uid}` | `plan`, `active`, optional `expiresAt` | admin only |
