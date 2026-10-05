@@ -614,7 +614,8 @@ const Screens = {
         <h1 class="mood">Our home</h1>
       </div>
       ${balanceCard(h)}
-      ${needs ? `<div class="section-head"><h2 class="section-title">Needs you</h2></div>${needs}` : ''}
+      <div class="section-head"><h2 class="section-title">Needs you</h2></div>
+      ${needs || `<div class="card all-clear"><p>${esc(allClearLine())}</p></div>`}
       ${boardCard(h)}
       ${taskMap(h, false)}
       ${isOrg ? addOwnRow('Add your own task') : ''}
@@ -845,7 +846,9 @@ function taskMap(h, openAll) {
         const ids = Household.isSplit(r) ? Household.parts(r).map(p => p.id) : [r.id];
         return ids.some(id => Household.assignee(h, id) === me);
       }).length;
-      const sub = `${plural(items.length, 'task')}${people.includes(me) && Household.stage(h) !== 'setup' ? ` · ${mine} yours` : ''}`;
+      const freeIds = new Set(homeless(h).map(u => u.id));
+      const free = items.filter(r => (Household.isSplit(r) ? Household.parts(r).map(p => p.id) : [r.id]).some(id => freeIds.has(id))).length;
+      const sub = `${plural(items.length, 'task')}${people.includes(me) && Household.stage(h) !== 'setup' ? ` · ${mine} yours` : ''}${free ? ` · ${free} without anyone` : ''}`;
       const rows = expanded ? items.map(r => {
         const parts = Household.parts(r).length;
         return `<button class="row task-row" data-action="openTask" data-id="${esc(r.id)}">
@@ -864,23 +867,30 @@ function homeless(h) {
   const sharing = new Set(((Household.activeReshare(h) || {}).unitIds) || []);
   return Household.unassigned(h).filter(u => !sharing.has(u.id));
 }
-/** New tasks waiting to be shared out, and tasks nobody has: one quiet card under "Needs you". */
+/** New tasks waiting to be shared out: the organiser starts the share-out. */
 function newTasksCard(h) {
-  if (Household.stage(h) !== 'active') return '';
-  const me = S.user.uid;
+  if (Household.stage(h) !== 'active' || !Household.isOwner(h, S.user.uid) || Household.activeReshare(h)) return '';
   const skipped = new Set((h.plan && h.plan.skipped) || []);
   const waiting = Household.units(h).filter(u => !Household.peopleIds(h).includes(Household.assignee(h, u.id)) && !skipped.has(u.id));
-  const sharing = !!Household.activeReshare(h);
-  const free = homeless(h);
-  let html = '';
-  if (waiting.length && !sharing) {
-    html += `<div class="result-card" role="status"><p class="plain" style="margin:0 0 12px">${plural(waiting.length, 'new task')} waiting to be shared out: ${esc(waiting.map(u => u.name).join(', '))}.</p>
-      ${Household.isOwner(h, me) ? `<button class="btn secondary" style="min-height:44px" data-action="shareNow">Share ${waiting.length === 1 ? 'it' : 'them'} out now</button>` : ''}</div>`;
-  }
-  if (free.length) {
-    html += `<div class="result-card" role="status"><p class="plain" style="margin:0">${plural(free.length, 'task')} without anyone yet: ${esc(free.map(u => u.name).join(', '))}. Tap ${free.length === 1 ? 'it' : 'one'} in the list to take it.</p></div>`;
-  }
-  return html;
+  if (!waiting.length) return '';
+  return `<div class="swap-card" role="status"><p class="joke">${plural(waiting.length, 'new task')} to share out</p>
+    <p class="plain">${esc(waiting.map(u => u.name).join(', '))}. You both say how you feel about ${waiting.length === 1 ? 'it' : 'them'}, then the app shares ${waiting.length === 1 ? 'it' : 'them'} out fairly.</p>
+    <button class="btn primary" data-action="shareNow">Share ${waiting.length === 1 ? 'it' : 'them'} out now</button></div>`;
+}
+/** When nothing needs me: a calm line, the same all day, a different one tomorrow. */
+const ALL_CLEAR = Object.freeze([
+  'All clear. Nothing needs you right now.',
+  'Nothing for now. Enjoy the quiet.',
+  'All quiet on the home front.',
+  'Hey, nothing for now!',
+  'All clear. Let\'s keep going.',
+  'Nothing waiting for you. Carry on.',
+  'Nothing to sort out. Nice.',
+  'All good here. Come back later.',
+]);
+function allClearLine(now = new Date()) {
+  const dayNo = Math.floor((Schedule.day(now) - new Date(now.getFullYear(), 0, 0)) / 864e5);
+  return ALL_CLEAR[dayNo % ALL_CLEAR.length];
 }
 /** Suggestions: the organiser decides; the partner sees their own, waiting. */
 function suggestionsCard(h) {
@@ -1055,7 +1065,6 @@ function homeNeedsMe(h) {
   const rsh = Household.activeReshare(h);
   if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) return true;
   if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) return true;
-  if (homeless(h).length) return true;
   if (Household.isOwner(h, me) && Household.suggestions(h).length) return true;
   if (boardWaiting(h).size) return true;
   return !!statusBanner(h);
@@ -1090,12 +1099,10 @@ function swapCards(h) {
         <button class="btn primary" data-action="acceptReshuffle">Let's reshuffle</button>
         <button class="btn secondary" data-action="declineReshuffle">Keep our plan</button>
       </div></div>`;
-  } else if (rs && rs.status === 'pending' && rs.by === me) {
-    html += `<div class="result-card" role="status"><p class="plain" style="margin:0">Reshuffle asked. Waiting for the others to agree.</p></div>`;
   } else if (rs && rs.status === 'declined' && rs.by === me && !rs.seen) {
     html += `<div class="result-card" role="status"><p class="joke">They'd rather keep the current plan.</p>
       <p class="plain">Nothing changes. You can still swap single tasks.</p>
-      <button class="btn secondary" style="min-height:44px" data-action="dismissReshuffle">OK</button></div>`;
+      <button class="btn secondary" style="min-height:44px" data-action="dismissReshuffle">Dismiss</button></div>`;
   }
   const rsh = Household.activeReshare(h);
   const noun = rsh ? reshareNoun(h, rsh) : '';
@@ -1103,14 +1110,10 @@ function swapCards(h) {
     html += `<div class="swap-card" role="status"><p class="joke">Time to share out the new ${noun}s ✂️</p>
       <p class="plain">Say how you feel about ${plural((rsh.unitIds || []).length, 'new ' + noun)}. It only takes a moment.</p>
       <button class="btn primary" data-action="nav" data-to="reshare">Rate the new ${noun}s</button></div>`;
-  } else if (rsh && rsh.status === 'rating') {
-    html += `<div class="result-card" role="status"><p class="plain" style="margin:0">Thanks! Waiting for the others to rate the new ${noun}s.</p></div>`;
   } else if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) {
     html += `<div class="swap-card" role="status"><p class="joke">The new ${noun}s have been shared out.</p>
       <p class="plain">Have a look and say yes if it works for you.</p>
       <button class="btn primary" data-action="nav" data-to="reshare">See the changes</button></div>`;
-  } else if (rsh && rsh.status === 'proposed') {
-    html += `<div class="result-card" role="status"><p class="plain" style="margin:0">You said yes. Waiting for the others.</p></div>`;
   }
   results.forEach(x => {
     const vars = { name: Household.memberName(Household.member(h, x.to) || {}), task: taskName(x.respId), other: x.gave ? taskName(x.gave) : 'nothing' };
@@ -1120,7 +1123,7 @@ function swapCards(h) {
     html += `<div class="result-card" role="status">
       <p class="joke">${SwapMessages.pick(x.status === 'done' ? 'done' : 'declined', x.id, vars)}</p>
       <p class="plain">${plain}</p>
-      <button class="btn secondary" style="min-height:44px" data-action="dismissSwap" data-id="${esc(x.id)}">OK</button></div>`;
+      <button class="btn secondary" style="min-height:44px" data-action="dismissSwap" data-id="${esc(x.id)}">Dismiss</button></div>`;
   });
   return html;
 }

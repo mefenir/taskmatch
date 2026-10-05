@@ -135,6 +135,7 @@ const Sheet = (() => {
       r.classList.add('open');
       enableDrag(r.querySelector('.sheet'));
       requestAnimationFrame(() => requestAnimationFrame(() => r.classList.add('show')));
+      tidyText(r);
       fitButtons(r);
       applyBusy(r);
       const first = r.querySelector('.sheet input, .sheet button');

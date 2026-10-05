@@ -312,7 +312,7 @@ button.row.pressed{animation:row-pressed .35s ease-out}
 /* Today: greeting, progress block, day strip */
 .greeting{margin:4px 0 20px}
 .greeting .hello{font-size:18px;font-weight:600;color:var(--muted);margin:0 0 6px;letter-spacing:-.01em}
-.greeting .mood{font-size:30px;line-height:1.15;letter-spacing:-.025em;font-weight:700;margin:0;text-wrap:balance}
+.greeting .mood{font-size:clamp(24px, 7.8vw, 30px);line-height:1.15;letter-spacing:-.025em;font-weight:700;margin:0;text-wrap:balance}
 .meter-card{margin:0 0 16px}
 .meter-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:0 4px 8px}
 .meter-label{white-space:nowrap;font-size:13px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
@@ -350,3 +350,10 @@ a.row{text-decoration:none;color:inherit}
 .sheet-facts{margin:0 0 16px;color:var(--muted)}
 .sheet-list{box-shadow:none;border:1px solid var(--line)}
 @media (prefers-reduced-motion: reduce){.task-map .cat-head .chev,.task-map .task-row{transition:none}}
+
+/* Sentences keep together; blocks avoid a lonely last word (tidyText in util.js does the same where text-wrap isn't supported) */
+.sentence{display:inline-block;max-width:100%}
+.nowrap{white-space:nowrap}
+h1, h2, h3, .mood{text-wrap:balance}
+p, .row-sub, .lead, .fine{text-wrap:pretty}
+.all-clear p{margin:0;padding:16px;color:var(--muted);text-align:center}

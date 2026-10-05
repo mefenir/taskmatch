@@ -173,7 +173,7 @@ function errorList() {
       </div>`).join('') : `<div class="note" style="border:0">No errors reported.</div>`}</div>`;
 }
 
-function render() { $root.innerHTML = view(); fitButtons($root); }
+function render() { $root.innerHTML = view(); tidyText($root); fitButtons($root); }
 
 async function act(kind, userId) {
   A.busy = userId; render();

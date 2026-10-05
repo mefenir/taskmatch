@@ -45,6 +45,55 @@ function fitButtons(scope = document) {
 }
 window.addEventListener('resize', () => fitButtons());
 
+/**
+ * Text that reads well on any width:
+ *  - a sentence that doesn't fit on the rest of a line starts on the next one ("Everything done. /
+ *    A well-earned evening.", never "Everything done. A / well-earned evening.")
+ *  - a block never ends with one word alone on its last line.
+ * Runs after every render, on plain-text blocks only (no markup inside), building with text nodes.
+ */
+const TIDY_TEXT = 'h1, h2, h3, p, .row-title, .row-sub, .note-text, .celebrate, .meter-sub, .fine, .lead';
+function tidyText(scope = document) {
+  scope.querySelectorAll(TIDY_TEXT).forEach(el => {
+    if (el.dataset.tidy || el.closest('button.btn, .mini, .chip, .link-btn')) return;
+    el.dataset.tidy = '1';
+    const heading = /^H[1-3]$/.test(el.tagName);       // headings use text-wrap: balance instead of glue
+    if (el.children.length) { if (!heading) glueLastWord(el); return; }
+    // Headings never break at a hyphen ("well-" / "earned"): use a no-break hyphen.
+    const text = heading ? el.textContent.replace(/(\w)-(\w)/g, '$1\u2011$2') : el.textContent;
+    if (heading) el.textContent = text;
+    // Split only where a sentence ends: . ! or ? (and a closing quote) followed by a space.
+    const bits = text.trim().split(/([.!?]["')\]]*)\s+/);
+    const parts = [];
+    for (let i = 0; i < bits.length; i += 2) parts.push(bits[i] + (bits[i + 1] || ''));
+    if (parts.length < 2) { if (!heading) glueLastWord(el); return; }
+    el.textContent = '';
+    parts.forEach((p, i) => {
+      const span = document.createElement('span');
+      span.className = 'sentence';
+      span.textContent = p.trim();
+      if (!heading) glueLastWord(span);
+      el.appendChild(span);
+      if (i < parts.length - 1) el.appendChild(document.createTextNode(' '));
+    });
+  });
+}
+/** Keep the last two words of a block together (in a no-wrap span), so the last line never holds one word alone. */
+function glueLastWord(el) {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let last = null, n;
+  while ((n = walker.nextNode())) if (n.nodeValue.trim()) last = n;
+  const m = last && /^([\s\S]*\S)\s+(\S+\s+\S+)(\s*)$/.exec(last.nodeValue);
+  // Only short endings, in blocks of four words or more: gluing a long pair could leave a word alone at the start instead.
+  if (!m || m[2].length > 16 || el.textContent.trim().split(/\s+/).length < 4) return;
+  const keep = document.createElement('span');
+  keep.className = 'nowrap';
+  keep.textContent = m[2];
+  last.nodeValue = m[1] + ' ';
+  last.parentNode.insertBefore(keep, last.nextSibling);
+  if (m[3]) keep.after(document.createTextNode(m[3]));
+}
+
 /* ---------- Crash reports ----------
    Errors on testers' phones go to the admin panel (Errors tab), once signed in:
    message, stack, screen and app version, at most 5 different ones per visit.

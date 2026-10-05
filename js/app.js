@@ -1175,6 +1175,7 @@ function render(routeChanged) {
   if (SHARE_FROM.includes(name) && changed) shareNewTasks();
   if (name === 'subscribe' && isOrganiser() && !hasAccess()) mark('paywall');
   $app.innerHTML = Screens[name]();
+  tidyText($app);
   fitButtons($app);
   applyBusy($app);
   animateMeters($app);
