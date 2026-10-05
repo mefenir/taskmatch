@@ -334,8 +334,6 @@ const Screens = {
       return `<main class="screen">
         ${topbar({ back: 'household' })}
         <h1>How do you feel about the new ${noun}s?</h1>
-        <p class="lead" style="margin-bottom:12px">${noun === 'part' ? "Only you see your answers. We've started from how you felt about the whole task." : 'Only you see your answers. Then the app shares them out fairly between you.'}</p>
-        <div class="legend">${PREFERENCES.map(p => `<span class="legend-item pref-${p.id}">${prefIconSm(p.icon)}${p.label}</span>`).join('')}</div>
         <div class="card" style="margin-top:12px">${units.map(u => {
           const v = Household.reshareValue(h, me, u);
           return `<div class="pref-row"><div class="row-text"><span class="row-title">${esc(u.name)}</span><span class="row-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${esc(Timing.label(u))}</span></div>
@@ -491,8 +489,6 @@ const Screens = {
     const h = S.household;
     const me = S.user.uid;
     const setup = !h.settings.onboarded;
-    const other = Household.people(h).find(m => m.uid !== me);
-    const otherName = other ? esc(Household.memberName(other)) : 'Nobody else';
     const groups = Household.inventory(h);
     const sections = groups.map(({ category, items }) => `<section aria-labelledby="pf-${esc(category.id)}">
         <div class="section-head"><h2 class="section-title" id="pf-${esc(category.id)}">${esc(category.name)}</h2></div>
@@ -501,8 +497,6 @@ const Screens = {
     return `<main class="screen">
       ${topbar({ back: setup ? 'frequency' : 'settings', step: setup ? 'rate' : null })}
       <h1>How do you feel about each task?</h1>
-      <p class="lead" style="margin-bottom:12px">Mark what you'd love to do and what you'd rather not. Everything else counts as Don't mind. ${otherName} won't see your answers.</p>
-      <div class="legend">${PREFERENCES.map(p => `<span class="legend-item pref-${p.id}">${prefIconSm(p.icon)}${p.label}</span>`).join('')}</div>
       ${sections}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${markedCount(h, me) ? `${plural(markedCount(h, me), 'task')} marked` : 'Nothing marked yet. That\'s fine too.'}</p>
@@ -524,9 +518,7 @@ const Screens = {
       <div class="card">${items.length ? items.map(r => prefRow(h, me, r)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
     return `<main class="screen">
       <div class="title-row"><h1>${orgName} made a plan for your home</h1>${settingsButton()}</div>
-      <p class="lead" style="margin-bottom:12px">Mark anything you'd rather not do, or would love to take. Everything else counts as Don't mind. ${orgName} won't see your answers.</p>
       ${totalCard(h)}
-      <div class="legend">${PREFERENCES.map(p => `<span class="legend-item pref-${p.id}">${prefIconSm(p.icon)}${p.label}</span>`).join('')}</div>
       ${list('Suggested for you', mine)}
       ${list(`Suggested for ${orgName}`, theirs)}
       <button class="btn ghost" data-action="suggestChanges">Suggest a change to the list</button>

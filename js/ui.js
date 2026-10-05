@@ -20,7 +20,7 @@ const Icon = {
   note:    svg('<path d="M20 12a7 7 0 0 1-10.3 6.2L5 19.5l1.3-4.2A7 7 0 1 1 20 12z"/>', 18, 1.9),
   low:     svg('<path d="M5 9h14l-1.4 9.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8z"/><path d="M9 9l3-5 3 5"/>', 18, 1.9),
   today:   svg('<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>', 18, 1.9),
-  // How you feel about a task (rating screens): heart, smile, frown — drawn at 22 for buttons, 16 for the legend.
+  // How you feel about a task (rating screens): heart, smile, frown.
   love:    svg('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>', 22, 1.9),
   ok:      svg('<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14a4 4 0 0 0 7 0"/><path d="M9.3 9.6h.01M14.7 9.6h.01"/>', 22, 1.9),
   notKeen: svg('<circle cx="12" cy="12" r="8.5"/><path d="M15.5 15.5a4 4 0 0 0-7 0"/><path d="M9.3 9.6h.01M14.7 9.6h.01"/>', 22, 1.9),
@@ -91,8 +91,6 @@ function switchRow(action, key, label, sub, on) {
 }
 
 /** The gear at the top right of every main screen: one way into Settings. */
-/** The small version of a feeling icon, for the legend above a list. */
-const prefIconSm = id => Icon[id].replace('width="22" height="22"', 'width="16" height="16"').replace('stroke-width="1.9"', 'stroke-width="2"');
 const settingsButton = () => `<button class="icon-btn right" data-action="nav" data-to="settings" aria-label="Settings">${Icon.gear}</button>`;
 
 function addOwnRow(label) {

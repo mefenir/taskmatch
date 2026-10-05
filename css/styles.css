@@ -194,7 +194,6 @@ button.row:active{background:var(--surface-2)}
 /* =========================================================
    PLAN, PREFERENCES, DAILY USE
    ========================================================= */
-.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;color:var(--muted);margin:0 4px 4px}
 .pref-row{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;min-height:60px}
 .pref-row + .pref-row{border-top:1px solid var(--line)}
 .pref-group{display:flex;gap:6px;flex:none}
@@ -203,7 +202,7 @@ button.row:active{background:var(--surface-2)}
 .pref-btn.pref-love[aria-pressed="true"]{background:var(--love-soft);border-color:var(--love);color:var(--love)}
 .pref-btn.pref-ok[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .pref-btn.pref-rather_not[aria-pressed="true"]{background:var(--surface-2);border-color:var(--muted);color:var(--ink)}
-.legend-item{display:inline-flex;align-items:center;gap:5px}
+
 .timing-row{display:flex;flex-direction:column;gap:10px;padding:12px 16px}
 .timing-row + .timing-row{border-top:1px solid var(--line)}
 .timing-controls{display:flex;gap:8px}
