@@ -129,7 +129,7 @@ Fill in `legal` in [`js/config.js`](js/config.js) (name, address, email, VAT ID 
 
 - **Firebase → Authentication → Settings → User actions:** turn on **Email enumeration protection**.
 - **Firebase → Authentication → Settings → Password policy:** require at least 8 characters (the app asks for 8).
-- **Google Cloud → APIs & Services → Credentials → the Browser key:** under *Application restrictions* pick *Websites* and add `https://mefenir.github.io/*` and `http://localhost/*`. The key is public by design; this stops other sites from using your quota.
+- **Google Cloud → APIs & Services → Credentials → the Browser key:** under *Application restrictions* pick *Websites* and add `https://mefenir.github.io/*`, `https://taskmatch-c51d2.firebaseapp.com/*` (Google sign-in runs on this Firebase page, so it must be allowed too) and `http://localhost/*`. The key is public by design; this stops other sites from using your quota.
 - **Admin account:** a long random password, and a username that isn't easy to guess.
 - **GitHub → Settings → Code security:** turn on Dependabot alerts and secret scanning. **Settings → Branches:** protect `main` from force pushes.
 - If the app ever moves away from `https://mefenir.github.io/taskmatch/`, update `appUrl()` in `firestore.rules`, or Stripe checkouts will be refused.
