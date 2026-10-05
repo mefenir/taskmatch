@@ -928,7 +928,7 @@ const Actions = {
   },
 
   /* board */
-  toggleBoard() { S.boardOpen = !S.boardOpen; rerender(); },
+  toggleBoard() { openBoard(!S.boardOpen); rerender(); },
   addNote() { Sheets.addNote(); },
   noteKind(d) { S.noteDraft = { ...(S.noteDraft || {}), kind: d.key }; Sheets.addNote(); },
   postNote() {
@@ -938,7 +938,7 @@ const Actions = {
     if (!n) { const i = document.getElementById('note-text'); if (i) i.focus(); toast('Write something first.'); return; }
     save('notes');
     S.noteDraft = { kind: d.kind || 'note', text: '' };
-    S.boardOpen = true;
+    openBoard(true);
     Sheet.close();
     rerender();
     if (n.kind === 'low') {

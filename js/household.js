@@ -244,6 +244,17 @@ const Household = {
       (n.kind === 'today' && n.claimedBy === userId) ||
       (n.kind === 'low' && (this.noteTarget(h, n) || {}).uid === userId));
   },
+  /** Does this board item wait for this person? 'mine' (running low, theirs to get),
+   *  'grab' (someone else's, anyone can take it) or null. */
+  noteWaiting(h, n, userId) {
+    if (n.kind === 'low') {
+      const t = this.noteTarget(h, n);
+      if (t) return t.uid === userId ? 'mine' : null;
+      return n.by !== userId ? 'grab' : null;
+    }
+    if (n.kind === 'today' && !n.claimedBy) return n.by !== userId ? 'grab' : null;
+    return null;
+  },
   /** New on the board since this person last looked, written by someone else. */
   unseenNotes(h, userId, seenAt) {
     return this.boardNotes(h).filter(n => n.by !== userId && n.createdAt > (seenAt || 0));

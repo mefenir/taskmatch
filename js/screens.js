@@ -963,24 +963,44 @@ const NOTE_KINDS = {
 function boardSeenKey(h) { return `household-app/board-seen/${h.id}/${S.user.uid}`; }
 function boardSeenAt(h) { return Number(SafeStorage.get(boardSeenKey(h)) || 0); }
 function boardUnseen(h) { return Household.unseenNotes(h, S.user.uid, boardSeenAt(h)); }
+/** Open or close the board. Opening remembers what was new, so it keeps its "New" tag while open. */
+function openBoard(open) {
+  if (open && !S.boardOpen && S.household && S.user) S.boardSeenBefore = boardSeenAt(S.household);
+  S.boardOpen = !!open;
+}
+/** Board items waiting for me: running low for me, up for grabs, or new since I last looked. */
+function boardWaiting(h) {
+  const me = S.user.uid;
+  const seen = S.boardOpen ? (S.boardSeenBefore || 0) : boardSeenAt(h);
+  const map = new Map();
+  Household.boardNotes(h).forEach(n => {
+    const w = Household.noteWaiting(h, n, me);
+    const fresh = n.by !== me && n.createdAt > seen;
+    if (w || fresh) map.set(n.id, { mine: w === 'mine', grab: w === 'grab', fresh });
+  });
+  return map;
+}
 
-/** One line at the top of Today; opens in place. */
+/** The board on Home; opens in place. Gold edge while something waits for me. */
 function boardCard(h) {
   const me = S.user.uid;
   const partner = h.members.find(m => m.uid !== me);
   const partnerName = partner ? Household.memberName(partner) : '';
   const items = Household.boardNotes(h);
+  const waiting = boardWaiting(h);
   if (S.boardOpen) SafeStorage.set(boardSeenKey(h), String(Date.now()));
-  const unseen = S.boardOpen ? [] : boardUnseen(h);
-  const newFrom = [...new Set(unseen.map(n => Household.memberName(Household.member(h, n.by) || {})))];
+  const count = waiting.size;
   const meta = !items.length ? (partnerName ? `Leave a note for ${esc(partnerName)}` : 'Leave a note')
-    : unseen.length ? `<b>New from ${esc(newFrom.join(' and '))}</b>` : plural(items.length, 'note');
+    : count ? `<b>${count} need${count === 1 ? 's' : ''} action</b>` : plural(items.length, 'note');
   const head = `<button class="board-head" data-action="${items.length ? 'toggleBoard' : 'addNote'}" aria-expanded="${!!S.boardOpen}">
       <span class="board-icon" aria-hidden="true">📝</span><span class="board-title">Board</span>
       <span class="board-meta">${meta}</span>
       <span class="board-chev" aria-hidden="true">${items.length ? (S.boardOpen ? '–' : '+') : '+'}</span></button>`;
-  if (!S.boardOpen || !items.length) return `<div class="board">${head}</div>`;
+  const cls = `board${count ? ' waiting' : ''}`;
+  if (!S.boardOpen || !items.length) return `<div class="${cls}">${head}</div>`;
   const now = new Date();
+  const tags = w => !w ? '' : [w.mine ? 'For you' : '', w.grab ? 'Up for grabs' : '', w.fresh ? 'New' : '']
+    .filter(Boolean).map(t => `<span class="note-tag">${t}</span>`).join('');
   const row = n => {
     const k = NOTE_KINDS[n.kind];
     const author = n.by === me ? 'You' : esc(Household.memberName(Household.member(h, n.by) || {}));
@@ -994,10 +1014,11 @@ function boardCard(h) {
       act = `<button class="mini" data-action="claimNote" data-id="${esc(n.id)}">I'll do it</button>`;
     }
     const del = n.by === me ? `<button class="note-del" data-action="deleteNote" data-id="${esc(n.id)}" aria-label="Delete note">×</button>` : '';
-    return `<div class="note-row"><span class="note-kind" aria-label="${k.label}" title="${k.label}">${k.emoji}</span>
-      <div class="row-text"><span class="note-text">${esc(n.text)}</span><span class="row-sub">${sub}</span></div>${act}${del}</div>`;
+    const w = waiting.get(n.id);
+    return `<div class="note-row${w ? ' waiting' : ''}"><span class="note-kind" aria-label="${k.label}" title="${k.label}">${k.emoji}</span>
+      <div class="row-text">${w ? `<span class="note-tags">${tags(w)}</span>` : ''}<span class="note-text">${esc(n.text)}</span><span class="row-sub">${sub}</span></div>${act}${del}</div>`;
   };
-  return `<div class="board open">${head}<div class="board-items">${items.map(row).join('')}</div>
+  return `<div class="${cls} open">${head}<div class="board-items">${items.map(row).join('')}</div>
     <button class="btn secondary board-add" data-action="addNote">Add to the board</button></div>`;
 }
 
@@ -1028,7 +1049,7 @@ function homeNeedsMe(h) {
   if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) return true;
   if (needsAHome(h)) return true;
   if (Household.isOwner(h, me) && Household.suggestions(h).length) return true;
-  if (boardUnseen(h).length) return true;
+  if (boardWaiting(h).size) return true;
   return !!statusBanner(h);
 }
 
