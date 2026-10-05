@@ -28,7 +28,8 @@ service cloud.firestore {
     // users/{uid} — each person's own profile. Nobody else can read it.
     // ---------------------------------------------------------------
     match /users/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
+      // You read your own profile; the admin reads all (name, email, household) for the beta funnel.
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow create, update: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['email', 'displayName', 'householdId', 'createdAt', 'inviteCodes'])
         && (request.resource.data.householdId == null || request.resource.data.householdId is string)
@@ -91,8 +92,23 @@ service cloud.firestore {
         return request.auth.uid in resource.data.memberIds
           && request.auth.uid != resource.data.ownerId
           && changed.hasOnly(['suggestions', 'preferences', 'plan', 'swaps', 'completions',
-                              'reshare', 'reshuffle', 'planSeed', 'previousAssignments', 'notes', 'weekdays', 'when', 'updatedAt'])
-          && preferencesChanged.hasOnly([request.auth.uid]);
+                              'reshare', 'reshuffle', 'planSeed', 'previousAssignments', 'notes', 'weekdays', 'when',
+                              'members', 'updatedAt'])
+          && preferencesChanged.hasOnly([request.auth.uid])
+          && (!changed.hasAny(['members']) || renamesOnlySelf());
+      }
+
+      // The partner may change their own name, and nothing else about the members.
+      function renamesOnlySelf() {
+        let before = resource.data.members;
+        let after = request.resource.data.members;
+        let i = before[0].uid == request.auth.uid ? 0 : 1;
+        let other = 1 - i;
+        return before.size() == 2 && after.size() == 2
+          && after[other] == before[other]
+          && after[i].uid == request.auth.uid
+          && after[i].diff(before[i]).affectedKeys().hasOnly(['name'])
+          && after[i].name is string && after[i].name.size() <= 40;
       }
 
       // The partner adds exactly themselves next to the organiser (who stays as is), in

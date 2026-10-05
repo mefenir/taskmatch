@@ -523,10 +523,7 @@ const Screens = {
     const list = (title, items) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
       <div class="card">${items.length ? items.map(r => prefRow(h, me, r)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
     return `<main class="screen">
-      <div class="topbar"><span class="spacer"></span>
-        ${settingsButton()}
-      </div>
-      <h1 style="margin-top:0">${orgName} made a plan for your home</h1>
+      <div class="title-row"><h1>${orgName} made a plan for your home</h1>${settingsButton()}</div>
       <p class="lead" style="margin-bottom:12px">Mark anything you'd rather not do 🙃, or would love to take ❤️. Everything else counts as 🙂 Don't mind. ${orgName} won't see your answers.</p>
       ${totalCard(h)}
       <div class="legend">${PREFERENCES.map(p => `<span>${p.emoji} ${p.label}</span>`).join('')}</div>
@@ -581,10 +578,7 @@ const Screens = {
     }
 
     return `<main class="screen">
-      <div class="topbar"><span class="spacer"></span>
-        ${settingsButton()}
-      </div>
-      <h1 style="margin-top:0">${head}</h1>
+      <div class="title-row"><h1>${head}</h1>${settingsButton()}</div>
       <p class="lead" style="margin-bottom:16px">${lead}</p>
       ${swapCards(h)}
       ${suggestionsCard(h)}
@@ -606,17 +600,13 @@ const Screens = {
     const needs = statusBanner(h) + swapCards(h) + suggestionsCard(h) + newTasksCard(h);
     const names = Household.people(h).map(m => esc(Household.memberName(m).split(' ')[0])).join(' & ');
     return `<main class="screen has-nav">
-      <div class="topbar"><span class="spacer"></span>
-        ${settingsButton()}
-      </div>
-      <div class="greeting">
-        <p class="hello">${names}</p>
+      <div class="greeting"><div class="greeting-top"><p class="hello">${names}</p>${settingsButton()}</div>
         <h1 class="mood">Our home</h1>
       </div>
       ${balanceCard(h)}
-      <div class="section-head"><h2 class="section-title">Needs you</h2></div>
-      ${needs || `<div class="card all-clear"><p>${esc(allClearLine())}</p></div>`}
       ${boardCard(h)}
+      <div class="section-head"><h2 class="section-title">Needs you</h2></div>
+      ${needs || `<p class="all-clear">${esc(allClearLine())}</p>`}
       ${taskMap(h, false)}
       ${isOrg ? addOwnRow('Add your own task') : ''}
       <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
@@ -659,11 +649,7 @@ const Screens = {
     const nothing = !today.length && !week.length && !anytime.length && !board.length;
 
     return `<main class="screen has-nav">
-      <div class="topbar"><span class="spacer"></span>
-        ${settingsButton()}
-      </div>
-      <div class="greeting">
-        <p class="hello">Hello, ${first}</p>
+      <div class="greeting"><div class="greeting-top"><p class="hello">Hello, ${first}</p>${settingsButton()}</div>
         <h1 class="mood">${esc(Mood.line(now, progress))}</h1>
       </div>
       ${progress.count ? progressBar(progress.pct, 'Your day', progress.left ? `${progress.doneCount} of ${progress.count} done` : 'All done') : ''}
@@ -700,7 +686,7 @@ const Screens = {
     const myName = Household.memberName(Household.member(h, me));
     const marked = Household.marked(h, me);
     const you = group('You', [
-      isOrg && usable ? row(go('members'), 'Your name', esc(myName)) : info('Your name', esc(myName)),
+      usable ? row('data-action="editName"', 'Your name', esc(myName)) : info('Your name', esc(myName)),
       info('Signed in as', esc(S.user.email || '')),
       usable && stage !== 'active' ? row(go('rate'), 'My answers', marked ? `${plural(marked, 'task')} marked` : 'Nothing marked') : '',
     ]);
@@ -974,9 +960,9 @@ const Mood = (() => {
 
 /* ---------- Board ---------- */
 const NOTE_KINDS = {
-  note:  { emoji: '💬', label: 'Note',        hint: 'Stays on the board for 7 days.',                               placeholder: 'e.g. Plumber comes Thursday at 10' },
-  low:   { emoji: '🧴', label: 'Running low', hint: 'Goes to whoever looks after it, until someone has got it.',     placeholder: 'e.g. Dishwasher tabs' },
-  today: { emoji: '⚡', label: 'Today only',  hint: 'Whoever taps "I\'ll do it" first gets it on their Today list.', placeholder: 'e.g. Take the parcel to the post office' },
+  note:  { icon: 'note', label: 'Note',        hint: 'Stays on the board for 7 days.',                               placeholder: 'e.g. Plumber comes Thursday at 10' },
+  low:   { icon: 'low', label: 'Running low', hint: 'Goes to whoever looks after it, until someone has got it.',     placeholder: 'e.g. Dishwasher tabs' },
+  today: { icon: 'today', label: 'Today only',  hint: 'Whoever taps "I\'ll do it" first gets it on their Today list.', placeholder: 'e.g. Take the parcel to the post office' },
 };
 function boardSeenKey(h) { return `household-app/board-seen/${h.id}/${S.user.uid}`; }
 function boardSeenAt(h) { return Number(SafeStorage.get(boardSeenKey(h)) || 0); }
@@ -1011,7 +997,7 @@ function boardCard(h) {
   const meta = !items.length ? (partnerName ? `Leave a note for ${esc(partnerName)}` : 'Leave a note')
     : count ? `<b>${count} need${count === 1 ? 's' : ''} action</b>` : plural(items.length, 'note');
   const head = `<button class="board-head" data-action="${items.length ? 'toggleBoard' : 'addNote'}" aria-expanded="${!!S.boardOpen}">
-      <span class="board-icon" aria-hidden="true">📝</span><span class="board-title">Board</span>
+      <span class="board-icon" aria-hidden="true">${Icon.board}</span><span class="board-title">Board</span>
       <span class="board-meta">${meta}</span>
       <span class="board-chev" aria-hidden="true">${items.length ? (S.boardOpen ? '–' : '+') : '+'}</span></button>`;
   const cls = `board${count ? ' waiting' : ''}`;
@@ -1033,7 +1019,7 @@ function boardCard(h) {
     }
     const del = n.by === me ? `<button class="note-del" data-action="deleteNote" data-id="${esc(n.id)}" aria-label="Delete note">×</button>` : '';
     const w = waiting.get(n.id);
-    return `<div class="note-row${w ? ' waiting' : ''}"><span class="note-kind" aria-label="${k.label}" title="${k.label}">${k.emoji}</span>
+    return `<div class="note-row${w ? ' waiting' : ''}"><span class="note-kind" role="img" aria-label="${k.label}" title="${k.label}">${Icon[k.icon]}</span>
       <div class="row-text">${w ? `<span class="note-tags">${tags(w)}</span>` : ''}<span class="note-text">${esc(n.text)}</span><span class="row-sub">${sub}</span></div>${act}${del}</div>`;
   };
   return `<div class="${cls} open">${head}<div class="board-items">${items.map(row).join('')}</div>
@@ -1049,7 +1035,7 @@ function noteTaskRow(h, n, ownerId, everyone) {
   const sub = n.kind === 'low' ? `${who}Running low · ${by}` : `${who}Today only · ${by}`;
   return `<button class="row" data-action="doneNote" data-id="${esc(n.id)}" aria-pressed="false">
     <span class="check" aria-hidden="true">${Icon.check}</span>
-    <div class="row-text"><span class="row-title">${k.emoji} ${n.kind === 'low' ? 'Get ' : ''}${esc(n.text)}</span><span class="row-sub">${sub}</span></div></button>`;
+    <div class="row-text"><span class="row-title"><span class="title-icon" aria-hidden="true">${Icon[k.icon]}</span>${n.kind === 'low' ? 'Get ' : ''}${esc(n.text)}</span><span class="row-sub">${sub}</span></div></button>`;
 }
 
 /** "parts" when only task parts are being shared, otherwise "tasks". */
@@ -1297,6 +1283,20 @@ const Sheets = {
       <button class="btn ghost" data-action="closeSheet">Close</button>`, r.name);
   },
 
+  /** Your name, as it shows in the app for both of you. */
+  editName() {
+    const me = Household.member(S.household, S.user.uid);
+    Sheet.open(`<h2>Your name</h2>
+      <div class="card"><div class="field">
+        <label for="edit-name">How it shows in the app</label>
+        <input id="edit-name" value="${esc(me ? me.name : '')}" placeholder="Your name" autocomplete="given-name" maxlength="40">
+      </div></div>
+      <button class="btn primary" data-action="saveName">Save</button>
+      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Your name');
+    const input = document.getElementById('edit-name');
+    if (input) { input.focus(); input.select(); input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); Actions.saveName(); } }); }
+  },
+
   /** The invite link, when the phone's share sheet isn't available (or was closed). */
   invite({ link, text, name }) {
     const canShare = typeof navigator.share === 'function';
@@ -1324,7 +1324,7 @@ const Sheets = {
     const k = NOTE_KINDS[d.kind];
     Sheet.open(`<h2>Add to the board</h2>
       <div class="chips" role="group" aria-label="Kind" style="margin-bottom:10px">${Object.entries(NOTE_KINDS).map(([id, x]) =>
-        `<button class="chip" data-action="noteKind" data-key="${esc(id)}" aria-pressed="${d.kind === id}">${x.emoji} ${x.label}</button>`).join('')}</div>
+        `<button class="chip" data-action="noteKind" data-key="${esc(id)}" aria-pressed="${d.kind === id}"><span class="chip-icon" aria-hidden="true">${Icon[x.icon]}</span>${x.label}</button>`).join('')}</div>
       <p style="margin-bottom:12px">${esc(k.hint)}</p>
       <div class="field"><input id="note-text" data-input="noteText" maxlength="${Household.NOTE_MAX_LENGTH}" placeholder="${esc(k.placeholder)}" value="${esc(d.text)}" autocomplete="off" enterkeyhint="done"></div>
       <button class="btn primary" data-action="postNote">Add</button>

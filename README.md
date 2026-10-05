@@ -202,3 +202,7 @@ A responsibility is **not** an assignment: selected responsibilities carry no ow
 **Needs you** (on Us) only holds things you act on: a swap offer, a reshuffle request, rating or approving new tasks, suggestions to decide (organiser), new tasks to share out (organiser), a payment problem. Results that need no action (a swap's outcome, a declined reshuffle) have a Dismiss button. Nothing about waiting for the other person. When it's empty, a calm line ("All clear. Nothing needs you right now."), one per day. Tasks nobody has show as "N without anyone" on their category.
 
 **Text**: every screen keeps a sentence together when it doesn't fit on the rest of a line, and a block never ends with one word alone (tidyText in util.js; headings use text-wrap: balance and never break at a hyphen).
+
+**Layout details**: on Us the board comes right after each person's share, then Needs you (a quiet grey line when there's nothing). The settings gear sits level with the first line of each screen. Open categories on Us show their tasks on a slightly darker shade. A round up-arrow appears bottom right once a page is scrolled, above the tabs. Settings → Your name opens a sheet to change it (both people; the rules let the partner change only their own name).
+
+**Admin funnel**: tap a step to list the households that reached it, with each person's name and email and when they got there; "stopped here" marks where a household's progress ends. (The admin can read users/{uid} for this.)

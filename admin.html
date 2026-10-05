@@ -7,9 +7,16 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Admin · Our Household</title>
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="css/styles.css?v=36">
+<link rel="stylesheet" href="css/styles.css?v=37">
 <style>
 .req{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.step-row .status{min-width:28px;text-align:center}
+.step-row[aria-expanded="true"]{background:var(--surface-2)}
+.who-list{padding:4px 16px 12px 28px;background:color-mix(in srgb, var(--surface-2) 45%, var(--surface));border-top:1px solid var(--line)}
+.who-item{display:flex;flex-direction:column;gap:4px;padding:10px 0;font-size:14px;overflow-wrap:anywhere}
+.who-item + .who-item{border-top:1px solid var(--line)}
+.who-item .who{font-weight:600}
+.who-list .meta{font-size:13px;color:var(--muted)}
 .req + .req{border-top:1px solid var(--line)}
 .req .top{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
 .req .who{font-weight:600}
@@ -36,9 +43,9 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="js/config.js?v=36"></script>
-<script src="js/util.js?v=36"></script>
-<script src="js/backend.js?v=36"></script>
-<script src="js/admin.js?v=36"></script>
+<script src="js/config.js?v=37"></script>
+<script src="js/util.js?v=37"></script>
+<script src="js/backend.js?v=37"></script>
+<script src="js/admin.js?v=37"></script>
 </body>
 </html>

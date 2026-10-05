@@ -344,6 +344,9 @@ const Backend = (() => {
       await batch.commit();
     },
     deny: (userId, adminId) => premiumRequests().doc(userId).update({ status: 'denied', decidedAt: now(), decidedBy: adminId }),
+    /** Everyone's name, email and household, to see who reached each funnel step. */
+    watchUsers: (onData, onError) =>
+      users().onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, email: d.data().email || '', name: d.data().displayName || '', householdId: d.data().householdId || null }))), onError),
     watchMetrics: (onData, onError) =>
       db.collection('metrics').onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, ...d.data() }))), onError),
     watchFeedback: (onData, onError) =>

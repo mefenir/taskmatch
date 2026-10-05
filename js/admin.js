@@ -12,6 +12,8 @@ const A = {
   user: null,
   requests: [],
   metrics: [],
+  users: [],
+  openStep: null,       // funnel: the step whose people are listed
   feedback: [],
   errors: [],
   feedbackFilter: 'new',
@@ -24,6 +26,7 @@ const A = {
 };
 let unwatch = null;
 let unwatchMetrics = null;
+let unwatchUsers = null;
 let unwatchFeedback = null;
 let unwatchErrors = null;
 const TABS = ['funnel', 'requests', 'feedback', 'errors'];
@@ -123,14 +126,30 @@ function funnel() {
       `<button data-action="range" data-key="${esc(k)}" aria-pressed="${A.range === k}">${l}</button>`).join('')}</div>
     <div class="card">${steps.map((k, i) => {
       const v = n(k); const prev = i ? n(steps[i - 1]) : v;
-      return `<div class="row static"><div class="row-text"><span class="row-title">${STEP_LABEL[k]}</span>
+      const open = A.openStep === k;
+      return `<button class="row step-row" data-action="openStep" data-key="${esc(k)}" aria-expanded="${open}"><div class="row-text"><span class="row-title">${STEP_LABEL[k]}</span>
         <span class="row-sub">${i ? `${pct(v, prev)} of the step before · ` : ''}${pct(v, first)} of all</span></div>
-        <span class="status">${v}</span></div>`;
+        <span class="status">${v}</span></button>${open ? whoReached(rows, k) : ''}`;
     }).join('')}
       <div class="row static"><div class="row-text"><span class="row-title">Still using it a week after starting</span>
         <span class="row-sub">${pct(retained, n('started'))} of plans started</span></div><span class="status">${retained}</span></div>
     </div>
-    <p class="fine" style="text-align:left">Households, not people. Counted from when each step was first reached.</p>`;
+    <p class="fine" style="text-align:left">Households, not people. Counted from when each step was first reached. Tap a step to see who reached it.</p>`;
+}
+
+/** The people in each household that reached a step, newest first; "stopped here" when it's their furthest step. */
+function whoReached(rows, step) {
+  const steps = Object.keys(STEP_LABEL);
+  const furthest = m => steps.filter(k => m[k]).pop();
+  const list = rows.filter(m => m[step]).sort((a, b) => (millis(b[step]) || 0) - (millis(a[step]) || 0));
+  if (!list.length) return '<div class="who-list"><p class="meta">Nobody yet.</p></div>';
+  return `<div class="who-list">${list.map(m => {
+    const people = A.users.filter(u => u.householdId === m.id);
+    const names = people.length ? people.map(u => `<div><span class="who">${esc(u.name || 'No name')}</span> <span class="meta">· ${esc(u.email)}</span></div>`).join('')
+      : '<span class="meta">Nobody in this household any more</span>';
+    const stop = furthest(m) === step ? ' <span class="status">stopped here</span>' : '';
+    return `<div class="who-item"><div>${names}</div><div class="meta">${when(m[step])}${stop}</div></div>`;
+  }).join('')}</div>`;
 }
 
 /** Notes from Settings → Send feedback, newest first. */
@@ -211,6 +230,7 @@ const Actions = {
     A.busy = null; render();
   },
   range(d) { A.range = Number(d.key) || 0; render(); },
+  openStep(d) { A.openStep = A.openStep === d.key ? null : d.key; render(); },
   unlock(d) { act('unlock', d.id); },
   deny(d) { act('deny', d.id); },
   revoke(d) { if (confirm('Revoke access for this household?')) act('revoke', d.id); },
@@ -240,6 +260,7 @@ document.addEventListener('submit', async e => {
   Backend.Auth.onChange(async user => {
     if (unwatch) { unwatch(); unwatch = null; }
     if (unwatchMetrics) { unwatchMetrics(); unwatchMetrics = null; }
+    if (unwatchUsers) { unwatchUsers(); unwatchUsers = null; }
     if (unwatchFeedback) { unwatchFeedback(); unwatchFeedback = null; }
     if (unwatchErrors) { unwatchErrors(); unwatchErrors = null; }
     A.feedback = []; A.errors = [];
@@ -254,6 +275,7 @@ document.addEventListener('submit', async e => {
       console.error(e); A.phase = 'error'; A.error = `Couldn't load requests (${e.code || 'error'}). Publish the latest firestore.rules.`; render();
     });
     unwatchMetrics = Backend.Admin.watchMetrics(list => { A.metrics = list; render(); }, e => console.error(e));
+    unwatchUsers = Backend.Admin.watchUsers(list => { A.users = list; render(); }, e => console.error(e));
     unwatchFeedback = Backend.Admin.watchFeedback(list => { A.feedback = list; render(); }, e => console.error(e));
     unwatchErrors = Backend.Admin.watchErrors(list => { A.errors = list; render(); }, e => console.error(e));
   });

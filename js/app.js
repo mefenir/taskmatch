@@ -794,6 +794,20 @@ const Actions = {
     const r = h.responsibilities.find(x => x.id === d.id) || Household.parentOf(h, d.id);
     if (r) Sheets.taskPeek(r);
   },
+  editName() { if (S.household) Sheets.editName(); },
+  toTop() { window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); },
+  saveName() {
+    const input = document.getElementById('edit-name');
+    const name = input ? input.value.trim().slice(0, 40) : '';
+    if (!name) { toast('Type a name first.'); if (input) input.focus(); return; }
+    const me = Household.member(S.household, S.user.uid);
+    Sheet.close();
+    if (!me || me.name === name) return;
+    Household.renameMember(S.household, S.user.uid, name);
+    save('members');
+    toast('Name saved.');
+    rerender();
+  },
   /** A task in the list: the row lights up, then its sheet slides in. */
   openTask(d, el) {
     if (el) el.classList.add('is-tapped');
@@ -1179,6 +1193,7 @@ function render(routeChanged) {
   fitButtons($app);
   applyBusy($app);
   animateMeters($app);
+  ToTop.place();
   if (changed) {
     window.scrollTo(0, 0);
     const heading = $app.querySelector('h1');
@@ -1245,6 +1260,33 @@ function go(name) {
   if (location.hash === '#/' + name) render(true);
   else location.hash = '#/' + name;
 }
+
+/* ---------- Back to the top: a round arrow, bottom right, once the page has scrolled ---------- */
+const ToTop = (() => {
+  let btn = null;
+  const ensure = () => {
+    if (btn) return btn;
+    btn = document.createElement('button');
+    btn.className = 'to-top';
+    btn.type = 'button';
+    btn.dataset.action = 'toTop';
+    btn.setAttribute('aria-label', 'Back to the top');
+    btn.innerHTML = Icon.up;
+    document.body.appendChild(btn);
+    return btn;
+  };
+  return {
+    /** Sit above whatever is fixed at the bottom (the tabs, a bottom bar), and show only once scrolled. */
+    place() {
+      const b = ensure();
+      const fixed = [...document.querySelectorAll('.bottom-nav, .bottom-bar')].filter(el => el.offsetParent || getComputedStyle(el).position === 'fixed');
+      const lift = fixed.reduce((m, el) => Math.max(m, el.getBoundingClientRect().height), 0);
+      b.style.setProperty('--lift', `${Math.round(lift)}px`);
+      b.classList.toggle('show', window.scrollY > 240);
+    },
+  };
+})();
+window.addEventListener('scroll', () => ToTop.place(), { passive: true });
 
 /* ---------- events ---------- */
 window.addEventListener('hashchange', () => render(true));
