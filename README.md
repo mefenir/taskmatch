@@ -18,7 +18,8 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
    - Something marked → **Rebalance with my answers**: a fair split from both answers, then both say yes.
 5. **Two tabs once the plan runs:**
    - **Today** (mine): "Hello, Ian" and a playful line for the time of day and how my day is going (48 lines, never about the partner, never guilt), a big progress bar of today's minutes done, the next seven days, my tasks and anything from the board for me.
-   - **Home** (ours): one bar in one colour for what both have done today (no per-person score), everything waiting for me (swaps, share-outs, suggestions, payment), the board, who does what with Swap, and the home's tasks and times.
+   - **Home** (ours): one bar in one colour for what both have done today (no per-person score), everything waiting for me (swaps, share-outs, suggestions, payment), the board (gold edge and "N need action" while something waits for me; items tagged For you / Up for grabs / New), who does what with Swap, and the home's tasks and times.
+   - **Weekly days**: tap one of your weekly or two-weekly tasks on Home and pick M T W T F S S. It shows on Today only that day, until you change it; only the person doing it can. Missed, it stays as one line ("From Wednesday", on Sunday "Last day this week"); on Monday it goes back to its own day. Monthly tasks stay automatic.
    - **Settings** (gear, top right): You (name, sign-in, my answers), Our home (people and invite, your home, tasks, times, reshuffle; the partner gets "Suggest a change"), Subscription, Help & legal, then Sign out and, apart, Leave household / Delete household / Delete my account. Every row shows its current state.
 
 **Leaving and deleting**
@@ -171,7 +172,7 @@ docs/PRODUCT_BRIEF.md Product spec
 | Path | What | Who can write |
 |---|---|---|
 | `users/{uid}` | email, display name, which household, codes of invites they made | that user (and deletes it with their account) |
-| `households/{hid}` | organiser, members, partner name, rooms, children, pets, tasks (with times), suggestions, preferences, plan, swaps, completions, notes | organiser; partner only own preferences plus plan, swaps, ticks, suggestions and notes |
+| `households/{hid}` | organiser, members, partner name, rooms, children, pets, tasks (with times), suggestions, preferences, plan, swaps, completions, weekdays, notes | organiser; partner only own preferences plus plan, swaps, ticks, task days, suggestions and notes |
 | `invites/{code}` | household, expiry, who used it | members create; invitee redeems once |
 | `subscriptions/{uid}` | `plan`, `active`, optional `expiresAt` | admin only |
 | `premiumRequests/{uid}` | name, email, household size, status (`pending` / `approved` / `denied` / `revoked`) | the person asks; admin decides |

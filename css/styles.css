@@ -119,6 +119,12 @@ button.row:active{background:var(--surface-2)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1.5px solid var(--line);background:transparent;border-radius:999px;padding:8px 16px;min-height:40px;cursor:pointer;font-weight:500;font-size:15px}
 .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.weekday-picker{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px}
+.chip.weekday{padding:0;min-height:44px;font-weight:650;display:grid;place-items:center}
+.weekday-note{text-align:left;margin:0 0 16px}
+.last-day{color:var(--premium);font-weight:650}
+.weekday-read{margin:0 0 16px;color:var(--muted)}
+.weekday-read .muted, .section-title .muted{color:var(--muted);font-weight:500}
 
 /* Gold accent: subscription and plans */
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:650;letter-spacing:.02em;padding:3px 8px;border-radius:999px;background:var(--premium-soft);color:var(--premium);flex:none}

@@ -666,7 +666,7 @@ const Screens = {
         ${board.length ? `<div class="section-head"><h2 class="section-title">From the board</h2></div>
           <div class="card">${board.map(n => noteTaskRow(h, n, me, false)).join('')}</div>` : ''}
         ${open.length || done.length ? `<div class="section-head"><h2 class="section-title">Your tasks today</h2></div><div class="card">
-            ${open.map(x => tick(x.r, x.due < today ? `Was due ${Schedule.relative(x.due, now).toLowerCase()}` : freqLabel(x.r))).join('')}
+            ${open.map(x => tick(x.r, lateLabel(x.r, x.due, today, now) || freqLabel(x.r))).join('')}
             ${done.map(r => tick(r, 'Done today')).join('')}
           </div>` : (board.length ? '' : `<div class="celebrate">Nothing due today.</div>`)}
         ${whenNeeded.length ? `<div class="section-head"><h2 class="section-title">When needed</h2></div>
@@ -835,7 +835,7 @@ function whoDoesWhat(h) {
       ? (pending ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(r.id)}">Swap</button>`)
       : '';
     return `<div class="row static"><button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title">${esc(r.name)}</span>
-      <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${esc(Timing.label(r))}</span></button>${right}</div>`;
+      <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${taskLabel(h, r)}</span></button>${right}</div>`;
   };
   const list = (title, items, own) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
     <div class="card">${items.length ? items.map(r => row(r, own)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
@@ -851,6 +851,36 @@ function whoDoesWhat(h) {
   return list('Your tasks', Household.tasksOf(h, me), true)
     + others.map(m => list(`${esc(Household.memberName(m))}'s tasks${m.placeholder ? ' (suggested)' : ''}`, Household.tasksOf(h, m.uid), false)).join('')
     + fresh;
+}
+/** A task still open after its day. Weekly ones say which day they were from, and on Sunday that it's the last day. */
+function lateLabel(r, due, today, now) {
+  if (!(due < today)) return '';
+  if (!Household.keepsWeekday(r)) return `Was due ${Schedule.relative(due, now).toLowerCase()}`;
+  if (Schedule.weekdayIndex(today) === 6) return '<b class="last-day">Last day this week</b>';
+  return `From ${Schedule.WEEKDAYS[Schedule.weekdayIndex(due)]}`;
+}
+/** "Weekly · 60 min · Wednesdays" on Home, once the plan is running. */
+function taskLabel(h, r) {
+  const base = Timing.label(r);
+  if (Household.stage(h) !== 'active' || !Household.keepsWeekday(r) || !Household.peopleIds(h).includes(Household.assignee(h, r.id))) return esc(base);
+  return `${esc(base)} · ${Schedule.WEEKDAYS[Household.weekdayOf(h, r)]}s`;
+}
+/** Weekly and two-weekly tasks in a running plan: whoever does it picks the day; the other sees it. */
+function weekdayPicker(h, u) {
+  if (!u || Household.stage(h) !== 'active' || !Household.keepsWeekday(u)) return '';
+  const who = Household.assignee(h, u.id);
+  if (!who || !Household.peopleIds(h).includes(who)) return '';
+  const day = Household.weekdayOf(h, u);
+  const every = Timing.of(u).frequency === 'fortnightly' ? 'Every other' : 'Every';
+  const label = u.parentId ? ` <span class="muted">· ${esc(u.name)}</span>` : '';
+  if (who !== S.user.uid) {
+    const name = esc(Household.memberName(Household.member(h, who)));
+    return `<p class="weekday-read">${name} does it: ${every.toLowerCase()} ${Schedule.WEEKDAYS[day]}${label}</p>`;
+  }
+  return `<h3 class="section-title" style="margin:0 0 8px">Which day?${label}</h3>
+    <div class="weekday-picker" role="group" aria-label="Day of the week">${Schedule.WEEKDAYS.map((n, i) =>
+      `<button class="chip weekday" data-action="setWeekday" data-id="${esc(u.id)}" data-key="${i}" aria-pressed="${i === day}" aria-label="${n}">${n[0]}</button>`).join('')}</div>
+    <p class="fine weekday-note">${every} ${Schedule.WEEKDAYS[day]}. It shows on your Today list that day.</p>`;
 }
 /** New tasks nobody has yet (after "not now" in a share-out): anyone can take one. */
 function needsAHome(h) {
@@ -1240,8 +1270,10 @@ const Sheets = {
   },
 
   /** What a task includes, and breaking it into parts. */
-  taskPeek(r) {
+  taskPeek(r, unit) {
+    const h = S.household;
     const split = Household.parts(r).length > 0;
+    const u = unit || r;
     const parts = split ? Household.parts(r).map(p => p.name) : Library.parts(r.libraryId);
     const assignee = Household.assignee(S.household, r.id);
     const who = assignee ? (assignee === S.user.uid ? 'Yours' : `${Household.memberName(Household.member(S.household, assignee))}'s`) : '';
@@ -1249,6 +1281,7 @@ const Sheets = {
     const removable = isOrg && !r.predefined && !r.parentId;
     Sheet.open(`<h2>${esc(r.name)}</h2>
       <p style="margin-bottom:12px">${who ? esc(who) + ' · ' : ''}${esc(Timing.label(r))}${r.mentalLoad ? ' · Mental load' : ''}</p>
+      ${weekdayPicker(h, u)}
       ${removable ? `<button class="btn ghost text-danger" data-action="removeTask" data-id="${esc(r.id)}">Remove this task</button>` : ''}
       ${parts.length ? `<h3 class="section-title" style="margin:0 0 8px">${split ? 'Broken into' : 'Includes'}</h3>
         <ul class="part-chips">${parts.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}

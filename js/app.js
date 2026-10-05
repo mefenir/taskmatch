@@ -791,7 +791,19 @@ const Actions = {
   peek(d) {
     const h = S.household;
     const r = h.responsibilities.find(x => x.id === d.id) || Household.parentOf(h, d.id);
-    if (r) Sheets.taskPeek(r);
+    if (r) Sheets.taskPeek(r, Household.unit(h, d.id));
+  },
+  /** Whoever does a weekly task picks its day; it stays until they change it. */
+  setWeekday(d) {
+    const h = S.household;
+    const day = Number(d.key);
+    const u = Household.unit(h, d.id);
+    if (!u || !Household.setWeekday(h, S.user.uid, d.id, day)) return;
+    save('weekdays');
+    const r = h.responsibilities.find(x => x.id === d.id) || Household.parentOf(h, d.id);
+    if (r) Sheets.taskPeek(r, u);
+    rerender();
+    toast(`${u.name}: every ${Timing.of(u).frequency === 'fortnightly' ? 'other ' : ''}${Schedule.WEEKDAYS[day]}`);
   },
   choosePlan(d) { if (d.key === 'yearly' || d.key === 'monthly') { S.planChoice = d.key; rerender(); } },
   /**

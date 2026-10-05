@@ -68,7 +68,8 @@ service cloud.firestore {
           && request.resource.data.memberIds.size() <= 2
           && request.resource.data.get('suggestions', []).size() <= 200
           && request.resource.data.get('swaps', []).size() <= 300
-          && request.resource.data.get('notes', []).size() <= 200;
+          && request.resource.data.get('notes', []).size() <= 200
+          && request.resource.data.get('weekdays', {}).size() <= 600;
       }
 
       // The owner can change anything except who owns it and who's in it.
@@ -89,7 +90,7 @@ service cloud.firestore {
         return request.auth.uid in resource.data.memberIds
           && request.auth.uid != resource.data.ownerId
           && changed.hasOnly(['suggestions', 'preferences', 'plan', 'swaps', 'completions',
-                              'reshare', 'reshuffle', 'planSeed', 'previousAssignments', 'notes', 'updatedAt'])
+                              'reshare', 'reshuffle', 'planSeed', 'previousAssignments', 'notes', 'weekdays', 'updatedAt'])
           && preferencesChanged.hasOnly([request.auth.uid]);
       }
 

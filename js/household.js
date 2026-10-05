@@ -22,6 +22,7 @@
                signature, accepted: { [uid]: at }, rebalancedBy?, createdAt, startedAt }
    swaps       [{ id, from, to, respId, status: 'pending'|'done'|'declined', gave?, at, resolvedAt?, seen? }]
    completions { [unitId]: { last, prev, by } }
+   weekdays { [unitId]: { day: 0–6, Monday first, at } }   (weekly and two-weekly tasks; set by whoever does it)
    reshare, reshuffle, notes — see their sections below
    ========================================================= */
 const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], children: [0, 8] };
@@ -71,6 +72,9 @@ const Household = {
     if (h.reshuffle != null && !isObj(h.reshuffle)) h.reshuffle = null;
     if (!isObj(h.settings)) h.settings = {};
     if (!isObj(h.preferences)) h.preferences = {};
+    h.weekdays = isObj(h.weekdays) ? Object.fromEntries(Object.entries(h.weekdays)
+      .filter(([id, w]) => okId(id) && isObj(w) && Number.isInteger(w.day) && w.day >= 0 && w.day <= 6)
+      .map(([id, w]) => [id, { day: w.day, at: Number(w.at) || 0 }])) : {};
     return h;
   },
 
@@ -363,7 +367,8 @@ const Household = {
   isSplit(r) { return this.parts(r).length > 0; },
   partUnit(r, p) {
     return { id: p.id, parentId: r.id, parentName: r.name, name: p.name, minutes: p.minutes, frequency: p.frequency,
-      category: r.category, libraryId: null, mentalLoad: !!p.mentalLoad, custom: !!p.custom };
+      category: r.category, libraryId: null, mentalLoad: !!p.mentalLoad, custom: !!p.custom,
+      createdAt: p.createdAt || r.createdAt || null };
   },
   units(h) {
     const out = [];
@@ -500,7 +505,8 @@ const Household = {
     r.parts = parts.map(p => {
       const old = byName.get(String(p.name).toLowerCase());
       return { id: old ? old.id : uid(), name: String(p.name).slice(0, 60), minutes: Number(p.minutes) || 10,
-        frequency: p.frequency || Timing.of(r).frequency, ...(p.custom ? { custom: true } : {}) };
+        frequency: p.frequency || Timing.of(r).frequency, ...(p.custom ? { custom: true } : {}),
+        createdAt: (old && old.createdAt) || new Date().toISOString() };
     });
   },
   /** Parts that haven't been shared out yet (they sit with the task's owner for now). */
@@ -612,11 +618,79 @@ const Household = {
     const i = same.indexOf(r.id);
     return i < 0 ? 0 : Math.floor(i * period / same.length);
   },
-  dueDate(h, r) {
+  /**
+   * When the scheduled unit is next due. Weekly and two-weekly tasks keep to a day of the week
+   * (weekdayOf); missed, they stay due until Sunday, and on Monday they go back to their own day.
+   */
+  dueDate(h, r, now = new Date()) {
+    if (this.keepsWeekday(r)) return this.weekdayDue(h, r, now);
     return Schedule.nextDue(r, this.completion(h, r.id), h.plan && h.plan.startedAt, this.firstOffset(h, r));
   },
+
+  /* ---------- A day of the week for weekly and two-weekly tasks ----------
+   * weekdays { unitId: { day: 0–6 (Monday first), at: ms } } — set by whoever does the task.
+   * Without a choice, the task keeps the day the plan spread it to. */
+  keepsWeekday(u) { return ['weekly', 'fortnightly'].includes(Timing.of(u).frequency); },
+  startDay(h) { return Schedule.day((h.plan && h.plan.startedAt) || Date.now()); },
+  /** The day the plan spread it to, the first time round. */
+  spreadDay(h, u) { return Schedule.addDays(this.startDay(h), this.firstOffset(h, u)); },
+  weekdayChoice(h, id) {
+    const w = isObj(h.weekdays) ? h.weekdays[id] : null;
+    return w && Number.isInteger(w.day) && w.day >= 0 && w.day <= 6 ? w : null;
+  },
+  weekdayOf(h, u) {
+    const w = this.weekdayChoice(h, u.id);
+    return w ? w.day : Schedule.weekdayIndex(this.spreadDay(h, u));
+  },
+  /** Two-weekly tasks: is this one of its weeks? */
+  inItsWeek(h, u, monday) {
+    if (Timing.of(u).frequency !== 'fortnightly') return true;
+    const start = this.startDay(h);
+    const parity = ((Schedule.weeksBetween(start, this.spreadDay(h, u)) % 2) + 2) % 2;
+    return ((Schedule.weeksBetween(start, monday) % 2) + 2) % 2 === parity;
+  },
+  /** Nothing is due before the plan started, the task was added, or its day was last changed. */
+  sinceDay(h, u) {
+    const days = [this.startDay(h)];
+    const created = u.createdAt || ((h.responsibilities.find(r => r.id === u.parentId) || {}).createdAt);
+    if (created) days.push(Schedule.day(created));
+    const w = this.weekdayChoice(h, u.id);
+    if (w && w.at) days.push(Schedule.day(w.at));
+    return new Date(Math.max(...days.map(d => d.getTime())));
+  },
+  weekdayDue(h, u, now = new Date()) {
+    const today = Schedule.day(now);
+    const monday = Schedule.mondayOf(today);
+    const day = this.weekdayOf(h, u);
+    const since = this.sinceDay(h, u);
+    const c = this.completion(h, u.id);
+    for (let k = 0; k < 4; k++) {
+      const m = Schedule.addDays(monday, 7 * k);
+      if (!this.inItsWeek(h, u, m)) continue;
+      const due = Schedule.addDays(m, day);
+      if (k === 0 && c && c.last && Schedule.day(c.last) >= m) continue;   // done this week
+      if (due < since) continue;
+      return due;
+    }
+    return Schedule.addDays(monday, 28 + day);
+  },
+  /** Only the person doing it picks its day. */
+  setWeekday(h, userId, unitId, day) {
+    const u = this.unit(h, unitId);
+    if (!u || !this.keepsWeekday(u) || this.assignee(h, unitId) !== userId) return false;
+    if (!Number.isInteger(day) || day < 0 || day > 6) return false;
+    if (this.weekdayOf(h, u) === day) return false;
+    h.weekdays = { ...(isObj(h.weekdays) ? h.weekdays : {}), [unitId]: { day, at: Date.now() } };
+    return true;
+  },
+
   /** Is a scheduled unit due on `day`? Anything overdue counts as due today. */
   dueOn(h, r, day, today = new Date()) {
+    if (this.keepsWeekday(r)) {
+      const d = Schedule.day(day);
+      if (d.getTime() === Schedule.day(today).getTime()) return this.weekdayDue(h, r, today) <= d;
+      return this.weekdayDue(h, r, d).getTime() === d.getTime();
+    }
     const f = Timing.frequency(Timing.of(r).frequency);
     let d = this.dueDate(h, r);
     if (!d) return false;

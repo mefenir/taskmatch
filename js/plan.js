@@ -124,7 +124,6 @@ const Schedule = {
     else if (f.everyMonths) x.setMonth(x.getMonth() + f.everyMonths);
     return x;
   },
-  /** Next due day of a scheduled responsibility, or null when it's "as needed". */
   /** Next due day of a scheduled responsibility, or null when it's "as needed".
    *  firstOffsetDays spreads the very first round so not everything is due on day one. */
   nextDue(r, completion, startedAt, firstOffsetDays = 0) {
@@ -134,6 +133,11 @@ const Schedule = {
     return this.addDays(this.day(startedAt || Date.now()), firstOffsetDays);
   },
   periodDays(f) { return f.everyDays || (f.everyMonths ? 30 * f.everyMonths : 0); },
+  /** Weeks start on Monday. Weekday index: 0 = Monday … 6 = Sunday. */
+  weekdayIndex: d => (new Date(d).getDay() + 6) % 7,
+  mondayOf(d) { const x = this.day(d); return this.addDays(x, -this.weekdayIndex(x)); },
+  weeksBetween(a, b) { return Math.round((this.mondayOf(b) - this.mondayOf(a)) / (7 * 864e5)); },
+  WEEKDAYS: Object.freeze(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']),
   doneOn(completion, day) {
     return !!(completion && completion.last && this.day(completion.last).getTime() === this.day(day).getTime());
   },
