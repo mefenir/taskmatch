@@ -165,24 +165,20 @@ function bottomNav(current, dots = {}) {
       <span class="nav-icon">${icon}${dot ? '<span class="nav-dot" aria-hidden="true"></span>' : ''}</span><span>${label}</span></button>`;
   };
   return `<nav class="bottom-nav" aria-label="Main"><div class="inner">
-    ${item('today', 'Today', svg('<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>'))}
-    ${item('household', 'Home', svg('<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M10 20v-6h4v6"/>'))}
+    ${item('today', 'Me', svg('<circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>'))}
+    ${item('household', 'Us', svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M15.5 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>'))}
   </div></nav>`;
 }
 
-/* ---------- Progress block: a big number on a bar that fills by time done ----------
-   The number is drawn twice: dark over the empty part, light over the filled part, clipped
-   at the same edge, so it stays readable at any percentage. It slides from the last value. */
+/* ---------- Progress line: a slim bar that fills by time done, sliding from the last value ---------- */
 const meterLast = {};
-function meter(key, pct, label, sub) {
+function progressBar(pct, label, sub) {
+  const key = 'me';
   const from = key in meterLast ? meterLast[key] : 0;
   return `<div class="meter-card">
     <div class="meter-head"><span class="meter-label">${label}</span><span class="meter-sub">${sub}</span></div>
-    <div class="meter" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"
-      data-meter="${esc(key)}" data-pct="${pct}" style="--p:${from}%">
-      <div class="meter-fill"></div>
-      <span class="meter-num" aria-hidden="true">${pct}%</span><span class="meter-num on" aria-hidden="true">${pct}%</span>
-    </div></div>`;
+    <div class="meter slim" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"
+      data-meter="${key}" data-pct="${pct}" style="--p:${from}%"><div class="meter-fill"></div></div></div>`;
 }
 function animateMeters(root) {
   root.querySelectorAll('[data-meter]').forEach(m => {

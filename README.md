@@ -17,9 +17,7 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
    - Nothing marked → **Looks good, let's start**: the plan is active.
    - Something marked → **Rebalance with my answers**: a fair split from both answers, then both say yes.
 5. **Two tabs once the plan runs:**
-   - **Today** (mine): "Hello, Ian" and a playful line for the time of day and how my day is going (48 lines, never about the partner, never guilt), a big progress bar of today's minutes done, the next seven days, my tasks and anything from the board for me.
-   - **Home** (ours): one bar in one colour for what both have done today (no per-person score), everything waiting for me (swaps, share-outs, suggestions, payment), the board (gold edge and "N need action" while something waits for me; items tagged For you / Up for grabs / New), who does what with Swap, and the home's tasks and times.
-   - **When**: every task that isn't daily has a *When* button next to Swap (only on your own tasks; only the person doing a task can change it). Several times a week and weekly: tap any days M–S (all seven turns it into daily; the fair split counts the chosen days). Every two weeks: one day, every other week. Monthly: the week (1st–4th or last) and the day. Occasional: an optional date, cleared when you tick it. Today shows only what falls on that day; nothing carries over, a missed task comes back on its next turn. Occasional tasks live on Home ("last done…", or "Planned for 14 Nov, not done").
+   - **Me and Us**: two tabs with one look. **Me** is what I do and tick: *Today* (daily tasks), *This week* (several times a week as "1 of 3", weekly, and two-weekly or monthly tasks in the week they're due; done whenever suits, never "late") and *Anytime* (occasional and as needed, with when it was last done). **Us** is the household at a glance and nothing is ticked there: each person's share of the week, anything that needs you, the board, and the tasks by category (closed until tapped) with a round initial for who has each. Tapping a task lights the row and opens its sheet: who has it, what it includes, Swap, Break into parts / Suggest a breakdown, I'll take it, Remove. The app owns the calendar: nobody picks days.
    - **Settings** (gear, top right): You (name, sign-in, my answers), Our home (people and invite, your home, tasks, times, reshuffle; the partner gets "Suggest a change"), Subscription, Help & legal, then Sign out and, apart, Leave household / Delete household / Delete my account. Every row shows its current state.
 
 **Leaving and deleting**
@@ -28,7 +26,7 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 - *Delete household* (organiser): gone for both; the partner is told. Same subscription choice.
 - *Delete my account* (anyone, also from the start screen): leaves or hands over (or deletes the household if alone), deletes the invites they made, their access request, their profile and their sign-in. A renewing subscription must be cancelled first. Firebase needs a recent sign-in, so after a few minutes the app asks to sign in again and then continues.
 - Invites stop working once the person who made them has left, and leaving deletes their unused invites.
-   Before the plan runs, Home is the only screen. New tasks in a running plan show under "New, waiting to be shared out" and go out together (both rate, fair split, both say yes). **Reshuffle** gives a fresh split after asking the other person.
+   Before the plan runs, the plan screen (same task list, categories open) is the only screen. New tasks in a running plan show under Needs you as "waiting to be shared out" and go out together (both rate, fair split, both say yes). **Reshuffle** gives a fresh split after asking the other person.
 
 The fair split (`js/plan.js`) shares by weekly effort (time × frequency), not by count. Clear oppositions (❤️ vs 🙃) go to the person who likes it; the rest is balanced. The same answers always give the same plan; the organiser is the tie-break, so the plan doesn't change when the partner joins.
 
@@ -176,7 +174,7 @@ docs/PRODUCT_BRIEF.md Product spec
 | Path | What | Who can write |
 |---|---|---|
 | `users/{uid}` | email, display name, which household, codes of invites they made | that user (and deletes it with their account) |
-| `households/{hid}` | organiser, members, partner name, rooms, children, pets, tasks (with times), suggestions, preferences, plan, swaps, completions, when, notes | organiser; partner only own preferences plus plan, swaps, ticks, when, suggestions and notes |
+| `households/{hid}` | organiser, members, partner name, rooms, children, pets, tasks (with times), suggestions, preferences, plan, swaps, completions, notes | organiser; partner only own preferences plus plan, swaps, ticks, suggestions and notes |
 | `invites/{code}` | household, expiry, who used it | members create; invitee redeems once |
 | `subscriptions/{uid}` | `plan`, `active`, optional `expiresAt` | admin only |
 | `premiumRequests/{uid}` | name, email, household size, status (`pending` / `approved` / `denied` / `revoked`) | the person asks; admin decides |

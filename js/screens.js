@@ -572,7 +572,7 @@ const Screens = {
       head = "Here's your plan";
       lead = by === me ? 'Rebalanced with your answers. Have a look and say yes if it works for you.'
         : by ? `${esc(Household.memberName(Household.member(h, by)))} marked a few things, so the plan was rebalanced. Have a look and say yes if it works for you.`
-        : "If something isn't to your taste, tap Swap. When you're both happy, say yes.";
+        : "If something isn't to your taste, tap it to swap. When you're both happy, say yes.";
       bottom = `<div class="bottom-bar">
         ${accepted
           ? `<p class="count">Waiting for ${waiting.join(' and ')} to say yes</p>`
@@ -590,92 +590,72 @@ const Screens = {
       ${suggestionsCard(h)}
       ${top}
       ${balanceCard(h)}
-      ${whoDoesWhat(h)}
+      ${taskMap(h, true)}
       ${isOrg ? `<button class="btn ghost" data-action="nav" data-to="frequency">Change times</button>` : ''}
       ${bottom}
     </main>`;
   },
 
-  /* ---------- Home: the control centre for both of you (once the plan runs) ---------- */
+  /* ---------- Us: the household at a glance. Nothing is ticked here. ---------- */
   household() {
     const h = S.household;
     const me = S.user.uid;
     const isOrg = Household.isOwner(h, me);
     if (!isOrg && S.suggestMode) return Screens.suggest();
     if (Household.stage(h) !== 'active') return Screens.plan();
-    const together = Household.dayProgress(h, h.memberIds);
-    const needs = statusBanner(h) + swapCards(h) + suggestionsCard(h) + needsAHome(h);
-    const total = h.responsibilities.length;
+    const needs = statusBanner(h) + swapCards(h) + suggestionsCard(h) + newTasksCard(h);
+    const names = Household.people(h).map(m => esc(Household.memberName(m).split(' ')[0])).join(' & ');
     return `<main class="screen has-nav">
       <div class="topbar"><span class="spacer"></span>
         ${settingsButton()}
       </div>
-      <h1 style="margin-top:0">Our home</h1>
-      <div class="members">${memberChips(h)}</div>
-      ${together.total
-        ? meter('together', together.pct, 'Today, together', `${formatMinutes(together.done)} of ${formatMinutes(together.total)} done`)
-        : `<div class="card"><div class="note" style="border:0">Nothing due today for either of you.</div></div>`}
+      <div class="greeting">
+        <p class="hello">${names}</p>
+        <h1 class="mood">Our home</h1>
+      </div>
+      ${balanceCard(h)}
       ${needs ? `<div class="section-head"><h2 class="section-title">Needs you</h2></div>${needs}` : ''}
       ${boardCard(h)}
-      <div class="section-head"><h2 class="section-title">Who does what</h2></div>
-      <p class="fine" style="text-align:left;margin:-4px 4px 10px">Tap Swap to hand something over, or When to choose your days.</p>
-      ${balanceCard(h)}
-      ${whoDoesWhat(h)}
-      <div class="section-head"><h2 class="section-title">The home</h2></div>
-      <div class="card"><div class="stats">
-        <div class="stat"><b>${total}</b><span>${total === 1 ? 'Task' : 'Tasks'}</span></div>
-        <div class="stat"><b>${formatMinutes(Household.weeklyTotal(h))}</b><span>A week, together</span></div>
-      </div></div>
+      ${taskMap(h, false)}
       ${isOrg ? addOwnRow('Add your own task') : ''}
       <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
       ${bottomNav('household', navDots(h))}
     </main>`;
   },
 
-  /* ---------- Today: your own mission control ---------- */
+  /* ---------- Me: what I do. Today, this week, anytime. Never about the partner. ---------- */
   today() {
     const h = S.household;
     const me = S.user.uid;
     const now = new Date();
-    const today = Schedule.day(now);
-    const offset = S.dayOffset || 0;
-    const day = Schedule.addDays(today, offset);
-    const mine = Household.units(h).filter(r => Household.assignee(h, r.id) === me);
+    const lists = Household.myLists(h, me, now);
     const progress = Household.dayProgress(h, [me], now);
     const first = esc(Household.memberName(Household.member(h, me)).split(' ')[0]);
-    const freqLabel = r => Timing.frequency(Timing.of(r).frequency).label;
-    const tick = (r, sub) => {
-      const done = Schedule.doneOn(Household.completion(h, r.id), now);
-      return `<button class="row ${done ? 'done' : ''}" data-action="toggleDone" data-id="${esc(r.id)}" aria-pressed="${done}">
+    const tick = (r, sub, done) => `<button class="row ${done ? 'done' : ''}" data-action="toggleDone" data-id="${esc(r.id)}" aria-pressed="${done}">
         <span class="check" aria-hidden="true">${Icon.check}</span>
         <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${sub}</span></div>
       </button>`;
-    };
+    const doneToday = r => Schedule.doneOn(Household.completion(h, r.id), now);
+    const section = (title, rows) => rows.length ? `<div class="section-head"><h2 class="section-title">${title}</h2></div><div class="card">${rows.join('')}</div>` : '';
+    const byOpen = (a, b) => Number(a.done) - Number(b.done);
 
-    let body;
-    if (offset === 0) {
-      const doneToday = r => Schedule.doneOn(Household.completion(h, r.id), now);
-      const open = mine.filter(r => Household.occursOn(h, r, today) && !doneToday(r));
-      const done = mine.filter(doneToday);
-      const board = Household.myNoteTasks(h, me);
-      body = `${progress.total ? meter('me', progress.pct, 'Your day',
-          progress.left ? `${plural(progress.left, 'task')} · ${formatMinutes(progress.total - progress.done)} left` : 'All done') : ''}
-        ${dayStrip(h, mine, today, offset)}
-        ${board.length ? `<div class="section-head"><h2 class="section-title">From the board</h2></div>
-          <div class="card">${board.map(n => noteTaskRow(h, n, me, false)).join('')}</div>` : ''}
-        ${open.length || done.length ? `<div class="section-head"><h2 class="section-title">Your tasks today</h2></div><div class="card">
-            ${open.map(r => tick(r, esc(freqLabel(r)))).join('')}
-            ${done.map(r => tick(r, 'Done today')).join('')}
-          </div>` : (board.length ? '' : `<div class="celebrate">Nothing due today.</div>`)}`;
-    } else {
-      const due = mine.filter(r => Household.occursOn(h, r, day));
-      const name = day.toLocaleDateString(undefined, { weekday: 'long' });
-      body = `${dayStrip(h, mine, today, offset)}
-        <div class="section-head"><h2 class="section-title">${esc(Schedule.relative(day, now) === 'Tomorrow' ? 'Tomorrow' : name)}</h2><span class="section-meta">${due.length ? formatMinutes(due.reduce((t, r) => t + Timing.of(r).minutes, 0)) : ''}</span></div>
-        ${due.length ? `<div class="card">${due.map(r => `<div class="row static"><div class="row-text"><span class="row-title">${esc(r.name)}</span>
-            <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${esc(freqLabel(r))} · ${formatMinutes(Timing.of(r).minutes)}</span></div></div>`).join('')}</div>`
-          : `<div class="celebrate">Nothing due ${esc(name)}.</div>`}`;
-    }
+    const today = lists.today.map(r => ({ r, done: doneToday(r) })).sort(byOpen)
+      .map(x => tick(x.r, x.done ? 'Done today' : formatMinutes(Timing.of(x.r).minutes), x.done));
+    const week = lists.week.map(r => {
+      const target = Household.weekTarget(r), ticks = Household.weekTicks(h, r, now);
+      const done = Household.doneForNow(h, r, now);
+      const sub = target > 1 ? `${Math.min(ticks, target)} of ${target} this week${doneToday(r) && !done ? ' · done today' : ''}`
+        : done ? 'Done this week' : esc(Timing.label(r));
+      // A several-times task can be ticked once a day: today's tick shows as ticked until tomorrow.
+      return { r, done: done || doneToday(r), sub };
+    }).sort(byOpen).map(x => tick(x.r, x.sub, x.done));
+    const anytime = lists.anytime.map(r => {
+      const c = Household.completion(h, r.id);
+      const done = doneToday(r);
+      return { r, done, sub: done ? 'Done today' : c && c.last ? `Last done ${esc(Schedule.relative(c.last, now).toLowerCase())}` : 'Whenever it\'s needed' };
+    }).sort(byOpen).map(x => tick(x.r, x.sub, x.done));
+    const board = Household.myNoteTasks(h, me);
+    const nothing = !today.length && !week.length && !anytime.length && !board.length;
 
     return `<main class="screen has-nav">
       <div class="topbar"><span class="spacer"></span>
@@ -685,7 +665,14 @@ const Screens = {
         <p class="hello">Hello, ${first}</p>
         <h1 class="mood">${esc(Mood.line(now, progress))}</h1>
       </div>
-      ${body}
+      ${progress.count ? progressBar(progress.pct, 'Your day', progress.left ? `${progress.doneCount} of ${progress.count} done` : 'All done') : ''}
+      ${board.length ? `<div class="section-head"><h2 class="section-title">From the board</h2></div>
+        <div class="card">${board.map(n => noteTaskRow(h, n, me, false)).join('')}</div>` : ''}
+      ${section('Today', today)}
+      ${section('This week', week)}
+      ${section('Anytime', anytime)}
+      ${nothing ? '<div class="celebrate">Nothing on your list.</div>' : ''}
+      <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
       ${bottomNav('today', navDots(h))}
     </main>`;
   },
@@ -819,61 +806,81 @@ const Screens = {
 function balanceCard(h) {
   const me = S.user.uid;
   const loads = Household.loads(h);
-  return `<div class="card"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${Household.people(h).map(m =>
-    `<div style="display:flex;justify-content:space-between"><span>${esc(m.uid === me ? 'You' : Household.memberName(m))}</span><span class="sub">about ${formatMinutes(loads[m.uid] || 0)} a week</span></div>`).join('')}</div></div>`;
+  return `<div class="card balance-card">${Household.people(h).map(m =>
+    `<div class="balance-line"><span class="owner ${m.uid === me ? 'me' : ''}" aria-hidden="true">${esc(initialOf(h, m.uid))}</span>
+      <span class="balance-name">${esc(m.uid === me ? 'You' : Household.memberName(m))}${m.placeholder ? ' <span class="muted">(suggested)</span>' : ''}</span>
+      <span class="balance-sub">about ${formatMinutes(loads[m.uid] || 0)} a week</span></div>`).join('')}</div>`;
 }
-/** Everyone's tasks; mine can be swapped once both people are in. */
-function whoDoesWhat(h) {
+/** One or two letters for a person, unique within the household. */
+function initialOf(h, uid) {
+  const people = Household.people(h);
+  const name = m => Household.memberName(m).trim() || '?';
+  const m = people.find(p => p.uid === uid);
+  if (!m) return '';
+  const one = name(m)[0].toUpperCase();
+  const clash = people.some(p => p.uid !== uid && name(p)[0].toUpperCase() === one);
+  return clash ? name(m).slice(0, 2).replace(/^./, c => c.toUpperCase()) : one;
+}
+/** Who looks after a task, as small round initials (dashed when nobody has it yet). */
+function ownerBadges(h, r) {
   const me = S.user.uid;
-  const canSwap = !Household.alone(h);
-  const row = (r, own) => {
-    const pending = Household.pendingFor(h, r.id);
-    const swap = own && canSwap
-      ? (pending ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(r.id)}">Swap</button>`)
-      : '';
-    const when = own && canWhen(h, r) ? `<button class="mini" data-action="openWhen" data-id="${esc(r.id)}" aria-label="When: ${esc(r.name)}">📅 When</button>` : '';
-    const right = when || swap ? `<span class="row-actions">${when}${swap}</span>` : '';
-    return `<div class="row static"><button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title">${esc(r.name)}</span>
-      <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${taskLabel(h, r)}</span></button>${right}</div>`;
-  };
-  const list = (title, items, own) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
-    <div class="card">${items.length ? items.map(r => row(r, own)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
-  const others = Household.people(h).filter(m => m.uid !== me);
-  // Added to a running plan and not shared out yet (those left under "Needs a home" are shown there).
-  const skipped = new Set((h.plan && h.plan.skipped) || []);
-  const waiting = Household.stage(h) === 'active'
-    ? Household.units(h).filter(u => !Household.peopleIds(h).includes(Household.assignee(h, u.id)) && !skipped.has(u.id)) : [];
-  const sharing = !!Household.activeReshare(h);
-  const fresh = waiting.length ? `<div class="section-head"><h2 class="section-title">New, waiting to be shared out</h2><span class="section-meta">${waiting.length}</span></div>
-    <div class="card">${waiting.map(r => row(r, false)).join('')}</div>
-    ${!sharing && Household.isOwner(h, me) ? `<button class="btn secondary" data-action="shareNow">Share ${waiting.length === 1 ? 'it' : 'them'} out now</button>` : ''}` : '';
-  return list('Your tasks', Household.tasksOf(h, me), true)
-    + others.map(m => list(`${esc(Household.memberName(m))}'s tasks${m.placeholder ? ' (suggested)' : ''}`, Household.tasksOf(h, m.uid), false)).join('')
-    + fresh;
+  const people = Household.peopleIds(h);
+  const units = Household.isSplit(r) ? Household.parts(r).map(p => p.id) : [r.id];
+  const owners = [...new Set(units.map(id => Household.assignee(h, id)).map(x => (people.includes(x) ? x : null)))];
+  const label = uid => !uid ? 'Nobody yet' : uid === me ? 'Yours' : `${Household.memberName(Household.member(h, uid))}'s`;
+  const sorted = owners.sort((x, y) => (x === me ? -1 : y === me ? 1 : x ? -1 : 1));
+  return `<span class="owners" aria-label="${esc(sorted.map(label).join(', '))}">${sorted.map(uid => uid
+    ? `<span class="owner ${uid === me ? 'me' : ''}" aria-hidden="true">${esc(initialOf(h, uid))}</span>`
+    : '<span class="owner none" aria-hidden="true"></span>').join('')}</span>`;
 }
-/** Does this task have a "when" the person can set? (A running plan, a task that isn't daily.) */
-function canWhen(h, r) {
-  return Household.stage(h) === 'active' && !!Household.whenKind(r) && Household.peopleIds(h).includes(Household.assignee(h, r.id));
+/** The household's tasks by category, each category opening in place. Tapping a task opens its sheet. */
+function taskMap(h, openAll) {
+  const me = S.user.uid;
+  const people = Household.peopleIds(h);
+  const open = S.openCats || {};
+  return `<div class="section-head"><h2 class="section-title">The tasks</h2><span class="section-meta">${h.responsibilities.length}</span></div>
+    <div class="card task-map">${Household.inventory(h).map(({ category, items }) => {
+      const expanded = category.id in open ? open[category.id] : !!openAll;
+      const mine = items.filter(r => {
+        const ids = Household.isSplit(r) ? Household.parts(r).map(p => p.id) : [r.id];
+        return ids.some(id => Household.assignee(h, id) === me);
+      }).length;
+      const sub = `${plural(items.length, 'task')}${people.includes(me) && Household.stage(h) !== 'setup' ? ` · ${mine} yours` : ''}`;
+      const rows = expanded ? items.map(r => {
+        const parts = Household.parts(r).length;
+        return `<button class="row task-row" data-action="openTask" data-id="${esc(r.id)}">
+          <div class="row-text"><span class="row-title">${esc(r.name)}</span>
+            <span class="row-sub">${esc(Timing.label(r))}${parts ? ` · ${plural(parts, 'part')}` : ''}${r.mentalLoad ? ' · Mental load' : ''}</span></div>
+          ${ownerBadges(h, r)}</button>`;
+      }).join('') : '';
+      return `<button class="row cat-head" data-action="toggleCat" data-key="${esc(category.id)}" aria-expanded="${expanded}">
+          <div class="row-text"><span class="row-title">${esc(category.name)}</span><span class="row-sub">${sub}</span></div>
+          <span class="chev" aria-hidden="true">${Icon.chev}</span></button>${rows}`;
+    }).join('')}</div>`;
 }
-/** "Weekly · 60 min · Wednesdays" on Home, once the plan is running. */
-function taskLabel(h, r) {
-  const base = Timing.label(r);
-  if (Household.stage(h) !== 'active' || !Household.whenKind(r) || !Household.peopleIds(h).includes(Household.assignee(h, r.id))) return esc(base);
-  const text = Household.whenText(h, r);
-  if (Household.whenKind(r) !== 'date') return `${esc(base)} · ${esc(text)}`;
-  if (text) return `${esc(base)} · ${esc(text)}${Household.plannedMissed(h, r) ? ', not done' : ''}`;
-  const c = Household.completion(h, r.id);
-  return `${esc(base)}${c && c.last ? ` · last done ${esc(Schedule.relative(c.last, new Date()).toLowerCase())}` : ''}`;
-}
-/** New tasks nobody has yet (after "not now" in a share-out): anyone can take one. */
-function needsAHome(h) {
-  if (Household.stage(h) !== 'active') return '';
+/** Tasks nobody has yet (after "not now" in a share-out). */
+function homeless(h) {
+  if (Household.stage(h) !== 'active') return [];
   const sharing = new Set(((Household.activeReshare(h) || {}).unitIds) || []);
-  const items = Household.unassigned(h).filter(u => !sharing.has(u.id));
-  if (!items.length) return '';
-  return `<div class="card"><div class="row static"><div class="row-text"><span class="row-title">Needs a home</span><span class="row-sub">Nobody has these yet</span></div></div>
-    ${items.map(r => `<div class="row static"><button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title">${esc(r.name)}</span>
-      <span class="row-sub">${esc(Timing.label(r))}</span></button><button class="mini" data-action="claim" data-id="${esc(r.id)}">I'll take it</button></div>`).join('')}</div>`;
+  return Household.unassigned(h).filter(u => !sharing.has(u.id));
+}
+/** New tasks waiting to be shared out, and tasks nobody has: one quiet card under "Needs you". */
+function newTasksCard(h) {
+  if (Household.stage(h) !== 'active') return '';
+  const me = S.user.uid;
+  const skipped = new Set((h.plan && h.plan.skipped) || []);
+  const waiting = Household.units(h).filter(u => !Household.peopleIds(h).includes(Household.assignee(h, u.id)) && !skipped.has(u.id));
+  const sharing = !!Household.activeReshare(h);
+  const free = homeless(h);
+  let html = '';
+  if (waiting.length && !sharing) {
+    html += `<div class="result-card" role="status"><p class="plain" style="margin:0 0 12px">${plural(waiting.length, 'new task')} waiting to be shared out: ${esc(waiting.map(u => u.name).join(', '))}.</p>
+      ${Household.isOwner(h, me) ? `<button class="btn secondary" style="min-height:44px" data-action="shareNow">Share ${waiting.length === 1 ? 'it' : 'them'} out now</button>` : ''}</div>`;
+  }
+  if (free.length) {
+    html += `<div class="result-card" role="status"><p class="plain" style="margin:0">${plural(free.length, 'task')} without anyone yet: ${esc(free.map(u => u.name).join(', '))}. Tap ${free.length === 1 ? 'it' : 'one'} in the list to take it.</p></div>`;
+  }
+  return html;
 }
 /** Suggestions: the organiser decides; the partner sees their own, waiting. */
 function suggestionsCard(h) {
@@ -900,17 +907,6 @@ function suggestionsCard(h) {
     ${mine.map(x => `<div class="row static"><div class="row-text"><span class="row-title">${label(x)}</span></div>
       <button class="link-btn" data-action="withdrawSuggestion" data-id="${esc(x.id)}">Withdraw</button></div>`).join('')}</div>`;
 }
-/** The next seven days, starting today. A dot marks days with something of mine due. */
-function dayStrip(h, mine, today, offset) {
-  return `<div class="day-strip" role="group" aria-label="Pick a day">${[0, 1, 2, 3, 4, 5, 6].map(i => {
-    const d = Schedule.addDays(today, i);
-    const has = mine.some(r => Household.occursOn(h, r, d) && !(i === 0 && Schedule.doneOn(Household.completion(h, r.id), new Date())));
-    const name = d.toLocaleDateString(undefined, { weekday: 'short' });
-    return `<button class="day ${i === 0 ? 'is-today' : ''}" data-action="setDay" data-key="${i}" aria-pressed="${i === offset}" aria-label="${esc(d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))}${has ? ', something due' : ''}">
-      <span class="day-num">${d.getDate()}</span><span class="day-name">${esc(name)}</span><span class="day-dot ${has ? 'on' : ''}" aria-hidden="true"></span></button>`;
-  }).join('')}</div>`;
-}
-
 /* ---------- The line under "Hello, Ian": by time of day and how my day is going. Never about the partner. ---------- */
 const Mood = (() => {
   const LINES = {
@@ -1059,7 +1055,7 @@ function homeNeedsMe(h) {
   const rsh = Household.activeReshare(h);
   if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) return true;
   if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) return true;
-  if (needsAHome(h)) return true;
+  if (homeless(h).length) return true;
   if (Household.isOwner(h, me) && Household.suggestions(h).length) return true;
   if (boardWaiting(h).size) return true;
   return !!statusBanner(h);
@@ -1201,13 +1197,6 @@ function statusBanner(h) {
   return '';
 }
 
-function memberChips(h) {
-  return Household.people(h).map(m => {
-    const n = Household.memberName(m);
-    const you = m.uid === S.user.uid ? ' <span class="you">(you)</span>' : m.placeholder ? ' <span class="you">(invited)</span>' : '';
-    return `<span class="member"><span class="avatar" aria-hidden="true">${esc(n.charAt(0).toUpperCase())}</span>${esc(n)}${you}</span>`;
-  }).join('');
-}
 
 /* =========================================================
    SHEETS
@@ -1251,63 +1240,57 @@ const Sheets = {
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Add your own task');
   },
 
-  /** When a task happens. Whoever does it decides; the draft lives in S.whenDraft until Save. */
-  when(u) {
-    const w = S.whenDraft;
-    if (!w || w.id !== u.id) return;
+  /** One task: who has it, what it includes, and everything you can do with it (nothing is ticked here). */
+  taskPeek(r) {
     const h = S.household;
-    const kind = Household.whenKind(u);
-    const D = Schedule.WEEKDAYS;
-    const label = u.parentId ? ` <span class="muted">· ${esc(u.name)}</span>` : '';
-    const chips = (picked, many) => `<div class="weekday-picker" role="group" aria-label="${many ? 'Days of the week' : 'Day of the week'}">${D.map((n, i) =>
-      `<button class="chip weekday" data-action="whenDay" data-key="${i}" aria-pressed="${picked.includes(i)}" aria-label="${n}">${n[0]}</button>`).join('')}</div>`;
-    let body = '', note = '';
-    if (kind === 'days') {
-      const n = w.days.length;
-      body = `<h3 class="section-title" style="margin:0 0 8px">Which days?${label}</h3>${chips(w.days, true)}`;
-      note = n === 0 ? 'Pick at least one day.' : n >= 7 ? 'Every day: this becomes a daily task.'
-        : n === 1 ? `Every ${D[w.days[0]]}.` : `${n} days a week: ${w.days.map(d => D[d].slice(0, 3)).join(', ')}.`;
-    } else if (kind === 'day') {
-      body = `<h3 class="section-title" style="margin:0 0 8px">Which day?${label}</h3>${chips([w.day], false)}`;
-      note = `Every other ${D[w.day]}.`;
-    } else if (kind === 'month') {
-      const weeks = ['1st', '2nd', '3rd', '4th', 'Last'];
-      body = `<h3 class="section-title" style="margin:0 0 8px">Which week?${label}</h3>
-        <div class="weekday-picker weeks" role="group" aria-label="Week of the month">${weeks.map((n, i) =>
-          `<button class="chip weekday" data-action="whenWeek" data-key="${i + 1}" aria-pressed="${w.week === i + 1}">${n}</button>`).join('')}</div>
-        <h3 class="section-title" style="margin:8px 0">Which day?</h3>${chips([w.day], false)}`;
-      note = `The ${w.week >= 5 ? 'last' : weeks[w.week - 1]} ${D[w.day]} of the month.`;
-    } else {
-      const today = Schedule.key(new Date());
-      body = `<h3 class="section-title" style="margin:0 0 8px">Plan a date?${label}</h3>
-        <div class="field when-date"><input type="date" id="when-date" data-change="whenDate" min="${today}" value="${esc(w.date || '')}" aria-label="Date"></div>`;
-      note = 'It shows on your Today list that day only. Ticking it clears the date.';
-    }
-    Sheet.open(`<h2>When: ${esc(u.name)}</h2>
-      ${body}
-      <p class="fine weekday-note">${esc(note)} ${kind === 'date' ? '' : 'It shows on your Today list on those days.'}</p>
-      <button class="btn primary" data-action="saveWhen">Save</button>
-      ${kind === 'date' && Household.plannedDate(h, u) ? '<button class="btn secondary" data-action="clearWhen">Clear the date</button>' : ''}
-      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'When');
-  },
+    const me = S.user.uid;
+    const stage = Household.stage(h);
+    const planned = stage !== 'setup' && !!h.plan;
+    const split = Household.isSplit(r);
+    const isOrg = Household.isOwner(h, me);
+    const canSwap = planned && !Household.alone(h);
+    const free = new Set(homeless(h).map(u => u.id));
+    const ownerName = uid => uid === me ? 'Yours' : Household.peopleIds(h).includes(uid) ? `${Household.memberName(Household.member(h, uid))}'s` : 'Nobody has it yet';
+    const action = id => {
+      const who = Household.assignee(h, id);
+      if (free.has(id)) return `<button class="mini" data-action="claim" data-id="${esc(id)}">I'll take it</button>`;
+      if (who !== me || !canSwap) return '';
+      return Household.pendingFor(h, id) ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(id)}">Swap</button>`;
+    };
+    const facts = [esc(Timing.label(r))];
+    if (Timing.of(r).rooms > 1) facts.push(`${formatMinutes(Timing.of(r).each)} for each bathroom`);
+    if (r.mentalLoad) facts.push('Mental load');
 
-  /** What a task includes, and breaking it into parts. */
-  taskPeek(r, unit) {
-    const h = S.household;
-    const split = Household.parts(r).length > 0;
-    const u = unit || r;
-    const parts = split ? Household.parts(r).map(p => p.name) : Library.parts(r.libraryId);
-    const assignee = Household.assignee(S.household, r.id);
-    const who = assignee ? (assignee === S.user.uid ? 'Yours' : `${Household.memberName(Household.member(S.household, assignee))}'s`) : '';
-    const isOrg = Household.isOwner(S.household, S.user.uid);
-    const removable = isOrg && !r.predefined && !r.parentId;
+    let owner = '', body = '';
+    if (split) {
+      body = `<h3 class="section-title" style="margin:0 0 8px">Broken into</h3>
+        <div class="card sheet-list">${Household.parts(r).map(p => {
+          const pu = Household.partUnit(r, p);
+          const who = Household.assignee(h, p.id);
+          return `<div class="row static"><div class="row-text"><span class="row-title">${esc(p.name)}</span>
+            <span class="row-sub">${planned ? esc(ownerName(who)) + ' · ' : ''}${esc(Timing.label(pu))}</span></div>${planned ? action(p.id) : ''}</div>`;
+        }).join('')}</div>`;
+    } else {
+      const who = Household.assignee(h, r.id);
+      if (planned) owner = `<div class="sheet-owner">${ownerBadges(h, r)}<span>${esc(ownerName(who))}</span></div>`;
+      const includes = Library.parts(r.libraryId);
+      body = includes.length ? `<h3 class="section-title" style="margin:0 0 8px">Includes</h3>
+        <ul class="part-chips">${includes.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+    }
+    const who = Household.assignee(h, r.id);
+    const main = split || !planned ? ''
+      : free.has(r.id) ? `<button class="btn primary" data-action="claim" data-id="${esc(r.id)}">I'll take it</button>`
+      : who === me && canSwap ? (Household.pendingFor(h, r.id)
+        ? '<p class="fine" style="margin:0 0 12px">Swap asked. Waiting for an answer.</p>'
+        : `<button class="btn primary" data-action="askSwap" data-id="${esc(r.id)}">Swap</button>`) : '';
+    const canBreak = (split || Library.parts(r.libraryId).length) && stage !== 'setup';
     Sheet.open(`<h2>${esc(r.name)}</h2>
-      <p style="margin-bottom:12px">${who ? esc(who) + ' · ' : ''}${esc(Timing.label(r))}${r.mentalLoad ? ' · Mental load' : ''}</p>
-      ${removable ? `<button class="btn ghost text-danger" data-action="removeTask" data-id="${esc(r.id)}">Remove this task</button>` : ''}
-      ${parts.length ? `<h3 class="section-title" style="margin:0 0 8px">${split ? 'Broken into' : 'Includes'}</h3>
-        <ul class="part-chips">${parts.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
-      ${parts.length && !r.parentId && Household.stage(S.household) !== 'setup'
-        ? `<button class="btn secondary" data-action="openBreakdown" data-id="${esc(r.id)}">${isOrg ? (split ? 'Edit the parts' : 'Break into parts') : 'Suggest a breakdown'}</button>` : ''}
+      ${owner}
+      <p class="sheet-facts">${facts.join(' · ')}</p>
+      ${body}
+      ${main}
+      ${canBreak ? `<button class="btn secondary" data-action="openBreakdown" data-id="${esc(r.id)}">${isOrg ? (split ? 'Edit the parts' : 'Break into parts') : 'Suggest a breakdown'}</button>` : ''}
+      ${isOrg && !r.predefined ? `<button class="btn ghost text-danger" data-action="removeTask" data-id="${esc(r.id)}">Remove this task</button>` : ''}
       <button class="btn ghost" data-action="closeSheet">Close</button>`, r.name);
   },
 

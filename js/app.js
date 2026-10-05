@@ -28,7 +28,7 @@ const S = {
   planChoice: 'yearly',      // plan picked on the plans screen
   checkoutReturn: null,      // 'success' | 'cancel' after coming back from Stripe
   inviteLink: null,          // ready-made invite (so sharing can open straight from the tap)
-  dayOffset: 0,              // the day picked on Today (0 = today … 6)
+  openCats: {},              // categories opened in the task list on Us
   pendingInvite: null,
   inviteFrom: null,
   auth: { mode: 'signup', busy: false, error: '', note: '', values: {} },
@@ -734,7 +734,7 @@ const Actions = {
       go('today');
     } else rerender();
   },
-  claim(d) { Household.claim(S.household, d.id, S.user.uid); save('plan'); rerender(); },
+  claim(d) { Sheet.close(); Household.claim(S.household, d.id, S.user.uid); save('plan'); toast(`${Household.unitName(S.household, d.id)} is yours now.`); rerender(); },
 
   /* reshuffle the whole plan (the other person agrees first) */
   askReshuffle() { Sheets.askReshuffle(); },
@@ -781,11 +781,10 @@ const Actions = {
 
   /* daily use */
   shareNow() { if (isOrganiser()) shareNewTasks(true); },
-  setDay(d) { S.dayOffset = clamp(Number(d.key) || 0, 0, 6); rerender(); },
   toggleDone(d) {
     const h = S.household;
     Household.toggleDone(h, d.id, S.user.uid);
-    if (Household.clearPlannedIfDone(h, d.id)) save('completions', 'when'); else save('completions');
+    save('completions');
     rerender();
   },
 
@@ -793,66 +792,21 @@ const Actions = {
   peek(d) {
     const h = S.household;
     const r = h.responsibilities.find(x => x.id === d.id) || Household.parentOf(h, d.id);
-    if (r) Sheets.taskPeek(r, Household.unit(h, d.id));
+    if (r) Sheets.taskPeek(r);
   },
-  /* When a task happens: only the person doing it can change it. */
-  openWhen(d) {
-    const h = S.household;
-    const u = Household.unit(h, d.id);
-    if (!u || Household.assignee(h, u.id) !== S.user.uid || !Household.whenKind(u)) return;
-    const p = Household.plannedDate(h, u);
-    S.whenDraft = {
-      id: u.id,
-      days: Household.whenKind(u) === 'days' ? Household.daysOf(h, u) : [],
-      day: Household.dayOf(h, u),
-      week: Household.weekOf(h, u),
-      date: p ? Schedule.key(p) : '',
-    };
-    Sheets.when(u);
+  /** A task in the list: the row lights up, then its sheet slides in. */
+  openTask(d, el) {
+    if (el) el.classList.add('is-tapped');
+    const open = () => { if (el) el.classList.remove('is-tapped'); Actions.peek(d); };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) open(); else setTimeout(open, 170);
   },
-  /** A day chip: several/weekly tasks toggle any number of days; the others pick one. */
-  whenDay(d) {
-    const w = S.whenDraft, h = S.household;
-    const u = w && Household.unit(h, w.id);
-    if (!u) return;
-    const i = Number(d.key);
-    if (!(i >= 0 && i <= 6)) return;
-    if (Household.whenKind(u) === 'days') w.days = w.days.includes(i) ? w.days.filter(x => x !== i) : [...w.days, i].sort((a, b) => a - b);
-    else w.day = i;
-    Sheets.when(u);
-  },
-  whenWeek(d) {
-    const w = S.whenDraft, u = w && Household.unit(S.household, w.id);
-    const n = Number(d.key);
-    if (!u || !(n >= 1 && n <= 5)) return;
-    w.week = n;
-    Sheets.when(u);
-  },
-  saveWhen() {
-    const h = S.household, w = S.whenDraft;
-    const u = w && Household.unit(h, w.id);
-    if (!u) return Sheet.close();
-    const kind = Household.whenKind(u);
-    const value = kind === 'days' ? { days: w.days } : kind === 'day' ? { day: w.day } : kind === 'month' ? { week: w.week, day: w.day } : { date: w.date || null };
-    if (kind === 'days' && !w.days.length) { toast('Pick at least one day.'); return; }
-    if (kind === 'date' && !w.date) { toast('Pick a date first.'); return; }
-    const changed = Household.setWhen(h, S.user.uid, u.id, value);
-    S.whenDraft = null;
-    Sheet.close();
-    if (!changed) return;
-    save('when');
+  /** Open or close a category in the task list. */
+  toggleCat(d) {
+    const open = { ...(S.openCats || {}) };
+    const now = d.key in open ? open[d.key] : Household.stage(S.household) !== 'active';
+    open[d.key] = !now;
+    S.openCats = open;
     rerender();
-    toast(`${u.name}: ${Household.whenText(h, u).toLowerCase()}`);
-  },
-  clearWhen() {
-    const h = S.household, w = S.whenDraft;
-    const u = w && Household.unit(h, w.id);
-    S.whenDraft = null;
-    Sheet.close();
-    if (!u || !Household.setWhen(h, S.user.uid, u.id, { date: null })) return;
-    save('when');
-    rerender();
-    toast(`${u.name}: no date planned`);
   },
   choosePlan(d) { if (d.key === 'yearly' || d.key === 'monthly') { S.planChoice = d.key; rerender(); } },
   /**
@@ -1111,7 +1065,6 @@ const Changes = {
   customCategory(value) { S.customDraft = { ...(S.customDraft || {}), category: value }; },
   customFrequency(value) { S.customDraft = { ...(S.customDraft || {}), frequency: value }; },
   customMinutes(value) { S.customDraft = { ...(S.customDraft || {}), minutes: Number(value) }; },
-  whenDate(value) { if (S.whenDraft) S.whenDraft.date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''; },
 };
 
 const Inputs = {
@@ -1213,7 +1166,6 @@ function render(routeChanged) {
   const changed = routeChanged || name !== currentRoute;
   if (name !== currentRoute) {
     if (name !== 'household') S.suggestMode = false;
-    if (name !== 'today') S.dayOffset = 0;
     if (name === 'settings' && ['today', 'household', 'subscribe'].includes(currentRoute)) S.settingsFrom = currentRoute;
     if (!['review', 'rate'].includes(name)) S.prefDraft = null;
   }
