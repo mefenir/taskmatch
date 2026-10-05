@@ -335,11 +335,11 @@ const Screens = {
         ${topbar({ back: 'household' })}
         <h1>How do you feel about the new ${noun}s?</h1>
         <p class="lead" style="margin-bottom:12px">${noun === 'part' ? "Only you see your answers. We've started from how you felt about the whole task." : 'Only you see your answers. Then the app shares them out fairly between you.'}</p>
-        <div class="legend">${PREFERENCES.map(p => `<span>${p.emoji} ${p.label}</span>`).join('')}</div>
+        <div class="legend">${PREFERENCES.map(p => `<span class="legend-item pref-${p.id}">${prefIconSm(p.icon)}${p.label}</span>`).join('')}</div>
         <div class="card" style="margin-top:12px">${units.map(u => {
           const v = Household.reshareValue(h, me, u);
           return `<div class="pref-row"><div class="row-text"><span class="row-title">${esc(u.name)}</span><span class="row-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${esc(Timing.label(u))}</span></div>
-            <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn" data-action="setResharePref" data-id="${esc(u.id)}" data-key="${esc(p.id)}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${p.emoji}</button>`).join('')}</div></div>`;
+            <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn pref-${p.id}" data-action="setResharePref" data-id="${esc(u.id)}" data-key="${esc(p.id)}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${Icon[p.icon]}</button>`).join('')}</div></div>`;
         }).join('')}</div>
         <div class="bottom-bar"><button class="btn primary" data-action="finishReshare">Done</button></div>
       </main>`;
@@ -501,8 +501,8 @@ const Screens = {
     return `<main class="screen">
       ${topbar({ back: setup ? 'frequency' : 'settings', step: setup ? 'rate' : null })}
       <h1>How do you feel about each task?</h1>
-      <p class="lead" style="margin-bottom:12px">Mark what you'd love to do ❤️ and what you'd rather not 🙃. Everything else counts as 🙂 Don't mind. ${otherName} won't see your answers.</p>
-      <div class="legend">${PREFERENCES.map(p => `<span>${p.emoji} ${p.label}</span>`).join('')}</div>
+      <p class="lead" style="margin-bottom:12px">Mark what you'd love to do and what you'd rather not. Everything else counts as Don't mind. ${otherName} won't see your answers.</p>
+      <div class="legend">${PREFERENCES.map(p => `<span class="legend-item pref-${p.id}">${prefIconSm(p.icon)}${p.label}</span>`).join('')}</div>
       ${sections}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${markedCount(h, me) ? `${plural(markedCount(h, me), 'task')} marked` : 'Nothing marked yet. That\'s fine too.'}</p>
@@ -524,9 +524,9 @@ const Screens = {
       <div class="card">${items.length ? items.map(r => prefRow(h, me, r)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
     return `<main class="screen">
       <div class="title-row"><h1>${orgName} made a plan for your home</h1>${settingsButton()}</div>
-      <p class="lead" style="margin-bottom:12px">Mark anything you'd rather not do 🙃, or would love to take ❤️. Everything else counts as 🙂 Don't mind. ${orgName} won't see your answers.</p>
+      <p class="lead" style="margin-bottom:12px">Mark anything you'd rather not do, or would love to take. Everything else counts as Don't mind. ${orgName} won't see your answers.</p>
       ${totalCard(h)}
-      <div class="legend">${PREFERENCES.map(p => `<span>${p.emoji} ${p.label}</span>`).join('')}</div>
+      <div class="legend">${PREFERENCES.map(p => `<span class="legend-item pref-${p.id}">${prefIconSm(p.icon)}${p.label}</span>`).join('')}</div>
       ${list('Suggested for you', mine)}
       ${list(`Suggested for ${orgName}`, theirs)}
       <button class="btn ghost" data-action="suggestChanges">Suggest a change to the list</button>
@@ -1134,13 +1134,13 @@ function trialOffer() {
 function legalLine() {
   return `<p class="fine legal-line">By continuing you agree to the <a href="legal.html#terms" target="_blank" rel="noopener">Terms</a> and <a href="legal.html#privacy" target="_blank" rel="noopener">Privacy policy</a>.</p>`;
 }
-/** One task with ❤️ 🙂 🙃. Nothing marked counts as 🙂. */
+/** One task with Happy / Don't mind / Rather not. Nothing marked counts as Don't mind. */
 function prefRow(h, me, r) {
   const v = prefValue(h, me, r);
   return `<div class="pref-row" role="group" aria-labelledby="pn-${esc(r.id)}">
     <button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title" id="pn-${esc(r.id)}">${esc(r.name)}</span>
       <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${esc(Timing.label(r))}</span></button>
-    <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn" data-action="setPref" data-id="${esc(r.id)}" data-key="${esc(p.id)}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${p.emoji}</button>`).join('')}</div>
+    <div class="pref-group">${PREFERENCES.map(p => `<button class="pref-btn pref-${p.id}" data-action="setPref" data-id="${esc(r.id)}" data-key="${esc(p.id)}" aria-pressed="${v === p.id}" aria-label="${p.label}" title="${p.label}">${Icon[p.icon]}</button>`).join('')}</div>
   </div>`;
 }
 /** The whole household's work in one number. */

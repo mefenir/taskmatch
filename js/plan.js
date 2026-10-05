@@ -8,9 +8,9 @@
    - Messages: light-hearted swap copy
    ========================================================= */
 const PREFERENCES = Object.freeze([
-  { id: 'love',       emoji: '❤️', label: 'Happy to do it', score: 2 },
-  { id: 'ok',         emoji: '🙂', label: "Don't mind",     score: 1 },
-  { id: 'rather_not', emoji: '🙃', label: 'Would rather not', score: 0 },
+  { id: 'love',       icon: 'love', label: 'Happy to do it', score: 2 },
+  { id: 'ok',         icon: 'ok',   label: "Don't mind",     score: 1 },
+  { id: 'rather_not', icon: 'notKeen', label: 'Would rather not', score: 0 },
 ]);
 const PREF_SCORE = Object.freeze({ love: 2, ok: 1, rather_not: 0 });
 

@@ -4,7 +4,7 @@
 :root{
   --bg:#F6F4EF; --surface:#FFFFFF; --surface-2:#EEEBE4; --ink:#1E2320; --muted:#68706B; --line:#E4E0D7;
   --accent:#456B59; --accent-ink:#FFFFFF; --accent-soft:#E2ECE6;
-  --premium:#8A6526; --premium-soft:#F5ECDA; --danger:#A6473B;
+  --premium:#8A6526; --premium-soft:#F5ECDA; --danger:#A6473B; --love:#B4544A; --love-soft:#F7E4E1;
   --radius:18px; --radius-sm:12px;
   --shadow:0 1px 2px rgba(30,35,32,.04),0 6px 20px rgba(30,35,32,.05);
   color-scheme:light;
@@ -13,7 +13,7 @@
   :root:not([data-theme="light"]){
     --bg:#131614; --surface:#1B1F1D; --surface-2:#252A27; --ink:#ECEEEA; --muted:#9AA29C; --line:#2B302D;
     --accent:#8DB5A0; --accent-ink:#0F2219; --accent-soft:#21302A;
-    --premium:#D9B677; --premium-soft:#2E2819; --danger:#E08A7E;
+    --premium:#D9B677; --premium-soft:#2E2819; --danger:#E08A7E; --love:#E8968C; --love-soft:#3A2522;
     --shadow:0 1px 2px rgba(0,0,0,.3);
     color-scheme:dark;
   }
@@ -21,7 +21,7 @@
 :root[data-theme="dark"]{
   --bg:#131614; --surface:#1B1F1D; --surface-2:#252A27; --ink:#ECEEEA; --muted:#9AA29C; --line:#2B302D;
   --accent:#8DB5A0; --accent-ink:#0F2219; --accent-soft:#21302A;
-  --premium:#D9B677; --premium-soft:#2E2819; --danger:#E08A7E;
+  --premium:#D9B677; --premium-soft:#2E2819; --danger:#E08A7E; --love:#E8968C; --love-soft:#3A2522;
   --shadow:0 1px 2px rgba(0,0,0,.3);
   color-scheme:dark;
 }
@@ -198,8 +198,12 @@ button.row:active{background:var(--surface-2)}
 .pref-row{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;min-height:60px}
 .pref-row + .pref-row{border-top:1px solid var(--line)}
 .pref-group{display:flex;gap:6px;flex:none}
-.pref-btn{width:46px;height:46px;border-radius:14px;border:1.5px solid var(--line);background:transparent;font-size:22px;line-height:1;cursor:pointer;display:grid;place-items:center;filter:grayscale(.6);opacity:.75;transition:background .15s,border-color .15s,opacity .15s,filter .15s}
-.pref-btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);filter:none;opacity:1}
+.pref-btn{width:46px;height:46px;border-radius:14px;border:1.5px solid var(--line);background:transparent;color:var(--muted);line-height:1;cursor:pointer;display:grid;place-items:center;transition:background .15s,border-color .15s,color .15s}
+/* Picked: the heart soft red, the smile the app's green, the frown grey */
+.pref-btn.pref-love[aria-pressed="true"]{background:var(--love-soft);border-color:var(--love);color:var(--love)}
+.pref-btn.pref-ok[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.pref-btn.pref-rather_not[aria-pressed="true"]{background:var(--surface-2);border-color:var(--muted);color:var(--ink)}
+.legend-item{display:inline-flex;align-items:center;gap:5px}
 .timing-row{display:flex;flex-direction:column;gap:10px;padding:12px 16px}
 .timing-row + .timing-row{border-top:1px solid var(--line)}
 .timing-controls{display:flex;gap:8px}
