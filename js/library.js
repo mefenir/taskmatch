@@ -41,7 +41,7 @@ const LIBRARY = Object.freeze({
     // Each task bundles its usual parts; breaking it down turns them into
     // separate tasks with their own timing and owner. `tasks` lists those parts.
     // Cleaning
-    R('cleaning', 'clean_bathroom', 'Clean bathroom', When.room('bathroom'), { tasks: ['Clean toilet', 'Clean sink', 'Clean shower & bath', 'Clean mirror', 'Clean floor', 'Fresh towels', 'Refill toilet paper & soap'] }),
+    R('cleaning', 'clean_bathroom', 'Clean bathroom', When.room('bathroom'), { perRoom: 'bathroom', tasks: ['Clean toilet', 'Clean sink', 'Clean shower & bath', 'Clean mirror', 'Clean floor', 'Fresh towels', 'Refill toilet paper & soap'] }),
     R('cleaning', 'clean_floors', 'Clean floors', When.always, { tasks: ['Vacuum', 'Mop'] }),
     R('cleaning', 'tidying', 'General tidying', When.always, { tasks: ['Tidy up', 'Dusting', 'Change bed linen'] }),
     R('cleaning', 'clean_windows', 'Clean windows', When.always, { tasks: ['Clean windows', 'Wipe frames & sills'] }),
@@ -145,7 +145,8 @@ const FREQUENCIES = Object.freeze([
 const MINUTE_OPTIONS = Object.freeze([5, 10, 15, 20, 25, 30, 45, 60, 90, 120, 180, 240]);
 
 const TIMING_DEFAULTS = Object.freeze({
-  // Times cover all the parts of a task together (e.g. the whole bathroom).
+  // Times cover all the parts of a task together (e.g. one whole bathroom). A task with `perRoom`
+  // (the bathroom) is timed per room: the total is this time × the number of those rooms.
   clean_bathroom: [60, 'weekly'], clean_floors: [50, 'weekly'], tidying: [25, 'daily'], clean_windows: [60, 'monthly'], tidy_office: [15, 'weekly'],
   dishes: [25, 'daily'], clean_kitchen: [15, 'daily'],
   laundry: [60, 'several'],
@@ -168,17 +169,19 @@ const Timing = {
     return d ? { minutes: d[0], frequency: d[1] } : { minutes: 20, frequency: 'weekly' };
   },
   /** Effective timing of a household responsibility (falls back to library defaults). */
-  /** base = how often the household set it; frequency/perWeek = how often it really happens once
+  /** minutes = the total (each × rooms); each = the time set per room (what is stored). base = how often the household set it; frequency/perWeek = how often it really happens once
    *  the person doing it has picked its days (r._days, set by Household.applyWhen): 7 days = daily. */
   of(r) {
     const d = this.defaultsFor(r.libraryId);
-    const minutes = Number(r.minutes) || d.minutes;
+    const each = Number(r.minutes) || d.minutes;
+    const rooms = Number(r._rooms) > 1 ? Number(r._rooms) : 1;
+    const minutes = each * rooms;
     const base = r.frequency || d.frequency;
     const n = Array.isArray(r._days) ? r._days.length : 0;
     if (n && (base === 'several' || base === 'weekly')) {
-      return { minutes, base, frequency: n >= 7 ? 'daily' : n === 1 ? 'weekly' : 'several', perWeek: Math.min(n, 7) };
+      return { minutes, each, rooms, base, frequency: n >= 7 ? 'daily' : n === 1 ? 'weekly' : 'several', perWeek: Math.min(n, 7) };
     }
-    return { minutes, base, frequency: base, perWeek: this.frequency(base).perWeek };
+    return { minutes, each, rooms, base, frequency: base, perWeek: this.frequency(base).perWeek };
   },
   /** Minutes per week this responsibility takes on average. */
   weeklyMinutes(r) { const t = this.of(r); return t.minutes * t.perWeek; },

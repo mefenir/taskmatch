@@ -255,10 +255,10 @@ const Screens = {
         <div class="card">${items.map(r => {
           const t = Timing.of(r);
           return `<div class="timing-row">
-            <span class="row-title" id="t-${esc(r.id)}">${esc(r.name)}</span>
+            <span class="row-title" id="t-${esc(r.id)}">${esc(r.name)}${t.rooms > 1 ? `<span class="row-sub" style="display:block">Time for each bathroom · ${formatMinutes(t.minutes)} for all ${t.rooms}</span>` : (Library.get(r.libraryId) || {}).perRoom ? '<span class="row-sub">Time for each bathroom</span>' : ''}</span>
             <div class="timing-controls">
               <select class="select" data-change="frequency" data-id="${esc(r.id)}" aria-label="How often: ${esc(r.name)}">${frequencyOptions(t.frequency)}</select>
-              <select class="select minutes" data-change="minutes" data-id="${esc(r.id)}" aria-label="How long each time: ${esc(r.name)}">${minuteOptions(t.minutes)}</select>
+              <select class="select minutes" data-change="minutes" data-id="${esc(r.id)}" aria-label="How long each time: ${esc(r.name)}">${minuteOptions(t.each)}</select>
             </div>
           </div>`;
         }).join('')}</div>

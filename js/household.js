@@ -332,7 +332,7 @@ const Household = {
     const r = h.responsibilities.find(x => x.id === respId);
     if (!r) return;
     const t = Timing.of(r);
-    r.minutes = changes.minutes != null ? Number(changes.minutes) : t.minutes;
+    r.minutes = changes.minutes != null ? Number(changes.minutes) : t.each;
     r.frequency = changes.frequency || t.frequency;
   },
 
@@ -381,7 +381,7 @@ const Household = {
   partUnit(r, p) {
     return { id: p.id, parentId: r.id, parentName: r.name, name: p.name, minutes: p.minutes, frequency: p.frequency,
       category: r.category, libraryId: null, mentalLoad: !!p.mentalLoad, custom: !!p.custom,
-      createdAt: p.createdAt || r.createdAt || null, _days: p._days };
+      createdAt: p.createdAt || r.createdAt || null, _days: p._days, _rooms: p._rooms };
   },
   units(h) {
     this.applyWhen(h);
@@ -500,7 +500,7 @@ const Household = {
   defaultParts(r) {
     const names = Library.parts(r.libraryId);
     const t = Timing.of(r);
-    const each = Math.max(5, Math.round(t.minutes / Math.max(1, names.length) / 5) * 5);
+    const each = Math.max(5, Math.round(t.each / Math.max(1, names.length) / 5) * 5);
     return names.map(name => ({ name, minutes: each, frequency: t.frequency }));
   },
   /** Set a task's parts. An empty list puts it back together (with whoever had most of it). */
@@ -788,7 +788,11 @@ const Household = {
       const w = this.whenChoice(h, o.id);
       return w && Array.isArray(w.days) && w.days.length ? w.days : undefined;
     };
+    const tagRooms = (o, n) => Object.defineProperty(o, '_rooms', { value: n, enumerable: false, writable: true, configurable: true });
     (h.responsibilities || []).forEach(r => {
+      const lib = Library.get(r.libraryId);
+      const rooms = lib && lib.perRoom ? roomCount(h, lib.perRoom) : 1;
+      tagRooms(r, rooms); this.parts(r).forEach(p => tagRooms(p, rooms));
       const base = r.frequency || Timing.defaultsFor(r.libraryId).frequency;
       tag(r, this.isSplit(r) ? undefined : daysFor(r, base));
       this.parts(r).forEach(p => tag(p, daysFor(p, p.frequency || base)));
@@ -900,6 +904,7 @@ const Household = {
   /** The household's own responsibility map, grouped by category. */
   inventory(h) {
     const groups = new Map();
+    this.applyWhen(h);
     h.responsibilities.forEach(r => { if (!groups.has(r.category)) groups.set(r.category, []); groups.get(r.category).push(r); });
     return [...groups.entries()]
       .sort((a, b) => Library.categoryOrder(a[0]) - Library.categoryOrder(b[0]))

@@ -198,3 +198,5 @@ A responsibility is **not** an assignment: selected responsibilities carry no ow
 - A trial is refused by the app to anyone who has had a subscription; a deliberately modified app could still ask Stripe for a second trial. Acceptable for now; a server function can close it later.
 - Feedback and error reports are capped in size, but the rules can't limit how many a signed-in person sends; the app sends at most 5 error reports per visit. Fine for a beta; a server function can add a real limit later.
 - The security rules can't be tested automatically here; publish them and try a purchase in Stripe test mode before going live.
+
+**Room-based times**: the bathroom task is timed per bathroom (shown on the Times screen as "Time for each bathroom"); the total is that time × the number of bathrooms, and the fair split uses the total. Parts scale the same way.
