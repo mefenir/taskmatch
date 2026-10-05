@@ -369,3 +369,5 @@ p, .row-sub, .lead, .fine{text-wrap:pretty}
 .to-top{position:fixed;right:max(16px, calc((100vw - 520px) / 2 + 16px));bottom:calc(var(--lift, 0px) + 16px);z-index:11;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);box-shadow:var(--shadow);display:grid;place-items:center;cursor:pointer;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .2s,transform .2s}
 .to-top.show{opacity:1;transform:none;pointer-events:auto}
 @media (prefers-reduced-motion: reduce){.to-top{transition:none}}
+/* Phones mustn't turn plain text (an email, a date) into links */
+a[x-apple-data-detectors], .plain-text a{color:inherit!important;text-decoration:none!important;pointer-events:none}

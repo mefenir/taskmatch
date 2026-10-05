@@ -469,7 +469,7 @@ const Screens = {
       }
     }
 
-    const back = draft ? 'household' : on ? 'today' : null;
+    const back = S.fromSettings === 'subscribe' ? 'settings' : draft ? 'household' : on ? 'today' : null;
     return `<main class="screen">
       ${back ? topbar({ back }) : `<div class="topbar"><span class="spacer"></span>
         ${settingsButton()}</div>`}
@@ -675,12 +675,24 @@ const Screens = {
     const group = (title, rows) => rows.filter(Boolean).length
       ? `<div class="section-head"><h2 class="section-title">${title}</h2></div><div class="card">${rows.filter(Boolean).join('')}</div>` : '';
 
+    const sub = S.subscription;
+    const date = ms => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    let subStatus;
+    if (!on) subStatus = stage === 'draft' || !everSubscribed() ? 'Not started' : 'Ended';
+    else if (!isOrg) subStatus = `Covered by ${esc(orgName)}`;
+    else if (sub.source === 'stripe' && sub.status === 'trialing' && sub.trialEnd) subStatus = `Free trial until ${date(sub.trialEnd)}`;
+    else if (sub.source === 'stripe' && sub.status === 'past_due') subStatus = "Payment didn't go through";
+    else if (sub.source === 'stripe' && sub.periodEnd) subStatus = `${sub.interval === 'month' ? 'Monthly' : 'Yearly'} · ${sub.cancelAtPeriodEnd ? 'ends' : 'renews'} ${date(sub.periodEnd)}`;
+    else subStatus = 'Active';
+
+    // You: name, how you sign in (plain text, never a link), your answers before the plan runs, the subscription.
     const myName = Household.memberName(Household.member(h, me));
     const marked = Household.marked(h, me);
     const you = group('You', [
       usable ? row('data-action="editName"', 'Your name', esc(myName)) : info('Your name', esc(myName)),
-      info('Signed in as', esc(S.user.email || '')),
+      `<div class="row static"><div class="row-text"><span class="row-title">Signed in as</span><span class="row-sub plain-text">${esc(S.user.email || '')}</span></div></div>`,
       usable && stage !== 'active' ? row(go('rate'), 'My answers', marked ? `${plural(marked, 'task')} marked` : 'Nothing marked') : '',
+      (isOrg || on) && stage !== 'setup' ? row(go('subscribe'), 'Your subscription', subStatus) : info('Your subscription', subStatus),
     ]);
 
     const people = Household.people(h).map(m => esc(Household.memberName(m))).join(' & ');
@@ -703,19 +715,6 @@ const Screens = {
         ? row('data-action="askReshuffle"', 'Reshuffle the plan', `Asks ${esc(partnerName)} first`) : '',
     ]);
 
-    const sub = S.subscription;
-    const date = ms => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-    let subStatus;
-    if (!on) subStatus = stage === 'draft' || !everSubscribed() ? 'Not started' : 'Ended';
-    else if (!isOrg) subStatus = `Covered by ${esc(orgName)}`;
-    else if (sub.source === 'stripe' && sub.status === 'trialing' && sub.trialEnd) subStatus = `Free trial until ${date(sub.trialEnd)}`;
-    else if (sub.source === 'stripe' && sub.status === 'past_due') subStatus = "Payment didn't go through";
-    else if (sub.source === 'stripe' && sub.periodEnd) subStatus = `${sub.interval === 'month' ? 'Monthly' : 'Yearly'} · ${sub.cancelAtPeriodEnd ? 'ends' : 'renews'} ${date(sub.periodEnd)}`;
-    else subStatus = 'Active';
-    const subscription = group('Subscription', [
-      (isOrg || on) && stage !== 'setup' ? row(go('subscribe'), 'Your subscription', subStatus) : info('Your subscription', subStatus),
-    ]);
-
     const contact = APP_CONFIG.legal && APP_CONFIG.legal.email;
     const help = group('Help & legal', [
       `<button class="row" data-action="openFeedback"><div class="row-text"><span class="row-title">Send feedback</span><span class="row-sub">What works, what doesn't, what confused you</span></div><span class="chev">${Icon.chev}</span></button>`,
@@ -726,8 +725,11 @@ const Screens = {
     return `<main class="screen">
       ${topbar({ back: S.settingsFrom || (stage === 'active' && on ? 'today' : 'household') })}
       <h1>Settings</h1>
-      ${you}${ours}${subscription}${help}
-      <div class="card" style="margin-top:24px"><button class="row" data-action="signOut"><div class="row-text"><span class="row-title">Sign out</span></div></button></div>
+      ${you}${ours}${help}
+      <div class="card" style="margin-top:24px">
+        ${Backend.Auth.usesPassword() ? `<button class="row" data-action="changePassword"><div class="row-text"><span class="row-title">Change password</span></div><span class="chev">${Icon.chev}</span></button>` : ''}
+        <button class="row" data-action="signOut"><div class="row-text"><span class="row-title">Sign out</span></div></button>
+      </div>
       <div class="card danger-zone">
         ${!isOrg || !alone ? `<button class="row" data-action="confirmLeave"><div class="row-text"><span class="row-title text-danger">Leave household</span>
           <span class="row-sub">${isOrg ? `${esc(partnerName)} becomes the organiser` : "You'd need a new invite to come back"}</span></div></button>` : ''}
@@ -1287,6 +1289,21 @@ const Sheets = {
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Your name');
     const input = document.getElementById('edit-name');
     if (input) { input.focus(); input.select(); input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); Actions.saveName(); } }); }
+  },
+
+  /** Change the password (accounts that sign in with an email and password). */
+  changePassword() {
+    Sheet.open(`<h2>Change password</h2>
+      <form class="card" data-form="password" autocomplete="on">
+        <input type="email" name="username" autocomplete="username" value="${esc(S.user.email || '')}" hidden>
+        <div class="field"><label for="pw-current">Current password</label>
+          <input id="pw-current" type="password" autocomplete="current-password" required></div>
+        <div class="field"><label for="pw-new">New password</label>
+          <input id="pw-new" type="password" autocomplete="new-password" minlength="8" required></div>
+        <p class="fine" style="text-align:left;margin:0;padding:0 16px 12px">At least 8 characters.</p>
+      </form>
+      <button class="btn primary" data-action="savePassword">Save new password</button>
+      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Change password');
   },
 
   /** The invite link, when the phone's share sheet isn't available (or was closed). */

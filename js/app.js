@@ -702,7 +702,7 @@ const Actions = {
     Household.submitPrefs(h, S.user.uid);
     commit('preferences');
     toast('Saved. The plan follows your answers.');
-    go('household');
+    go(S.fromSettings === 'rate' ? 'settings' : 'household');
   },
   /** The partner, after looking at the plan: start it, or rebalance with their answers first. */
   submitReview() {
@@ -795,6 +795,26 @@ const Actions = {
     if (r) Sheets.taskPeek(r);
   },
   editName() { if (S.household) Sheets.editName(); },
+  changePassword() { if (Backend.Auth.usesPassword()) Sheets.changePassword(); },
+  /** Checks the current password, then sets the new one. Locked while it runs (one request per tap storm). */
+  async savePassword() {
+    const cur = (document.getElementById('pw-current') || {}).value || '';
+    const next = (document.getElementById('pw-new') || {}).value || '';
+    if (!cur) { toast('Type your current password.'); return; }
+    if (next.length < 8) { toast('The new password needs at least 8 characters.'); return; }
+    if (next === cur) { toast('That is your current password.'); return; }
+    try {
+      await Backend.Auth.changePassword(cur, next);
+      Sheet.close();
+      toast('Password changed.');
+    } catch (e) {
+      const c = e && e.code;
+      toast(['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(c) ? 'Your current password is not right.'
+        : c === 'auth/weak-password' ? 'Pick a stronger password.'
+        : c === 'auth/too-many-requests' ? 'Too many tries. Wait a moment and try again.'
+        : "Couldn't change it. Check your connection and try again.");
+    }
+  },
   toTop() { window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); },
   saveName() {
     const input = document.getElementById('edit-name');
@@ -1013,10 +1033,14 @@ const Actions = {
 
   /* the partner suggests list changes, the organiser decides */
   suggestChanges() {
+    S.suggestFromSettings = currentRoute === 'settings';
     S.suggestMode = true;
     go('household');
   },
-  doneSuggesting() { S.suggestMode = false; rerender(); },
+  doneSuggesting() {
+    S.suggestMode = false;
+    if (S.suggestFromSettings) { S.suggestFromSettings = false; go('settings'); } else rerender();
+  },
   suggest(d) {
     Household.toggleSuggestion(S.household, S.user.uid, d.type, d.id);
     save('suggestions');
@@ -1179,7 +1203,10 @@ function render(routeChanged) {
   if (routable && location.hash !== '#/' + name) history.replaceState(null, '', '#/' + name);
   const changed = routeChanged || name !== currentRoute;
   if (name !== currentRoute) {
-    if (name !== 'household') S.suggestMode = false;
+    // Remember a screen opened from Settings, so its back arrow and Done return there.
+    if (currentRoute === 'settings') S.fromSettings = name;
+    else if (name === 'today' || (name === 'household' && !S.suggestMode)) S.fromSettings = null;
+    if (name !== 'household') { S.suggestMode = false; S.suggestFromSettings = false; }
     if (name === 'settings' && ['today', 'household', 'subscribe'].includes(currentRoute)) S.settingsFrom = currentRoute;
     if (!['review', 'rate'].includes(name)) S.prefDraft = null;
   }

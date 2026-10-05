@@ -87,6 +87,15 @@ const Backend = (() => {
       return auth.getRedirectResult();
     },
     resetPassword: email => auth.sendPasswordResetEmail(email),
+    /** Signed in with an email and password (not only Google)? Only then can the password be changed. */
+    usesPassword: () => !!(auth.currentUser && auth.currentUser.providerData.some(p => p && p.providerId === 'password')),
+    /** Change the password: confirm the current one first (Firebase needs a recent sign-in). */
+    async changePassword(current, next) {
+      const u = auth.currentUser;
+      if (!u || !u.email) throw Object.assign(new Error('Not signed in'), { code: 'auth/no-current-user' });
+      await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, current));
+      await u.updatePassword(next);
+    },
     signOut: () => auth.signOut(),
     /** Firebase only allows deleting an account shortly after signing in. */
     signedInRecently: () => {

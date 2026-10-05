@@ -81,8 +81,20 @@ function view() {
   const tabs = `<div class="seg" role="group" aria-label="Section">
       ${tab('funnel', 'Funnel')}${tab('requests', 'Access requests')}
       ${tab('feedback', `Feedback${newFeedback ? ` (${newFeedback})` : ''}`)}${tab('errors', `Errors${A.errors.length ? ` (${errorGroups().length})` : ''}`)}</div>`;
-  const head = `<div class="topbar"><span class="spacer"></span><button class="link-btn" style="margin:0" data-action="signOut">Sign out</button></div>
-    <h1 style="margin-top:0">Admin</h1>${tabs}`;
+  const pw = A.pwOpen ? `<div class="card pw-card">
+      <div class="field"><label for="a-pw-cur">Current password</label>
+        <input id="a-pw-cur" type="password" autocomplete="current-password" value="${esc(A.values.pwCur || '')}" data-field="pwCur"></div>
+      <div class="field"><label for="a-pw-new">New password (at least 8 characters)</label>
+        <input id="a-pw-new" type="password" autocomplete="new-password" value="${esc(A.values.pwNew || '')}" data-field="pwNew"></div>
+      ${A.pwError ? `<p class="form-error" role="alert" style="margin:0 16px 8px">${esc(A.pwError)}</p>` : ''}
+      <div class="btns" style="display:flex;gap:8px;padding:0 16px 16px">
+        <button class="btn primary" style="flex:1" data-action="savePassword" ${A.busy === 'pw' ? 'disabled' : ''}>${A.busy === 'pw' ? 'Saving…' : 'Save'}</button>
+        <button class="btn secondary" style="flex:1" data-action="togglePassword">Cancel</button></div>
+    </div>` : '';
+  const head = `<div class="topbar"><span class="spacer"></span>
+      <button class="link-btn" style="margin:0 16px 0 0" data-action="togglePassword" aria-expanded="${!!A.pwOpen}">Change password</button>
+      <button class="link-btn" style="margin:0" data-action="signOut">Sign out</button></div>
+    <h1 style="margin-top:0">Admin</h1>${pw}${tabs}`;
   if (A.tab === 'funnel') return `<main class="screen">${head}${funnel()}</main>`;
   if (A.tab === 'feedback') return `<main class="screen">${head}${feedbackList()}</main>`;
   if (A.tab === 'errors') return `<main class="screen">${head}${errorList()}</main>`;
@@ -230,6 +242,24 @@ const Actions = {
     A.busy = null; render();
   },
   range(d) { A.range = Number(d.key) || 0; render(); },
+  togglePassword() { A.pwOpen = !A.pwOpen; A.pwError = ''; A.values.pwCur = A.values.pwNew = ''; render(); },
+  async savePassword() {
+    if (A.busy) return;
+    const cur = A.values.pwCur || '', next = A.values.pwNew || '';
+    if (!cur) { A.pwError = 'Type the current password.'; render(); return; }
+    if (next.length < 8) { A.pwError = 'The new password needs at least 8 characters.'; render(); return; }
+    A.busy = 'pw'; A.pwError = ''; render();
+    try {
+      await Backend.Auth.changePassword(cur, next);
+      A.pwOpen = false; A.values.pwCur = A.values.pwNew = '';
+      toast('Password changed.');
+    } catch (e) {
+      const c = e && e.code;
+      A.pwError = ['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(c) ? 'The current password is not right.'
+        : c === 'auth/too-many-requests' ? 'Too many tries. Wait a moment.' : `Couldn't change it (${c || 'error'}).`;
+    }
+    A.busy = null; render();
+  },
   openStep(d) { A.openStep = A.openStep === d.key ? null : d.key; render(); },
   unlock(d) { act('unlock', d.id); },
   deny(d) { act('deny', d.id); },
