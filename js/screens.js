@@ -129,7 +129,7 @@ const Screens = {
       <p class="lead" style="margin-top:16px">Checking your subscription…</p></main>`;
     return `<main class="screen">
       <div class="topbar"><span class="spacer"></span>
-        <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button></div>
+        ${settingsButton()}</div>
       ${houseArt}
       <h1>We couldn't check your subscription</h1>
       <p class="lead">Check your connection. We'll keep trying, and your home opens as soon as it works.</p>
@@ -149,7 +149,7 @@ const Screens = {
     const setup = !h.settings.onboarded;
     const partner = Household.alone(h) ? null : Household.member(h, Household.partnerId(h));
     return `<main class="screen">
-      ${topbar({ back: setup ? null : 'household', step: setup ? 'members' : null })}
+      ${topbar({ back: setup ? null : 'settings', step: setup ? 'members' : null })}
       <h1>Who shares your home?</h1>
       <p class="lead">${setup ? "Just first names. You'll invite your partner once the plan is ready." : 'Change how your names show in the app.'}</p>
       <div class="card">
@@ -165,7 +165,7 @@ const Screens = {
               <input id="partner-name" value="${esc(h.settings.partnerName || '')}" placeholder="e.g. Sam" autocomplete="off" maxlength="40" data-input="partnerName">
             </div>`}
       </div>
-      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'home' : 'household')}">${setup ? 'Continue' : 'Done'}</button></div>
+      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'home' : 'settings')}">${setup ? 'Continue' : 'Done'}</button></div>
     </main>`;
   },
 
@@ -176,7 +176,7 @@ const Screens = {
     const pets = `<button class="chip" data-action="clearPets" aria-pressed="${h.pets.length === 0}">None</button>` +
       petTypes.map(([t, l]) => `<button class="chip" data-action="togglePet" data-key="${esc(t)}" aria-pressed="${h.pets.some(p => p.type === t)}">${l}</button>`).join('');
     return `<main class="screen">
-      ${topbar({ back: setup ? 'members' : 'household', step: setup ? 'home' : null })}
+      ${topbar({ back: setup ? 'members' : 'settings', step: setup ? 'home' : null })}
       <h1>Your home</h1>
       <p class="lead">So we only suggest what applies to you.</p>
       <div class="card">
@@ -195,7 +195,7 @@ const Screens = {
         ${switchRow('toggleFlag', 'garden', 'Garden or outdoor space', '', !!h.circumstances.garden)}
         ${switchRow('toggleFlag', 'car', 'Car', '', !!h.circumstances.car)}
       </div>
-      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'responsibilities' : 'household')}">${setup ? 'Show what needs doing' : 'Done'}</button></div>
+      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'responsibilities' : 'settings')}">${setup ? 'Show what needs doing' : 'Done'}</button></div>
     </main>`;
   },
 
@@ -227,7 +227,7 @@ const Screens = {
     const count = h.responsibilities.length;
     const active = Household.stage(h) === 'active';
     return `<main class="screen">
-      ${topbar({ back: setup ? 'home' : 'household', step: setup ? 'responsibilities' : null })}
+      ${topbar({ back: setup ? 'home' : 'settings', step: setup ? 'responsibilities' : null })}
       <h1>What needs doing in your home?</h1>
       <p class="lead" style="margin-bottom:0">${setup ? "Tick everything that applies. You're not deciding who does it yet."
         : active ? "Tick anything new. You'll both say how you feel about new tasks, and they're shared out fairly."
@@ -238,7 +238,7 @@ const Screens = {
       ${addOwnRow('Add your own task')}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${count ? `${plural(count, 'task')} · about ${formatMinutes(Household.weeklyTotal(h))} a week` : 'Nothing selected yet'}</p>
-        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'frequency' : 'household')}" ${count ? '' : 'disabled'}>${setup ? 'Continue' : 'Done'}</button>
+        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'frequency' : 'settings')}" ${count ? '' : 'disabled'}>${setup ? 'Continue' : 'Done'}</button>
       </div>
     </main>`;
   },
@@ -263,14 +263,14 @@ const Screens = {
         }).join('')}</div>
       </section>`).join('');
     return `<main class="screen">
-      ${topbar({ back: setup ? 'responsibilities' : 'household', step: setup ? 'frequency' : null })}
+      ${topbar({ back: setup ? 'responsibilities' : 'settings', step: setup ? 'frequency' : null })}
       <h1>How often, and how long?</h1>
       <p class="lead" style="margin-bottom:0">We've filled in what's typical. Change anything that's different in your home.</p>
       ${stage === 'active' ? `<p class="form-note" style="margin-top:16px">Your plan is running. Changes here affect when tasks come up, not who does them.</p>` : ''}
       ${sections}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">About ${formatMinutes(Household.weeklyTotal(h))} a week in total</p>
-        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'rate' : 'household')}">${setup ? 'Continue' : 'Done'}</button>
+        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'rate' : 'settings')}">${setup ? 'Continue' : 'Done'}</button>
       </div>
     </main>`;
   },
@@ -473,7 +473,7 @@ const Screens = {
     const back = draft ? 'household' : on ? 'today' : null;
     return `<main class="screen">
       ${back ? topbar({ back }) : `<div class="topbar"><span class="spacer"></span>
-        <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button></div>`}
+        ${settingsButton()}</div>`}
       <div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
       <h1 style="margin-top:0">${head}</h1>
       <p class="lead">${lead}</p>
@@ -498,7 +498,7 @@ const Screens = {
         <div class="card">${items.map(r => prefRow(h, me, r)).join('')}</div>
       </section>`).join('');
     return `<main class="screen">
-      ${topbar({ back: setup ? 'frequency' : 'household', step: setup ? 'rate' : null })}
+      ${topbar({ back: setup ? 'frequency' : 'settings', step: setup ? 'rate' : null })}
       <h1>How do you feel about each task?</h1>
       <p class="lead" style="margin-bottom:12px">Mark what you'd love to do ❤️ and what you'd rather not 🙃. Everything else counts as 🙂 Don't mind. ${otherName} won't see your answers.</p>
       <div class="legend">${PREFERENCES.map(p => `<span>${p.emoji} ${p.label}</span>`).join('')}</div>
@@ -523,7 +523,7 @@ const Screens = {
       <div class="card">${items.length ? items.map(r => prefRow(h, me, r)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
     return `<main class="screen">
       <div class="topbar"><span class="spacer"></span>
-        <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button>
+        ${settingsButton()}
       </div>
       <h1 style="margin-top:0">${orgName} made a plan for your home</h1>
       <p class="lead" style="margin-bottom:12px">Mark anything you'd rather not do 🙃, or would love to take ❤️. Everything else counts as 🙂 Don't mind. ${orgName} won't see your answers.</p>
@@ -581,7 +581,7 @@ const Screens = {
 
     return `<main class="screen">
       <div class="topbar"><span class="spacer"></span>
-        <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button>
+        ${settingsButton()}
       </div>
       <h1 style="margin-top:0">${head}</h1>
       <p class="lead" style="margin-bottom:16px">${lead}</p>
@@ -591,7 +591,6 @@ const Screens = {
       ${balanceCard(h)}
       ${whoDoesWhat(h)}
       ${isOrg ? `<button class="btn ghost" data-action="nav" data-to="frequency">Change times</button>` : ''}
-      ${reshuffleButton(h)}
       ${bottom}
     </main>`;
   },
@@ -608,7 +607,7 @@ const Screens = {
     const total = h.responsibilities.length;
     return `<main class="screen has-nav">
       <div class="topbar"><span class="spacer"></span>
-        <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button>
+        ${settingsButton()}
       </div>
       <h1 style="margin-top:0">Our home</h1>
       <div class="members">${memberChips(h)}</div>
@@ -626,14 +625,7 @@ const Screens = {
         <div class="stat"><b>${total}</b><span>${total === 1 ? 'Task' : 'Tasks'}</span></div>
         <div class="stat"><b>${formatMinutes(Household.weeklyTotal(h))}</b><span>A week, together</span></div>
       </div></div>
-      ${isOrg
-        ? `${addOwnRow('Add your own task')}
-           <div class="btn-pair" style="margin-top:12px">
-             <button class="btn secondary" data-action="nav" data-to="responsibilities">Edit tasks</button>
-             <button class="btn secondary" data-action="nav" data-to="frequency">Edit times</button>
-           </div>`
-        : `<button class="btn secondary" data-action="suggestChanges">Suggest a change</button>`}
-      ${reshuffleButton(h)}
+      ${isOrg ? addOwnRow('Add your own task') : ''}
       <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
       ${bottomNav('household', navDots(h))}
     </main>`;
@@ -690,7 +682,7 @@ const Screens = {
 
     return `<main class="screen has-nav">
       <div class="topbar"><span class="spacer"></span>
-        <button class="icon-btn right" data-action="menu" aria-label="Household options">${Icon.more}</button>
+        ${settingsButton()}
       </div>
       <div class="greeting">
         <p class="hello">Hello, ${first}</p>
@@ -698,6 +690,84 @@ const Screens = {
       </div>
       ${body}
       ${bottomNav('today', navDots(h))}
+    </main>`;
+  },
+
+  /* ---------- Settings: everything about you, your home, the subscription, in one place ---------- */
+  settings() {
+    const h = S.household;
+    const me = S.user.uid;
+    const isOrg = Household.isOwner(h, me);
+    const stage = Household.stage(h);
+    const on = Entitlements.active(S.subscription);
+    const usable = on || stage === 'draft';                       // a paused household can't be edited
+    const orgName = Household.memberName(Household.owner(h));
+    const partner = Household.people(h).find(m => m.uid !== me);
+    const partnerName = partner ? Household.memberName(partner) : 'your partner';
+    const row = (attrs, title, status) => `<button class="row" ${attrs}>
+        <div class="row-text"><span class="row-title">${title}</span>${status ? `<span class="row-sub">${status}</span>` : ''}</div>
+        <span class="chev">${Icon.chev}</span></button>`;
+    const info = (title, status) => `<div class="row static"><div class="row-text"><span class="row-title">${title}</span><span class="row-sub">${status}</span></div></div>`;
+    const go = to => `data-action="nav" data-to="${esc(to)}"`;
+    const group = (title, rows) => rows.filter(Boolean).length
+      ? `<div class="section-head"><h2 class="section-title">${title}</h2></div><div class="card">${rows.filter(Boolean).join('')}</div>` : '';
+
+    const myName = Household.memberName(Household.member(h, me));
+    const marked = Household.marked(h, me);
+    const you = group('You', [
+      isOrg && usable ? row(go('members'), 'Your name', esc(myName)) : info('Your name', esc(myName)),
+      info('Signed in as', esc(S.user.email || '')),
+      usable && stage !== 'active' ? row(go('rate'), 'My answers', marked ? `${plural(marked, 'task')} marked` : 'Nothing marked') : '',
+    ]);
+
+    const people = Household.people(h).map(m => esc(Household.memberName(m))).join(' & ');
+    const invited = !!(h.settings && h.settings.invitedAt);
+    const alone = Household.alone(h);
+    const roomsOf = type => roomCount(h, type);
+    const homeBits = [plural(roomsOf('bedroom'), 'bedroom'), plural(roomsOf('bathroom'), 'bathroom')];
+    if (h.children.length) homeBits.push(plural(h.children.length, 'child', 'children'));
+    if (h.pets.length) homeBits.push(h.pets.map(p => p.type === 'other' ? 'pet' : p.type).join(', '));
+    if (h.circumstances.garden) homeBits.push('garden');
+    if (h.circumstances.car) homeBits.push('car');
+    const ours = group('Our home', [
+      isOrg && usable ? row(go('members'), 'People', alone ? `${esc(people)} · ${invited ? 'invite sent' : 'not joined yet'}` : esc(people)) : info('People', esc(people)),
+      isOrg && alone && h.settings.onboarded ? row('data-action="invite"', `Invite ${esc(partnerName)}`, hasAccess() ? (invited ? 'Send the link again' : 'Send them the plan') : 'Starts with your subscription') : '',
+      isOrg && usable ? row(go('home'), 'Your home', esc(homeBits.join(' · '))) : '',
+      isOrg && usable ? row(go('responsibilities'), 'Tasks', plural(h.responsibilities.length, 'task')) : '',
+      isOrg && usable ? row(go('frequency'), 'Times', `about ${formatMinutes(Household.weeklyTotal(h))} a week`) : '',
+      !isOrg && on ? row('data-action="suggestChanges"', 'Suggest a change to the list', `${esc(orgName)} decides`) : '',
+      on && !alone && stage !== 'setup' && !(h.reshuffle && h.reshuffle.status === 'pending')
+        ? row('data-action="askReshuffle"', 'Reshuffle the plan', `Asks ${esc(partnerName)} first`) : '',
+    ]);
+
+    const sub = S.subscription;
+    const date = ms => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    let subStatus;
+    if (!on) subStatus = stage === 'draft' || !everSubscribed() ? 'Not started' : 'Ended';
+    else if (!isOrg) subStatus = `Covered by ${esc(orgName)}`;
+    else if (sub.source === 'stripe' && sub.status === 'trialing' && sub.trialEnd) subStatus = `Free trial until ${date(sub.trialEnd)}`;
+    else if (sub.source === 'stripe' && sub.status === 'past_due') subStatus = "Payment didn't go through";
+    else if (sub.source === 'stripe' && sub.periodEnd) subStatus = `${sub.interval === 'month' ? 'Monthly' : 'Yearly'} · ${sub.cancelAtPeriodEnd ? 'ends' : 'renews'} ${date(sub.periodEnd)}`;
+    else subStatus = 'Active';
+    const subscription = group('Subscription', [
+      (isOrg || on) && stage !== 'setup' ? row(go('subscribe'), 'Your subscription', subStatus) : info('Your subscription', subStatus),
+    ]);
+
+    const contact = APP_CONFIG.legal && APP_CONFIG.legal.email;
+    const help = group('Help & legal', [
+      `<a class="row" href="legal.html" target="_blank" rel="noopener"><div class="row-text"><span class="row-title">Imprint, privacy and terms</span></div><span class="chev">${Icon.chev}</span></a>`,
+      contact ? `<a class="row" href="mailto:${esc(contact)}"><div class="row-text"><span class="row-title">Contact us</span><span class="row-sub">${esc(contact)}</span></div><span class="chev">${Icon.chev}</span></a>` : '',
+    ]);
+
+    return `<main class="screen">
+      ${topbar({ back: S.settingsFrom || (stage === 'active' && on ? 'today' : 'household') })}
+      <h1>Settings</h1>
+      ${you}${ours}${subscription}${help}
+      <div class="card" style="margin-top:24px"><button class="row" data-action="signOut"><div class="row-text"><span class="row-title">Sign out</span></div></button></div>
+      <div class="card danger-zone">${isOrg
+        ? `<button class="row" data-action="confirmDelete"><div class="row-text"><span class="row-title text-danger">Delete household</span><span class="row-sub">Removes it for both of you</span></div></button>`
+        : `<button class="row" data-action="confirmLeave"><div class="row-text"><span class="row-title text-danger">Leave household</span><span class="row-sub">You'd need a new invite to come back</span></div></button>`}</div>
+      <div style="height:calc(32px + env(safe-area-inset-bottom))"></div>
     </main>`;
   },
 
@@ -812,10 +882,6 @@ function suggestionsCard(h) {
   return `<div class="card"><div class="row static"><div class="row-text"><span class="row-title">Your suggestions</span><span class="row-sub">Waiting for ${orgName}</span></div></div>
     ${mine.map(x => `<div class="row static"><div class="row-text"><span class="row-title">${label(x)}</span></div>
       <button class="link-btn" data-action="withdrawSuggestion" data-id="${esc(x.id)}">Withdraw</button></div>`).join('')}</div>`;
-}
-function reshuffleButton(h) {
-  return !Household.alone(h) && !(h.reshuffle && h.reshuffle.status === 'pending')
-    ? `<button class="btn ghost quiet" data-action="askReshuffle">Reshuffle the whole plan</button>` : '';
 }
 /** The next seven days, starting today. A dot marks days with something of mine due. */
 function dayStrip(h, mine, today, offset) {
@@ -1217,28 +1283,6 @@ const Sheets = {
           <span class="chev">${Icon.chev}</span></button>`).join('') ||
         `<button class="row" data-action="completeSwap" data-id="${esc(swap.id)}" data-key=""><div class="row-text"><span class="row-title">I have nothing to give, just take it</span></div></button>`}</div>
       <button class="btn ghost" data-action="closeSheet">Back</button>`, 'Pick what to give back');
-  },
-
-  menu() {
-    const h = S.household;
-    const me = S.user.uid;
-    const isOrg = Household.isOwner(h, me);
-    const on = Entitlements.active(S.subscription);
-    const orgName = Household.memberName(Household.owner(h));
-    const stage = Household.stage(h);
-    const plan = on ? (isOrg ? 'Active' : `Through ${orgName}`) : stage === 'draft' || !everSubscribed() ? 'Not started' : 'Ended';
-    const item = (to, label) => `<button class="btn secondary" data-action="sheetNav" data-to="${esc(to)}">${label}</button>`;
-    Sheet.open(`<h2>Our home</h2>
-      <div class="plan-line"><span>Subscription</span><span>${esc(plan)}${stage === 'setup' || (!on && !isOrg) ? '' : ` · <button class="link-btn" style="margin:0;padding:0" data-action="sheetNav" data-to="subscribe">${on ? 'Details' : 'See plans'}</button>`}</span></div>
-      <div class="plan-line"><span>Signed in as</span><span>${esc(S.user.email || '')}</span></div>
-      ${isOrg && (on || stage === 'draft') ? item('members', 'Names') + item('home', 'Your home') : ''}
-      ${stage !== 'active' && stage !== 'setup' && (on || stage === 'draft') ? item('rate', 'Change my answers') : ''}
-      ${isOrg && Household.alone(h) && h.settings.onboarded ? `<button class="btn secondary" data-action="invite">Invite ${esc(Household.memberName(Household.invitee(h)))}</button>` : ''}
-      <button class="btn ghost" data-action="signOut">Sign out</button>
-      ${isOrg
-        ? `<button class="btn ghost text-danger" data-action="confirmDelete">Delete household</button>`
-        : `<button class="btn ghost text-danger" data-action="confirmLeave">Leave household</button>`}
-      <p class="fine legal-line"><a href="legal.html" target="_blank" rel="noopener">Imprint, privacy and terms</a></p>`, 'Household options');
   },
 
   confirmDelete() {

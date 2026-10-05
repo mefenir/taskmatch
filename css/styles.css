@@ -328,3 +328,9 @@ button.row.pressed{animation:row-pressed .35s ease-out}
 .day-dot{width:5px;height:5px;border-radius:50%;background:transparent}
 .day-dot.on{background:var(--accent)}
 @media (prefers-reduced-motion: reduce){.meter-fill,.meter-num.on{transition:none}}
+
+/* Settings */
+a.row{text-decoration:none;color:inherit}
+.danger-zone{margin-top:12px}
+.danger-zone .row-title.text-danger{color:var(--danger)}
+

@@ -19,6 +19,7 @@ The full product spec is in [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md). Re
 5. **Two tabs once the plan runs:**
    - **Today** (mine): "Hello, Ian" and a playful line for the time of day and how my day is going (48 lines, never about the partner, never guilt), a big progress bar of today's minutes done, the next seven days, my tasks and anything from the board for me.
    - **Home** (ours): one bar in one colour for what both have done today (no per-person score), everything waiting for me (swaps, share-outs, suggestions, payment), the board, who does what with Swap, and the home's tasks and times.
+   - **Settings** (gear, top right): You (name, sign-in, my answers), Our home (people and invite, your home, tasks, times, reshuffle; the partner gets "Suggest a change"), Subscription, Help & legal, then Sign out and, apart, Delete / Leave household. Every row shows its current state.
    Before the plan runs, Home is the only screen. New tasks in a running plan show under "New, waiting to be shared out" and go out together (both rate, fair split, both say yes). **Reshuffle** gives a fresh split after asking the other person.
 
 The fair split (`js/plan.js`) shares by weekly effort (time × frequency), not by count. Clear oppositions (❤️ vs 🙃) go to the person who likes it; the rest is balanced. The same answers always give the same plan; the organiser is the tie-break, so the plan doesn't change when the partner joins.
@@ -36,7 +37,7 @@ There is no Free tier. Setting up and seeing the draft plan is free; inviting th
 - **When it ends**, the household is paused for both: the plans screen replaces the app (the partner sees "{organiser}'s subscription has ended"). Nothing is deleted; restarting brings everything back as it was, including anything that was half-way.
 - A failed renewal (`past_due`) keeps the household running while Stripe retries and shows "Fix payment".
 - If the subscription can't be read (offline, a hiccup), the app never says "ended": it shows a neutral "checking" screen and retries by itself.
-- The organiser manages or cancels in the Stripe customer portal (⋯ menu → Subscription → Details → Manage or cancel subscription).
+- The organiser manages or cancels in the Stripe customer portal (Settings → Your subscription → Manage or cancel subscription).
 - Two sources give access, merged in `Entitlements.effective()`: a Stripe subscription (`customers/{uid}/subscriptions`) or a gift from the admin panel (`subscriptions/{uid}`). While no Stripe prices are configured, the plans screen shows **Request access** (requests go to the admin panel).
 - The subscription is checked by the app. The security rules protect who may change what; they don't check payment (a modified app could use the plan without paying, but never touch someone else's data).
 

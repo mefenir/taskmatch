@@ -5,7 +5,7 @@
    ========================================================= */
 const INVITE_KEY = 'household-app/pending-invite';
 const INVITE_FROM_KEY = 'household-app/pending-invite-from';
-const HOUSEHOLD_SCREENS = ['members', 'home', 'responsibilities', 'frequency', 'rate', 'review', 'today', 'household',
+const HOUSEHOLD_SCREENS = ['members', 'home', 'responsibilities', 'frequency', 'rate', 'review', 'today', 'household', 'settings',
   'subscribe', 'breakdown', 'reshare'];
 const SETUP_SCREENS = ONBOARDING;
 
@@ -499,7 +499,7 @@ const Actions = {
   },
   sheetNav(d) { Sheet.close(); go(d.to); },
   closeSheet() { Sheet.close(); },
-  menu() { Sheets.menu(); },
+  menu() { go('settings'); },
   confirmDelete() { Sheets.confirmDelete(); },
   confirmLeave() { Sheets.confirmLeave(); },
 
@@ -670,7 +670,12 @@ const Actions = {
   /* daily use */
   shareNow() { if (isOrganiser()) shareNewTasks(true); },
   setDay(d) { S.dayOffset = clamp(Number(d.key) || 0, 0, 6); rerender(); },
-  toggleDone(d) { Household.toggleDone(S.household, d.id, S.user.uid); save('completions'); rerender(); },
+  toggleDone(d) {
+    const h = S.household;
+    Household.toggleDone(h, d.id, S.user.uid);
+    save('completions');
+    rerender();
+  },
 
   /* subscription: one screen, one checkout */
   peek(d) {
@@ -971,6 +976,9 @@ function resolveRoute() {
   // The organiser sets up alone. (A partner can't be here yet: invites only exist once the plan does.)
   if (stage === 'setup') return organiser && SETUP_SCREENS.includes(name) ? name : (h.settings.step || 'members');
 
+  // Settings are always there (a paused household shows what can still be done).
+  if (name === 'settings') return 'settings';
+
   // Past the draft, the household needs its subscription. Without it, it's paused on the plans screen.
   // While that isn't known yet (still loading, or a read failed) a neutral screen keeps the address as it is.
   if (stage !== 'draft' && !hasAccess()) { S.lastStage = stage; return !watchers.subLoaded || S.subUnknown ? 'checking' : 'subscribe'; }
@@ -1000,6 +1008,7 @@ function render(routeChanged) {
   if (name !== currentRoute) {
     if (name !== 'household') S.suggestMode = false;
     if (name !== 'today') S.dayOffset = 0;
+    if (name === 'settings' && ['today', 'household', 'subscribe'].includes(currentRoute)) S.settingsFrom = currentRoute;
     if (!['review', 'rate'].includes(name)) S.prefDraft = null;
   }
   currentRoute = name;
