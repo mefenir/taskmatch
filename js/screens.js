@@ -618,7 +618,7 @@ const Screens = {
       ${needs ? `<div class="section-head"><h2 class="section-title">Needs you</h2></div>${needs}` : ''}
       ${boardCard(h)}
       <div class="section-head"><h2 class="section-title">Who does what</h2></div>
-      <p class="fine" style="text-align:left;margin:-4px 4px 10px">Want to hand something over? Tap Swap.</p>
+      <p class="fine" style="text-align:left;margin:-4px 4px 10px">Tap Swap to hand something over, or When to choose your days.</p>
       ${balanceCard(h)}
       ${whoDoesWhat(h)}
       <div class="section-head"><h2 class="section-title">The home</h2></div>
@@ -654,11 +654,9 @@ const Screens = {
 
     let body;
     if (offset === 0) {
-      const scheduled = mine.filter(r => Timing.isScheduled(r));
-      const open = scheduled.map(r => ({ r, due: Household.dueDate(h, r) }))
-        .filter(x => x.due <= today && !Schedule.doneOn(Household.completion(h, x.r.id), now)).sort((a, b) => a.due - b.due);
-      const done = scheduled.filter(r => Schedule.doneOn(Household.completion(h, r.id), now));
-      const whenNeeded = mine.filter(r => !Timing.isScheduled(r));
+      const doneToday = r => Schedule.doneOn(Household.completion(h, r.id), now);
+      const open = mine.filter(r => Household.occursOn(h, r, today) && !doneToday(r));
+      const done = mine.filter(doneToday);
       const board = Household.myNoteTasks(h, me);
       body = `${progress.total ? meter('me', progress.pct, 'Your day',
           progress.left ? `${plural(progress.left, 'task')} · ${formatMinutes(progress.total - progress.done)} left` : 'All done') : ''}
@@ -666,13 +664,11 @@ const Screens = {
         ${board.length ? `<div class="section-head"><h2 class="section-title">From the board</h2></div>
           <div class="card">${board.map(n => noteTaskRow(h, n, me, false)).join('')}</div>` : ''}
         ${open.length || done.length ? `<div class="section-head"><h2 class="section-title">Your tasks today</h2></div><div class="card">
-            ${open.map(x => tick(x.r, lateLabel(x.r, x.due, today, now) || freqLabel(x.r))).join('')}
+            ${open.map(r => tick(r, esc(freqLabel(r)))).join('')}
             ${done.map(r => tick(r, 'Done today')).join('')}
-          </div>` : (board.length ? '' : `<div class="celebrate">Nothing due today.</div>`)}
-        ${whenNeeded.length ? `<div class="section-head"><h2 class="section-title">When needed</h2></div>
-          <div class="card">${whenNeeded.map(r => { const c = Household.completion(h, r.id); return tick(r, c && c.last ? `Last done ${Schedule.relative(c.last, now).toLowerCase()}` : 'Tick it when you do it'); }).join('')}</div>` : ''}`;
+          </div>` : (board.length ? '' : `<div class="celebrate">Nothing due today.</div>`)}`;
     } else {
-      const due = mine.filter(r => Timing.isScheduled(r) && Household.dueOn(h, r, day, today));
+      const due = mine.filter(r => Household.occursOn(h, r, day));
       const name = day.toLocaleDateString(undefined, { weekday: 'long' });
       body = `${dayStrip(h, mine, today, offset)}
         <div class="section-head"><h2 class="section-title">${esc(Schedule.relative(day, now) === 'Tomorrow' ? 'Tomorrow' : name)}</h2><span class="section-meta">${due.length ? formatMinutes(due.reduce((t, r) => t + Timing.of(r).minutes, 0)) : ''}</span></div>
@@ -832,9 +828,11 @@ function whoDoesWhat(h) {
   const canSwap = !Household.alone(h);
   const row = (r, own) => {
     const pending = Household.pendingFor(h, r.id);
-    const right = own && canSwap
+    const swap = own && canSwap
       ? (pending ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(r.id)}">Swap</button>`)
       : '';
+    const when = own && canWhen(h, r) ? `<button class="mini" data-action="openWhen" data-id="${esc(r.id)}" aria-label="When: ${esc(r.name)}">📅 When</button>` : '';
+    const right = when || swap ? `<span class="row-actions">${when}${swap}</span>` : '';
     return `<div class="row static"><button class="name-btn" data-action="peek" data-id="${esc(r.id)}"><span class="row-title">${esc(r.name)}</span>
       <span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${taskLabel(h, r)}</span></button>${right}</div>`;
   };
@@ -853,35 +851,19 @@ function whoDoesWhat(h) {
     + others.map(m => list(`${esc(Household.memberName(m))}'s tasks${m.placeholder ? ' (suggested)' : ''}`, Household.tasksOf(h, m.uid), false)).join('')
     + fresh;
 }
-/** A task still open after its day. Weekly ones say which day they were from, and on Sunday that it's the last day. */
-function lateLabel(r, due, today, now) {
-  if (!(due < today)) return '';
-  if (!Household.keepsWeekday(r)) return `Was due ${Schedule.relative(due, now).toLowerCase()}`;
-  if (Schedule.weekdayIndex(today) === 6) return '<b class="last-day">Last day this week</b>';
-  return `From ${Schedule.WEEKDAYS[Schedule.weekdayIndex(due)]}`;
+/** Does this task have a "when" the person can set? (A running plan, a task that isn't daily.) */
+function canWhen(h, r) {
+  return Household.stage(h) === 'active' && !!Household.whenKind(r) && Household.peopleIds(h).includes(Household.assignee(h, r.id));
 }
 /** "Weekly · 60 min · Wednesdays" on Home, once the plan is running. */
 function taskLabel(h, r) {
   const base = Timing.label(r);
-  if (Household.stage(h) !== 'active' || !Household.keepsWeekday(r) || !Household.peopleIds(h).includes(Household.assignee(h, r.id))) return esc(base);
-  return `${esc(base)} · ${Schedule.WEEKDAYS[Household.weekdayOf(h, r)]}s`;
-}
-/** Weekly and two-weekly tasks in a running plan: whoever does it picks the day; the other sees it. */
-function weekdayPicker(h, u) {
-  if (!u || Household.stage(h) !== 'active' || !Household.keepsWeekday(u)) return '';
-  const who = Household.assignee(h, u.id);
-  if (!who || !Household.peopleIds(h).includes(who)) return '';
-  const day = Household.weekdayOf(h, u);
-  const every = Timing.of(u).frequency === 'fortnightly' ? 'Every other' : 'Every';
-  const label = u.parentId ? ` <span class="muted">· ${esc(u.name)}</span>` : '';
-  if (who !== S.user.uid) {
-    const name = esc(Household.memberName(Household.member(h, who)));
-    return `<p class="weekday-read">${name} does it: ${every.toLowerCase()} ${Schedule.WEEKDAYS[day]}${label}</p>`;
-  }
-  return `<h3 class="section-title" style="margin:0 0 8px">Which day?${label}</h3>
-    <div class="weekday-picker" role="group" aria-label="Day of the week">${Schedule.WEEKDAYS.map((n, i) =>
-      `<button class="chip weekday" data-action="setWeekday" data-id="${esc(u.id)}" data-key="${i}" aria-pressed="${i === day}" aria-label="${n}">${n[0]}</button>`).join('')}</div>
-    <p class="fine weekday-note">${every} ${Schedule.WEEKDAYS[day]}. It shows on your Today list that day.</p>`;
+  if (Household.stage(h) !== 'active' || !Household.whenKind(r) || !Household.peopleIds(h).includes(Household.assignee(h, r.id))) return esc(base);
+  const text = Household.whenText(h, r);
+  if (Household.whenKind(r) !== 'date') return `${esc(base)} · ${esc(text)}`;
+  if (text) return `${esc(base)} · ${esc(text)}${Household.plannedMissed(h, r) ? ', not done' : ''}`;
+  const c = Household.completion(h, r.id);
+  return `${esc(base)}${c && c.last ? ` · last done ${esc(Schedule.relative(c.last, new Date()).toLowerCase())}` : ''}`;
 }
 /** New tasks nobody has yet (after "not now" in a share-out): anyone can take one. */
 function needsAHome(h) {
@@ -920,10 +902,9 @@ function suggestionsCard(h) {
 }
 /** The next seven days, starting today. A dot marks days with something of mine due. */
 function dayStrip(h, mine, today, offset) {
-  const scheduled = mine.filter(r => Timing.isScheduled(r));
   return `<div class="day-strip" role="group" aria-label="Pick a day">${[0, 1, 2, 3, 4, 5, 6].map(i => {
     const d = Schedule.addDays(today, i);
-    const has = scheduled.some(r => Household.dueOn(h, r, d, today) && !(i === 0 && Schedule.doneOn(Household.completion(h, r.id), new Date())));
+    const has = mine.some(r => Household.occursOn(h, r, d) && !(i === 0 && Schedule.doneOn(Household.completion(h, r.id), new Date())));
     const name = d.toLocaleDateString(undefined, { weekday: 'short' });
     return `<button class="day ${i === 0 ? 'is-today' : ''}" data-action="setDay" data-key="${i}" aria-pressed="${i === offset}" aria-label="${esc(d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))}${has ? ', something due' : ''}">
       <span class="day-num">${d.getDate()}</span><span class="day-name">${esc(name)}</span><span class="day-dot ${has ? 'on' : ''}" aria-hidden="true"></span></button>`;
@@ -1270,6 +1251,46 @@ const Sheets = {
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Add your own task');
   },
 
+  /** When a task happens. Whoever does it decides; the draft lives in S.whenDraft until Save. */
+  when(u) {
+    const w = S.whenDraft;
+    if (!w || w.id !== u.id) return;
+    const h = S.household;
+    const kind = Household.whenKind(u);
+    const D = Schedule.WEEKDAYS;
+    const label = u.parentId ? ` <span class="muted">· ${esc(u.name)}</span>` : '';
+    const chips = (picked, many) => `<div class="weekday-picker" role="group" aria-label="${many ? 'Days of the week' : 'Day of the week'}">${D.map((n, i) =>
+      `<button class="chip weekday" data-action="whenDay" data-key="${i}" aria-pressed="${picked.includes(i)}" aria-label="${n}">${n[0]}</button>`).join('')}</div>`;
+    let body = '', note = '';
+    if (kind === 'days') {
+      const n = w.days.length;
+      body = `<h3 class="section-title" style="margin:0 0 8px">Which days?${label}</h3>${chips(w.days, true)}`;
+      note = n === 0 ? 'Pick at least one day.' : n >= 7 ? 'Every day: this becomes a daily task.'
+        : n === 1 ? `Every ${D[w.days[0]]}.` : `${n} days a week: ${w.days.map(d => D[d].slice(0, 3)).join(', ')}.`;
+    } else if (kind === 'day') {
+      body = `<h3 class="section-title" style="margin:0 0 8px">Which day?${label}</h3>${chips([w.day], false)}`;
+      note = `Every other ${D[w.day]}.`;
+    } else if (kind === 'month') {
+      const weeks = ['1st', '2nd', '3rd', '4th', 'Last'];
+      body = `<h3 class="section-title" style="margin:0 0 8px">Which week?${label}</h3>
+        <div class="weekday-picker weeks" role="group" aria-label="Week of the month">${weeks.map((n, i) =>
+          `<button class="chip weekday" data-action="whenWeek" data-key="${i + 1}" aria-pressed="${w.week === i + 1}">${n}</button>`).join('')}</div>
+        <h3 class="section-title" style="margin:8px 0">Which day?</h3>${chips([w.day], false)}`;
+      note = `The ${w.week >= 5 ? 'last' : weeks[w.week - 1]} ${D[w.day]} of the month.`;
+    } else {
+      const today = Schedule.key(new Date());
+      body = `<h3 class="section-title" style="margin:0 0 8px">Plan a date?${label}</h3>
+        <div class="field when-date"><input type="date" id="when-date" data-change="whenDate" min="${today}" value="${esc(w.date || '')}" aria-label="Date"></div>`;
+      note = 'It shows on your Today list that day only. Ticking it clears the date.';
+    }
+    Sheet.open(`<h2>When: ${esc(u.name)}</h2>
+      ${body}
+      <p class="fine weekday-note">${esc(note)} ${kind === 'date' ? '' : 'It shows on your Today list on those days.'}</p>
+      <button class="btn primary" data-action="saveWhen">Save</button>
+      ${kind === 'date' && Household.plannedDate(h, u) ? '<button class="btn secondary" data-action="clearWhen">Clear the date</button>' : ''}
+      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'When');
+  },
+
   /** What a task includes, and breaking it into parts. */
   taskPeek(r, unit) {
     const h = S.household;
@@ -1282,7 +1303,6 @@ const Sheets = {
     const removable = isOrg && !r.predefined && !r.parentId;
     Sheet.open(`<h2>${esc(r.name)}</h2>
       <p style="margin-bottom:12px">${who ? esc(who) + ' · ' : ''}${esc(Timing.label(r))}${r.mentalLoad ? ' · Mental load' : ''}</p>
-      ${weekdayPicker(h, u)}
       ${removable ? `<button class="btn ghost text-danger" data-action="removeTask" data-id="${esc(r.id)}">Remove this task</button>` : ''}
       ${parts.length ? `<h3 class="section-title" style="margin:0 0 8px">${split ? 'Broken into' : 'Includes'}</h3>
         <ul class="part-chips">${parts.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}

@@ -22,7 +22,7 @@
                signature, accepted: { [uid]: at }, rebalancedBy?, createdAt, startedAt }
    swaps       [{ id, from, to, respId, status: 'pending'|'done'|'declined', gave?, at, resolvedAt?, seen? }]
    completions { [unitId]: { last, prev, by } }
-   weekdays { [unitId]: { day: 0–6, Monday first, at } }   (weekly and two-weekly tasks; set by whoever does it)
+   when { [unitId]: { days | day | week+day | date, at } }   (set by whoever does the task; see "When each task happens")
    reshare, reshuffle, notes — see their sections below
    ========================================================= */
 const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], children: [0, 8] };
@@ -72,9 +72,22 @@ const Household = {
     if (h.reshuffle != null && !isObj(h.reshuffle)) h.reshuffle = null;
     if (!isObj(h.settings)) h.settings = {};
     if (!isObj(h.preferences)) h.preferences = {};
-    h.weekdays = isObj(h.weekdays) ? Object.fromEntries(Object.entries(h.weekdays)
-      .filter(([id, w]) => okId(id) && isObj(w) && Number.isInteger(w.day) && w.day >= 0 && w.day <= 6)
-      .map(([id, w]) => [id, { day: w.day, at: Number(w.at) || 0 }])) : {};
+    const okDay = x => Number.isInteger(x) && x >= 0 && x <= 6;
+    const cleanWhen = w => {
+      if (!isObj(w)) return null;
+      const at = Number(w.at) || 0;
+      if (Array.isArray(w.days)) { const days = [...new Set(w.days.filter(okDay))].sort((a, b) => a - b); return days.length ? { days, at } : null; }
+      if (Number.isInteger(w.week) && w.week >= 1 && w.week <= 5 && okDay(w.day)) return { week: w.week, day: w.day, at };
+      if (okDay(w.day)) return { day: w.day, at };
+      if (typeof w.date === 'string' && Schedule.fromKey(w.date)) return { date: w.date, at };
+      return null;
+    };
+    const when = {};
+    // Days picked before "when" existed (weekdays { id: { day } }) count as one chosen day.
+    if (isObj(h.weekdays)) Object.entries(h.weekdays).forEach(([id, w]) => { if (okId(id) && isObj(w) && okDay(w.day)) when[id] = { days: [w.day], day: w.day, at: Number(w.at) || 0 }; });
+    if (isObj(h.when)) Object.entries(h.when).forEach(([id, w]) => { const c = okId(id) && cleanWhen(w); if (c) when[id] = c; });
+    h.when = when;
+    delete h.weekdays;
     return h;
   },
 
@@ -368,9 +381,10 @@ const Household = {
   partUnit(r, p) {
     return { id: p.id, parentId: r.id, parentName: r.name, name: p.name, minutes: p.minutes, frequency: p.frequency,
       category: r.category, libraryId: null, mentalLoad: !!p.mentalLoad, custom: !!p.custom,
-      createdAt: p.createdAt || r.createdAt || null };
+      createdAt: p.createdAt || r.createdAt || null, _days: p._days };
   },
   units(h) {
+    this.applyWhen(h);
     const out = [];
     h.responsibilities.forEach(r => { if (this.isSplit(r)) this.parts(r).forEach(p => out.push(this.partUnit(r, p))); else out.push(r); });
     return out;
@@ -607,112 +621,192 @@ const Household = {
   /* ---------- Schedule ---------- */
   /** Spread each person's first round evenly over the period (weekly over 7 days, monthly over 30). */
   firstOffset(h, r) {
-    const freq = Timing.of(r).frequency;
+    const freq = Timing.of(r).base;
     const f = Timing.frequency(freq);
     const period = Schedule.periodDays(f);
     if (period <= 1) return 0;
     const owner = this.assignee(h, r.id);
     const same = this.units(h)
-      .filter(x => this.assignee(h, x.id) === owner && Timing.of(x).frequency === freq)
+      .filter(x => this.assignee(h, x.id) === owner && Timing.of(x).base === freq)
       .map(x => x.id).sort();
     const i = same.indexOf(r.id);
     return i < 0 ? 0 : Math.floor(i * period / same.length);
   },
-  /**
-   * When the scheduled unit is next due. Weekly and two-weekly tasks keep to a day of the week
-   * (weekdayOf); missed, they stay due until Sunday, and on Monday they go back to their own day.
-   */
-  dueDate(h, r, now = new Date()) {
-    if (this.keepsWeekday(r)) return this.weekdayDue(h, r, now);
-    return Schedule.nextDue(r, this.completion(h, r.id), h.plan && h.plan.startedAt, this.firstOffset(h, r));
-  },
-
-  /* ---------- A day of the week for weekly and two-weekly tasks ----------
-   * weekdays { unitId: { day: 0–6 (Monday first), at: ms } } — set by whoever does the task.
-   * Without a choice, the task keeps the day the plan spread it to. */
-  keepsWeekday(u) { return ['weekly', 'fortnightly'].includes(Timing.of(u).frequency); },
+  /* ---------- When each task happens ----------
+   * when { unitId: { days: [0–6] } | { day: 0–6 } | { week: 1–5, day: 0–6 } | { date: 'YYYY-MM-DD' }, at: ms }
+   *   days   — several times a week and weekly: any days (7 days = daily, 1 day = weekly)
+   *   day    — every two weeks: one day, every other week
+   *   week   — monthly: 1st–4th or 5 = last, plus the day
+   *   date   — occasionally / as needed: one planned date, cleared when it's ticked
+   * Set by whoever does the task (the When button on Home). Without a choice, the plan spreads
+   * tasks over the period. Today shows only what falls on that day: a missed task waits for its next turn.
+   * (Days of the week: 0 = Monday … 6 = Sunday.) */
+  WHEN_KIND: Object.freeze({ several: 'days', weekly: 'days', fortnightly: 'day', monthly: 'month', occasionally: 'date', asneeded: 'date' }),
+  whenKind(u) { return this.WHEN_KIND[Timing.of(u).base] || null; },
+  whenChoice(h, id) { const w = isObj(h.when) ? h.when[id] : null; return isObj(w) ? w : null; },
   startDay(h) { return Schedule.day((h.plan && h.plan.startedAt) || Date.now()); },
   /** The day the plan spread it to, the first time round. */
   spreadDay(h, u) { return Schedule.addDays(this.startDay(h), this.firstOffset(h, u)); },
-  weekdayChoice(h, id) {
-    const w = isObj(h.weekdays) ? h.weekdays[id] : null;
-    return w && Number.isInteger(w.day) && w.day >= 0 && w.day <= 6 ? w : null;
+  /** Days of the week for a "days" task. */
+  daysOf(h, u) {
+    const w = this.whenChoice(h, u.id);
+    if (w && Array.isArray(w.days) && w.days.length) return w.days.slice();
+    const first = Schedule.weekdayIndex(this.spreadDay(h, u));
+    if (Timing.of(u).base !== 'several') return [first];
+    return [...new Set([0, 2, 4].map(k => (first + k) % 7))].sort((a, b) => a - b);
   },
-  weekdayOf(h, u) {
-    const w = this.weekdayChoice(h, u.id);
-    return w ? w.day : Schedule.weekdayIndex(this.spreadDay(h, u));
+  /** Day of the week for a two-weekly or monthly task. */
+  dayOf(h, u) {
+    const w = this.whenChoice(h, u.id);
+    return w && Number.isInteger(w.day) ? w.day : Schedule.weekdayIndex(this.spreadDay(h, u));
+  },
+  /** Week of the month for a monthly task: 1–4, or 5 = the last one. */
+  weekOf(h, u) {
+    const w = this.whenChoice(h, u.id);
+    if (w && Number.isInteger(w.week)) return w.week;
+    return Math.min(4, Math.ceil(this.spreadDay(h, u).getDate() / 7));
   },
   /** Two-weekly tasks: is this one of its weeks? */
   inItsWeek(h, u, monday) {
-    if (Timing.of(u).frequency !== 'fortnightly') return true;
+    if (Timing.of(u).base !== 'fortnightly') return true;
     const start = this.startDay(h);
     const parity = ((Schedule.weeksBetween(start, this.spreadDay(h, u)) % 2) + 2) % 2;
     return ((Schedule.weeksBetween(start, monday) % 2) + 2) % 2 === parity;
   },
-  /** Nothing is due before the plan started, the task was added, or its day was last changed. */
+  /** Nothing is due before the plan started, the task was added, or its days were last changed. */
   sinceDay(h, u) {
     const days = [this.startDay(h)];
     const created = u.createdAt || ((h.responsibilities.find(r => r.id === u.parentId) || {}).createdAt);
     if (created) days.push(Schedule.day(created));
-    const w = this.weekdayChoice(h, u.id);
-    if (w && w.at) days.push(Schedule.day(w.at));
+    const w = this.whenChoice(h, u.id);
+    if (w && w.at && !w.date) days.push(Schedule.day(w.at));
     return new Date(Math.max(...days.map(d => d.getTime())));
   },
-  weekdayDue(h, u, now = new Date()) {
+  /** The planned date of an occasional task, as a local day, or null. */
+  plannedDate(h, u) {
+    const w = this.whenChoice(h, u.id);
+    return w && typeof w.date === 'string' ? Schedule.fromKey(w.date) : null;
+  },
+  /** Does this unit fall on `day`? Only that day: nothing carries over. */
+  occursOn(h, u, day) {
+    const d = Schedule.day(day);
+    const kind = this.whenKind(u);
+    if (kind === 'date') { const p = this.plannedDate(h, u); return !!p && p.getTime() === d.getTime(); }
+    if (d < this.sinceDay(h, u)) return false;
+    const wd = Schedule.weekdayIndex(d);
+    if (kind === 'days') return this.daysOf(h, u).includes(wd);
+    if (kind === 'day') return wd === this.dayOf(h, u) && this.inItsWeek(h, u, Schedule.mondayOf(d));
+    if (kind === 'month') {
+      if (wd !== this.dayOf(h, u)) return false;
+      const week = this.weekOf(h, u);
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      return week >= 5 ? d.getDate() + 7 > last : Math.ceil(d.getDate() / 7) === week;
+    }
+    return Timing.of(u).frequency === 'daily';
+  },
+  /** Next day (from today) the unit falls on, or null. */
+  dueDate(h, u, now = new Date()) {
     const today = Schedule.day(now);
-    const monday = Schedule.mondayOf(today);
-    const day = this.weekdayOf(h, u);
-    const since = this.sinceDay(h, u);
+    if (this.whenKind(u) === 'date') { const p = this.plannedDate(h, u); return p && p >= today ? p : null; }
+    for (let i = 0; i < 70; i++) { const d = Schedule.addDays(today, i); if (this.occursOn(h, u, d)) return d; }
+    return null;
+  },
+  dueOn(h, u, day) { return this.occursOn(h, u, day); },
+  /** The schedule in words: "Wednesdays", "Mon, Wed, Fri", "Every other Friday", "1st Saturday", "Planned for 14 Nov". */
+  whenText(h, u) {
+    const kind = this.whenKind(u), D = Schedule.WEEKDAYS;
+    if (kind === 'days') {
+      const days = this.daysOf(h, u);
+      if (days.length >= 7) return 'Every day';
+      return days.length === 1 ? `${D[days[0]]}s` : days.map(d => D[d].slice(0, 3)).join(', ');
+    }
+    if (kind === 'day') return `Every other ${D[this.dayOf(h, u)]}`;
+    if (kind === 'month') { const w = this.weekOf(h, u); return `${w >= 5 ? 'Last' : ['1st', '2nd', '3rd', '4th'][w - 1]} ${D[this.dayOf(h, u)]}`; }
+    if (kind === 'date') { const p = this.plannedDate(h, u); return p ? `Planned for ${p.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''; }
+    return '';
+  },
+  /** An occasional task planned for a day that passed without being done. */
+  plannedMissed(h, u, now = new Date()) {
+    const p = this.plannedDate(h, u);
+    if (!p || p >= Schedule.day(now)) return false;
     const c = this.completion(h, u.id);
-    for (let k = 0; k < 4; k++) {
-      const m = Schedule.addDays(monday, 7 * k);
-      if (!this.inItsWeek(h, u, m)) continue;
-      const due = Schedule.addDays(m, day);
-      if (k === 0 && c && c.last && Schedule.day(c.last) >= m) continue;   // done this week
-      if (due < since) continue;
-      return due;
-    }
-    return Schedule.addDays(monday, 28 + day);
-  },
-  /** Only the person doing it picks its day. */
-  setWeekday(h, userId, unitId, day) {
-    const u = this.unit(h, unitId);
-    if (!u || !this.keepsWeekday(u) || this.assignee(h, unitId) !== userId) return false;
-    if (!Number.isInteger(day) || day < 0 || day > 6) return false;
-    if (this.weekdayOf(h, u) === day) return false;
-    h.weekdays = { ...(isObj(h.weekdays) ? h.weekdays : {}), [unitId]: { day, at: Date.now() } };
-    return true;
-  },
-
-  /** Is a scheduled unit due on `day`? Anything overdue counts as due today. */
-  dueOn(h, r, day, today = new Date()) {
-    if (this.keepsWeekday(r)) {
-      const d = Schedule.day(day);
-      if (d.getTime() === Schedule.day(today).getTime()) return this.weekdayDue(h, r, today) <= d;
-      return this.weekdayDue(h, r, d).getTime() === d.getTime();
-    }
-    const f = Timing.frequency(Timing.of(r).frequency);
-    let d = this.dueDate(h, r);
-    if (!d) return false;
-    const target = Schedule.day(day).getTime();
-    const start = Schedule.day(today);
-    if (d < start) d = start;
-    for (let i = 0; i < 400 && d.getTime() < target; i++) d = Schedule.advance(d, f);
-    return d.getTime() === target;
+    return !(c && c.last && Schedule.day(c.last) >= p);
   },
   /**
-   * Today's progress for some people, by time: minutes of the scheduled work due today (or overdue)
-   * that is ticked, out of all of it. Work ticked today counts as done.
+   * Set when a task happens. Only the person doing it can.
+   * value: { days } | { day } | { week, day } | { date } (date null = clear it)
+   */
+  setWhen(h, userId, unitId, value, now = new Date()) {
+    const u = this.unit(h, unitId);
+    if (!u || this.assignee(h, unitId) !== userId || !isObj(value)) return false;
+    const kind = this.whenKind(u);
+    const okDay = x => Number.isInteger(x) && x >= 0 && x <= 6;
+    let next;
+    if (kind === 'days') {
+      if (!Array.isArray(value.days) || !value.days.every(okDay)) return false;
+      const days = [...new Set(value.days)].sort((a, b) => a - b);
+      if (!days.length) return false;
+      next = { days };
+    } else if (kind === 'day') {
+      if (!okDay(value.day)) return false;
+      next = { day: value.day };
+    } else if (kind === 'month') {
+      const week = Number.isInteger(value.week) ? value.week : this.weekOf(h, u);
+      const day = okDay(value.day) ? value.day : this.dayOf(h, u);
+      if (week < 1 || week > 5) return false;
+      next = { week, day };
+    } else if (kind === 'date') {
+      if (value.date == null) {
+        if (!this.whenChoice(h, unitId)) return false;
+        const rest = { ...h.when }; delete rest[unitId]; h.when = rest;
+        return true;
+      }
+      const d = Schedule.fromKey(value.date);
+      if (!d || d < Schedule.day(now)) return false;
+      next = { date: Schedule.key(d) };
+    } else return false;
+    const cur = this.whenChoice(h, unitId);
+    const same = cur && JSON.stringify({ ...cur, at: 0 }) === JSON.stringify({ ...next, at: 0 });
+    if (same) return false;
+    h.when = { ...(isObj(h.when) ? h.when : {}), [unitId]: { ...next, at: now.getTime() } };
+    return true;
+  },
+  /** Ticking an occasional task done clears its planned date. */
+  clearPlannedIfDone(h, unitId, now = new Date()) {
+    const u = this.unit(h, unitId);
+    if (!u || this.whenKind(u) !== 'date' || !this.plannedDate(h, u)) return false;
+    if (!Schedule.doneOn(this.completion(h, unitId), now)) return false;
+    const rest = { ...h.when }; delete rest[unitId]; h.when = rest;
+    return true;
+  },
+  /** Chosen days change how often a task really happens, so the fair split counts them.
+   *  Kept on the task in memory only (never saved with it). */
+  applyWhen(h) {
+    const tag = (o, days) => Object.defineProperty(o, '_days', { value: days, enumerable: false, writable: true, configurable: true });
+    const daysFor = (o, base) => {
+      if (base !== 'several' && base !== 'weekly') return undefined;
+      const w = this.whenChoice(h, o.id);
+      return w && Array.isArray(w.days) && w.days.length ? w.days : undefined;
+    };
+    (h.responsibilities || []).forEach(r => {
+      const base = r.frequency || Timing.defaultsFor(r.libraryId).frequency;
+      tag(r, this.isSplit(r) ? undefined : daysFor(r, base));
+      this.parts(r).forEach(p => tag(p, daysFor(p, p.frequency || base)));
+    });
+  },
+
+  /**
+   * Today's progress for some people, by time: minutes of today's work that is ticked, out of all
+   * of it (anything ticked today counts as done).
    * @returns {{ done: number, total: number, left: number, pct: number }} minutes; left = tasks still open
    */
   dayProgress(h, userIds, now = new Date()) {
-    const today = Schedule.day(now);
     let done = 0, open = 0, left = 0;
     this.units(h).forEach(u => {
-      if (!userIds.includes(this.assignee(h, u.id)) || !Timing.isScheduled(u)) return;
+      if (!userIds.includes(this.assignee(h, u.id))) return;
       const minutes = Timing.of(u).minutes;
       if (Schedule.doneOn(this.completion(h, u.id), now)) done += minutes;
-      else if (this.dueDate(h, u) <= today) { open += minutes; left += 1; }
+      else if (this.occursOn(h, u, now)) { open += minutes; left += 1; }
     });
     const total = done + open;
     return { done, total, left, pct: total ? Math.round(done / total * 100) : 0 };

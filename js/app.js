@@ -785,7 +785,7 @@ const Actions = {
   toggleDone(d) {
     const h = S.household;
     Household.toggleDone(h, d.id, S.user.uid);
-    save('completions');
+    if (Household.clearPlannedIfDone(h, d.id)) save('completions', 'when'); else save('completions');
     rerender();
   },
 
@@ -795,17 +795,64 @@ const Actions = {
     const r = h.responsibilities.find(x => x.id === d.id) || Household.parentOf(h, d.id);
     if (r) Sheets.taskPeek(r, Household.unit(h, d.id));
   },
-  /** Whoever does a weekly task picks its day; it stays until they change it. */
-  setWeekday(d) {
+  /* When a task happens: only the person doing it can change it. */
+  openWhen(d) {
     const h = S.household;
-    const day = Number(d.key);
     const u = Household.unit(h, d.id);
-    if (!u || !Household.setWeekday(h, S.user.uid, d.id, day)) return;
-    save('weekdays');
-    const r = h.responsibilities.find(x => x.id === d.id) || Household.parentOf(h, d.id);
-    if (r) Sheets.taskPeek(r, u);
+    if (!u || Household.assignee(h, u.id) !== S.user.uid || !Household.whenKind(u)) return;
+    const p = Household.plannedDate(h, u);
+    S.whenDraft = {
+      id: u.id,
+      days: Household.whenKind(u) === 'days' ? Household.daysOf(h, u) : [],
+      day: Household.dayOf(h, u),
+      week: Household.weekOf(h, u),
+      date: p ? Schedule.key(p) : '',
+    };
+    Sheets.when(u);
+  },
+  /** A day chip: several/weekly tasks toggle any number of days; the others pick one. */
+  whenDay(d) {
+    const w = S.whenDraft, h = S.household;
+    const u = w && Household.unit(h, w.id);
+    if (!u) return;
+    const i = Number(d.key);
+    if (!(i >= 0 && i <= 6)) return;
+    if (Household.whenKind(u) === 'days') w.days = w.days.includes(i) ? w.days.filter(x => x !== i) : [...w.days, i].sort((a, b) => a - b);
+    else w.day = i;
+    Sheets.when(u);
+  },
+  whenWeek(d) {
+    const w = S.whenDraft, u = w && Household.unit(S.household, w.id);
+    const n = Number(d.key);
+    if (!u || !(n >= 1 && n <= 5)) return;
+    w.week = n;
+    Sheets.when(u);
+  },
+  saveWhen() {
+    const h = S.household, w = S.whenDraft;
+    const u = w && Household.unit(h, w.id);
+    if (!u) return Sheet.close();
+    const kind = Household.whenKind(u);
+    const value = kind === 'days' ? { days: w.days } : kind === 'day' ? { day: w.day } : kind === 'month' ? { week: w.week, day: w.day } : { date: w.date || null };
+    if (kind === 'days' && !w.days.length) { toast('Pick at least one day.'); return; }
+    if (kind === 'date' && !w.date) { toast('Pick a date first.'); return; }
+    const changed = Household.setWhen(h, S.user.uid, u.id, value);
+    S.whenDraft = null;
+    Sheet.close();
+    if (!changed) return;
+    save('when');
     rerender();
-    toast(`${u.name}: every ${Timing.of(u).frequency === 'fortnightly' ? 'other ' : ''}${Schedule.WEEKDAYS[day]}`);
+    toast(`${u.name}: ${Household.whenText(h, u).toLowerCase()}`);
+  },
+  clearWhen() {
+    const h = S.household, w = S.whenDraft;
+    const u = w && Household.unit(h, w.id);
+    S.whenDraft = null;
+    Sheet.close();
+    if (!u || !Household.setWhen(h, S.user.uid, u.id, { date: null })) return;
+    save('when');
+    rerender();
+    toast(`${u.name}: no date planned`);
   },
   choosePlan(d) { if (d.key === 'yearly' || d.key === 'monthly') { S.planChoice = d.key; rerender(); } },
   /**
@@ -1064,6 +1111,7 @@ const Changes = {
   customCategory(value) { S.customDraft = { ...(S.customDraft || {}), category: value }; },
   customFrequency(value) { S.customDraft = { ...(S.customDraft || {}), frequency: value }; },
   customMinutes(value) { S.customDraft = { ...(S.customDraft || {}), minutes: Number(value) }; },
+  whenDate(value) { if (S.whenDraft) S.whenDraft.date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''; },
 };
 
 const Inputs = {

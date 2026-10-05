@@ -168,14 +168,27 @@ const Timing = {
     return d ? { minutes: d[0], frequency: d[1] } : { minutes: 20, frequency: 'weekly' };
   },
   /** Effective timing of a household responsibility (falls back to library defaults). */
+  /** base = how often the household set it; frequency/perWeek = how often it really happens once
+   *  the person doing it has picked its days (r._days, set by Household.applyWhen): 7 days = daily. */
   of(r) {
     const d = this.defaultsFor(r.libraryId);
-    return { minutes: Number(r.minutes) || d.minutes, frequency: r.frequency || d.frequency };
+    const minutes = Number(r.minutes) || d.minutes;
+    const base = r.frequency || d.frequency;
+    const n = Array.isArray(r._days) ? r._days.length : 0;
+    if (n && (base === 'several' || base === 'weekly')) {
+      return { minutes, base, frequency: n >= 7 ? 'daily' : n === 1 ? 'weekly' : 'several', perWeek: Math.min(n, 7) };
+    }
+    return { minutes, base, frequency: base, perWeek: this.frequency(base).perWeek };
   },
   /** Minutes per week this responsibility takes on average. */
-  weeklyMinutes(r) { const t = this.of(r); return t.minutes * this.frequency(t.frequency).perWeek; },
+  weeklyMinutes(r) { const t = this.of(r); return t.minutes * t.perWeek; },
   isScheduled(r) { const f = this.frequency(this.of(r).frequency); return !!(f.everyDays || f.everyMonths); },
-  label(r) { const t = this.of(r); return `${this.frequency(t.frequency).label} · ${formatMinutes(t.minutes)}`; },
+  freqLabel(r) {
+    const t = this.of(r);
+    return t.frequency === 'several' && t.base !== 'several' || (t.frequency === 'several' && t.perWeek !== 3)
+      ? `${t.perWeek}× a week` : this.frequency(t.frequency).label;
+  },
+  label(r) { const t = this.of(r); return `${this.freqLabel(r)} · ${formatMinutes(t.minutes)}`; },
 };
 
 function formatMinutes(m) {

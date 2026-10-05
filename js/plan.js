@@ -137,6 +137,14 @@ const Schedule = {
   weekdayIndex: d => (new Date(d).getDay() + 6) % 7,
   mondayOf(d) { const x = this.day(d); return this.addDays(x, -this.weekdayIndex(x)); },
   weeksBetween(a, b) { return Math.round((this.mondayOf(b) - this.mondayOf(a)) / (7 * 864e5)); },
+  /** 'YYYY-MM-DD' for a local day, and back (null when it isn't a real date). */
+  key(d) { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; },
+  fromKey(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]) ? d : null;
+  },
   WEEKDAYS: Object.freeze(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']),
   doneOn(completion, day) {
     return !!(completion && completion.last && this.day(completion.last).getTime() === this.day(day).getTime());

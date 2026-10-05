@@ -348,3 +348,8 @@ a.row{text-decoration:none;color:inherit}
 .danger-zone{margin-top:12px}
 .danger-zone .row-title.text-danger{color:var(--danger)}
 
+
+.row-actions{display:flex;align-items:center;gap:6px;flex:none}
+.weekday-picker.weeks{grid-template-columns:repeat(5,1fr)}
+.when-date{padding:0;margin-bottom:8px}
+.when-date input{width:100%;min-height:48px}
