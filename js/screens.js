@@ -1181,6 +1181,16 @@ function memberChips(h) {
    ========================================================= */
 const Sheets = {
   /** Right after subscribing: the next step is the invite (a tap, so the share sheet can open). */
+  /** Tapping "Break into parts" before subscribing: what it is, and the way to get it. */
+  partsNeedSubscription() {
+    const trial = trialOffer();
+    Sheet.open(`<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
+      <h2>Break tasks into parts</h2>
+      <p>Split big jobs like Clean bathroom into smaller tasks, each with its own timing, and share them out fairly. It comes with your subscription.</p>
+      <button class="btn premium" data-action="sheetNav" data-to="subscribe">${trial ? `Start free for ${APP_CONFIG.billing.trialDays} days` : 'See plans'}</button>
+      <button class="btn ghost" data-action="closeSheet">Not now</button>`, 'Break tasks into parts');
+  },
+
   unlocked() {
     const h = S.household;
     const name = esc(Household.memberName(Household.invitee(h)));

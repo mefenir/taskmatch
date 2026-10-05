@@ -849,6 +849,8 @@ const Actions = {
 
   /* break a task into parts (organiser saves, partner suggests) */
   openBreakdown(d) {
+    // Breaking tasks into parts comes with the subscription (the draft before it is free).
+    if (!hasAccess()) { Sheets.partsNeedSubscription(); return; }
     const h = S.household;
     const r = h.responsibilities.find(x => x.id === d.id);
     if (!r) return;
@@ -873,7 +875,7 @@ const Actions = {
     const input = document.getElementById('bd-new'); if (input) { input.value = ''; input.focus(); }
   },
   saveBreakdown() {
-    if (!isOrganiser()) return;
+    if (!isOrganiser() || !hasAccess()) return;
     const h = S.household;
     const bd = S.breakdown;
     const r = bd && h.responsibilities.find(x => x.id === bd.respId);
