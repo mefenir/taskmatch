@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Admin · Our Household</title>
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="css/styles.css?v=31">
+<link rel="stylesheet" href="css/styles.css?v=32">
 <style>
 .req{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .req + .req{border-top:1px solid var(--line)}
@@ -22,6 +22,11 @@
 .status{font-size:12px;font-weight:650;padding:3px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted);flex:none}
 .status.pending{background:var(--premium-soft);color:var(--premium)}
 .status.approved{background:var(--accent-soft);color:var(--accent)}
+.status.denied{background:var(--surface-2);color:var(--danger)}
+.feedback-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.req .who{overflow-wrap:anywhere}
+.stack summary{cursor:pointer;font-size:13px;color:var(--accent);font-weight:600}
+.stack pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:var(--surface-2);border-radius:8px;padding:10px;margin:8px 0 4px;max-height:240px;overflow:auto}
 </style>
 </head>
 <body>
@@ -31,9 +36,9 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="js/config.js?v=31"></script>
-<script src="js/util.js?v=31"></script>
-<script src="js/backend.js?v=31"></script>
-<script src="js/admin.js?v=31"></script>
+<script src="js/config.js?v=32"></script>
+<script src="js/util.js?v=32"></script>
+<script src="js/backend.js?v=32"></script>
+<script src="js/admin.js?v=32"></script>
 </body>
 </html>

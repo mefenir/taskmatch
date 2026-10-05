@@ -44,3 +44,50 @@ function fitButtons(scope = document) {
   });
 }
 window.addEventListener('resize', () => fitButtons());
+
+/* ---------- Crash reports ----------
+   Errors on testers' phones go to the admin panel (Errors tab), once signed in:
+   message, stack, screen and app version, at most 5 different ones per visit.
+   Errors before sign-in wait in a short queue. */
+const ErrorLog = (() => {
+  const MAX = 5;
+  const seen = new Set();
+  const queue = [];
+  let sender = null;
+  const cut = (v, n) => String(v == null ? '' : v).slice(0, n);
+  const version = () => {
+    const s = document.querySelector('script[src*="js/app.js"]');
+    const m = s && /[?&]v=([^&#]+)/.exec(s.getAttribute('src'));
+    return m ? m[1] : '';
+  };
+  const send = entry => { try { Promise.resolve(sender(entry)).catch(() => {}); } catch (e) { /* never throw from here */ } };
+  function report(err, where) {
+    const message = cut((err && err.message) || err, 300) || 'Unknown error';
+    if (/^Script error\.?$/.test(message)) return;   // another site's script: nothing useful to report
+    const key = `${message}|${where || ''}`;
+    if (seen.has(key) || seen.size >= MAX) return;
+    seen.add(key);
+    const entry = {
+      message,
+      stack: cut(err && err.stack, 2000),
+      where: cut(where, 60),
+      screen: cut(location.hash.replace(/^#\/?/, '').split('?')[0], 40),
+      version: cut(version(), 20),
+      ua: cut(navigator.userAgent, 200),
+    };
+    if (sender) send(entry); else if (queue.length < MAX) queue.push(entry);
+  }
+  window.addEventListener('error', e => {
+    if (!e.error && !e.message) return;
+    const file = e.filename ? `${e.filename.split('/').pop().split('?')[0]}:${e.lineno || 0}` : 'page';
+    report(e.error || e.message, file);
+  });
+  window.addEventListener('unhandledrejection', e => report(e.reason, 'promise'));
+  return {
+    report,
+    version,
+    /** Start sending (after sign-in); anything queued goes first. */
+    connect(fn) { sender = fn; queue.splice(0).forEach(send); },
+    disconnect() { sender = null; },
+  };
+})();

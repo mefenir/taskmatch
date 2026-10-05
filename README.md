@@ -84,7 +84,7 @@ On GitHub: **Settings → Pages → Build and deployment → Source: Deploy from
 
 The app is live at `https://mefenir.github.io/taskmatch/` a minute or two later. Every push to `main` redeploys it.
 
-### 5. Admin panel (funnel and access requests)
+### 5. Admin panel (funnel, access requests, feedback, errors)
 
 The panel is at **`https://mefenir.github.io/taskmatch/admin.html`**. It isn't linked from the app.
 
@@ -102,7 +102,11 @@ Then sign in on `admin.html` with that username and password.
 - **Deny** turns the request down; they can ask again later.
 - **Revoke** ends it; the household is paused for both at once.
 
-Only accounts listed in `admins` can see requests or give access; the rules enforce it, not just the page.
+**Feedback** lists the notes people send from **Settings → Send feedback**: their name, the note, the screen they came from and the app version. Filter **New / Done / All**; **Mark as done** once handled.
+
+**Errors** lists crashes on people's phones, grouped by message: how many times, how many people (and who), which screens and versions, and the technical details. The app reports uncaught errors, failed promises, broken buttons and failed saves, at most 5 different ones per visit, only while signed in. **Clear** removes a group once it's fixed.
+
+Only accounts listed in `admins` can see requests, feedback or errors, or give access; the rules enforce it, not just the page.
 
 ### 6. Payments with Stripe
 
@@ -179,6 +183,8 @@ docs/PRODUCT_BRIEF.md Product spec
 | `customers/{uid}/…` | Stripe customer, checkout sessions, subscriptions, payments | the person creates checkout sessions; the rest only the Stripe extension |
 | `products`, `prices` | synced from Stripe | the Stripe extension |
 | `metrics/{hid}` | funnel step times, active days | household members; read by admin |
+| `feedback/{id}` | name, household, note, screen, version, status (`new` / `done`) | anyone signed in sends as themselves; admin reads and marks; the sender can delete their own |
+| `errors/{id}` | name, error message, stack, screen, version, browser | anyone signed in reports as themselves; admin reads and clears; the sender can delete their own |
 | `admins/{uid}` | `role: admin` | Firebase console only |
 
 A responsibility is **not** an assignment: selected responsibilities carry no owner, frequency or preference yet.
@@ -190,4 +196,5 @@ A responsibility is **not** an assignment: selected responsibilities carry no ow
 - Preferences are hidden in the app but stored in the shared household data (the split runs on your phones). Making them truly private needs a server function (Firebase Blaze plan).
 - If two people change the *same* list at the *same* second, the last save wins.
 - A trial is refused by the app to anyone who has had a subscription; a deliberately modified app could still ask Stripe for a second trial. Acceptable for now; a server function can close it later.
+- Feedback and error reports are capped in size, but the rules can't limit how many a signed-in person sends; the app sends at most 5 error reports per visit. Fine for a beta; a server function can add a real limit later.
 - The security rules can't be tested automatically here; publish them and try a purchase in Stripe test mode before going live.

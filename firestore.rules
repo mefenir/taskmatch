@@ -293,6 +293,47 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---------------------------------------------------------------
+    // feedback/{id} — notes sent from Settings → Send feedback. Anyone signed in
+    // can send one as themselves; admins read them and mark them done.
+    // errors/{id} — crash reports from the app (message, stack, screen, version).
+    // Sizes are capped; the rules can't rate-limit, so the app sends at most
+    // 5 error reports per visit.
+    // ---------------------------------------------------------------
+    match /feedback/{id} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'householdId', 'text', 'screen', 'version', 'at', 'status'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
+        && (request.resource.data.householdId == null || (request.resource.data.householdId is string && request.resource.data.householdId.size() <= 64))
+        && request.resource.data.screen is string && request.resource.data.screen.size() <= 40
+        && request.resource.data.version is string && request.resource.data.version.size() <= 20
+        && request.resource.data.at == request.time
+        && request.resource.data.status == 'new';
+      // People can find and delete their own (Delete my account does this).
+      allow read, delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['new', 'done'];
+    }
+    match /errors/{id} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'message', 'stack', 'where', 'screen', 'version', 'ua', 'at'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
+        && request.resource.data.message is string && request.resource.data.message.size() <= 300
+        && request.resource.data.stack is string && request.resource.data.stack.size() <= 2000
+        && request.resource.data.where is string && request.resource.data.where.size() <= 60
+        && request.resource.data.screen is string && request.resource.data.screen.size() <= 40
+        && request.resource.data.version is string && request.resource.data.version.size() <= 20
+        && request.resource.data.ua is string && request.resource.data.ua.size() <= 200
+        && request.resource.data.at == request.time;
+      allow read, delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update: if false;
+    }
+
     // admins/{uid} — only readable by that admin, never writable from the app.
     match /admins/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;

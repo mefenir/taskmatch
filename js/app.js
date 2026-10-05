@@ -113,6 +113,7 @@ function save(...fields) {
   [...new Set(fields)].forEach(f => { data[f] = h[f] === undefined ? null : h[f]; });
   return Backend.Repo.saveHousehold(h.id, data).catch(e => {
     console.error(e);
+    ErrorLog.report(e, `save:${[...new Set(fields)].join(',')}`);
     toast(e && e.code === 'permission-denied'
       ? "Couldn't save: the database refused access. Check firestore.rules is published."
       : "Couldn't save that change. Check your connection and try again.");
@@ -185,7 +186,8 @@ async function onAuth(user) {
   Sheet.close();
   S.user = user; S.profile = null; S.household = null; S.grant = null; S.stripeSubs = []; S.subscription = null;
   S.householdLoading = false; S.joining = false; S.lastStage = undefined; S.inviteLink = null;
-  if (!user) { S.phase = 'signedOut'; render(true); return; }
+  if (!user) { ErrorLog.disconnect(); S.phase = 'signedOut'; render(true); return; }
+  ErrorLog.connect(entry => Backend.Repo.reportError(user, entry));
   // On sign-up this fires before the display name is saved, so use what was typed.
   const nameHint = user.displayName || (S.auth.values.name || '').trim();
   S.auth = { mode: 'signin', busy: false, error: '', note: '', values: {} };
@@ -939,6 +941,32 @@ const Actions = {
     go('household');
   },
 
+  /* feedback (Settings → Help & legal) */
+  openFeedback() { Sheets.feedback(); },
+  async sendFeedback() {
+    const text = (S.feedbackDraft || '').trim();
+    if (!text) { const i = document.getElementById('feedback-text'); if (i) i.focus(); toast('Write something first.'); return; }
+    const h = S.household;
+    try {
+      await Backend.Repo.sendFeedback(S.user, {
+        name: (h && Household.memberName(Household.member(h, S.user.uid))) || S.user.displayName || '',
+        householdId: h ? h.id : null,
+        text,
+        screen: S.settingsFrom || currentRoute || '',
+        version: ErrorLog.version(),
+      });
+    } catch (e) {
+      console.error(e);
+      toast(e && e.code === 'permission-denied'
+        ? "Couldn't send: the database refused it. Check firestore.rules is published."
+        : "Couldn't send. Check your connection and try again.");
+      return;
+    }
+    S.feedbackDraft = '';
+    Sheet.close();
+    toast('Thanks! Your feedback was sent.');
+  },
+
   /* board */
   toggleBoard() { openBoard(!S.boardOpen); rerender(); },
   addNote() { Sheets.addNote(); },
@@ -1039,6 +1067,7 @@ const Changes = {
 };
 
 const Inputs = {
+  feedbackText(value) { S.feedbackDraft = String(value).slice(0, 1000); },
   noteText(value) { S.noteDraft = { ...(S.noteDraft || { kind: 'note' }), text: value }; },
   breakNew(value) {
     if (!S.breakdown) return;
@@ -1239,11 +1268,11 @@ document.addEventListener('click', e => {
   el.classList.remove('pressed'); void el.offsetWidth; el.classList.add('pressed');
   let result;
   try { result = fn({ ...el.dataset }, el); }
-  catch (err) { console.error(err); toast('Something went wrong. Please try again.'); return; }
+  catch (err) { console.error(err); ErrorLog.report(err, `action:${action}`); toast('Something went wrong. Please try again.'); return; }
   if (result && typeof result.then === 'function') {
     Busy.add(action);
     applyBusy(document);
-    result.catch(err => console.error(err)).finally(() => {
+    result.catch(err => { console.error(err); ErrorLog.report(err, `action:${action}`); }).finally(() => {
       Busy.delete(action);
       document.querySelectorAll(`[data-action="${action}"]`).forEach(b => { b.classList.remove('is-busy'); b.removeAttribute('aria-busy'); b.disabled = false; });
       rerender();

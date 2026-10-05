@@ -99,6 +99,9 @@ button.row:active{background:var(--surface-2)}
 .field-line{display:flex;align-items:center;gap:8px}
 .field-line .add-part{border:0;background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:10px 16px;font-size:14px;font-weight:650;cursor:pointer;flex:none;min-height:44px}
 .field-line .add-part:disabled{background:var(--surface-2);color:var(--muted);cursor:default}
+.field textarea{flex:1;min-width:0;border:0;background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 14px;font:inherit;font-size:16px;line-height:1.45;outline:none;resize:vertical;min-height:120px;color:var(--ink)}
+.field textarea:focus{box-shadow:0 0 0 2px var(--accent)}
+.field textarea::placeholder{color:var(--muted)}
 .field input{flex:1;min-width:0;border:0;background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 14px;font-size:16px;outline:none}
 .field input:focus{box-shadow:0 0 0 2px var(--accent)}
 .field input::placeholder{color:var(--muted)}

@@ -756,6 +756,7 @@ const Screens = {
 
     const contact = APP_CONFIG.legal && APP_CONFIG.legal.email;
     const help = group('Help & legal', [
+      `<button class="row" data-action="openFeedback"><div class="row-text"><span class="row-title">Send feedback</span><span class="row-sub">What works, what doesn't, what confused you</span></div><span class="chev">${Icon.chev}</span></button>`,
       `<a class="row" href="legal.html" target="_blank" rel="noopener"><div class="row-text"><span class="row-title">Imprint, privacy and terms</span></div><span class="chev">${Icon.chev}</span></a>`,
       contact ? `<a class="row" href="mailto:${esc(contact)}"><div class="row-text"><span class="row-title">Contact us</span><span class="row-sub">${esc(contact)}</span></div><span class="chev">${Icon.chev}</span></a>` : '',
     ]);
@@ -1323,6 +1324,19 @@ const Sheets = {
       <button class="btn primary" data-action="postNote">Add</button>
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Add to the board');
     const input = document.getElementById('note-text');
+    if (input) { input.focus({ preventScroll: true }); input.setSelectionRange(input.value.length, input.value.length); }
+  },
+
+  /** Settings → Send feedback: a short note that lands in the admin panel. */
+  feedback() {
+    const text = S.feedbackDraft || '';
+    Sheet.open(`<h2>Send feedback</h2>
+      <p style="margin-bottom:12px">What works, what doesn't, or what confused you. Every note is read.</p>
+      <div class="field"><textarea id="feedback-text" data-input="feedbackText" maxlength="1000" rows="5" placeholder="e.g. I couldn't find where to change who does a task">${esc(text)}</textarea></div>
+      <p class="fine" style="text-align:left;margin:6px 0 14px">Your name and the screen you were on are sent with it.</p>
+      <button class="btn primary" data-action="sendFeedback">Send</button>
+      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Send feedback');
+    const input = document.getElementById('feedback-text');
     if (input) { input.focus({ preventScroll: true }); input.setSelectionRange(input.value.length, input.value.length); }
   },
 

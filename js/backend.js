@@ -17,6 +17,8 @@
      metrics/{hid}          { <step>: time, activeDays[] } — see METRIC_STEPS
      premiumRequests/{uid}  { uid, email, name, householdId, members, status, requestedAt, decidedAt? }
                             status: pending → approved | denied; approved → revoked; denied/revoked → pending
+     feedback/{id}          { uid, name, householdId, text, screen, version, at, status: 'new'|'done' }
+     errors/{id}            { uid, name, message, stack, where, screen, version, ua, at }
      admins/{uid}           { role: 'admin' }   ← created by hand in the Firebase console
    ========================================================= */
 const Backend = (() => {
@@ -47,6 +49,8 @@ const Backend = (() => {
   const invites = () => db.collection('invites');
   const subscriptions = () => db.collection('subscriptions');
   const premiumRequests = () => db.collection('premiumRequests');
+  const feedback = () => db.collection('feedback');
+  const errorReports = () => db.collection('errors');
 
   /* ---------- Auth ---------- */
   const Auth = {
@@ -211,8 +215,34 @@ const Backend = (() => {
   Repo.deleteAccount = async user => {
     await Repo.forgetInvites(user.uid);
     await premiumRequests().doc(user.uid).delete().catch(() => {});
+    await Repo.forgetReports(user.uid).catch(() => {});
     await users().doc(user.uid).delete();
     await auth.currentUser.delete();
+  };
+
+  /* ---------- Feedback and crash reports (read in the admin panel) ---------- */
+  Repo.sendFeedback = (user, info) => feedback().add({
+    uid: user.uid,
+    name: String(info.name || '').slice(0, 60),
+    householdId: info.householdId || null,
+    text: String(info.text || '').trim().slice(0, 1000),
+    screen: String(info.screen || '').slice(0, 40),
+    version: String(info.version || '').slice(0, 20),
+    at: now(),
+    status: 'new',
+  });
+  Repo.reportError = (user, entry) => errorReports().add({
+    uid: user.uid,
+    name: String(user.displayName || '').slice(0, 60),
+    message: entry.message, stack: entry.stack, where: entry.where, screen: entry.screen, version: entry.version, ua: entry.ua,
+    at: now(),
+  });
+  /** Someone deleting their account: their feedback and crash reports go too. */
+  Repo.forgetReports = async userId => {
+    for (const col of [feedback(), errorReports()]) {
+      const q = await col.where('uid', '==', userId).get();
+      await Promise.all(q.docs.map(d => d.ref.delete()));
+    }
   };
 
   /* ---------- Requesting access while payments aren't set up ---------- */
@@ -316,6 +346,18 @@ const Backend = (() => {
     deny: (userId, adminId) => premiumRequests().doc(userId).update({ status: 'denied', decidedAt: now(), decidedBy: adminId }),
     watchMetrics: (onData, onError) =>
       db.collection('metrics').onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, ...d.data() }))), onError),
+    watchFeedback: (onData, onError) =>
+      feedback().orderBy('at', 'desc').limit(300).onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, ...d.data() }))), onError),
+    markFeedback: (id, status) => feedback().doc(id).update({ status }),
+    watchErrors: (onData, onError) =>
+      errorReports().orderBy('at', 'desc').limit(500).onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, ...d.data() }))), onError),
+    async clearErrors(ids) {
+      for (let i = 0; i < ids.length; i += 400) {
+        const batch = db.batch();
+        ids.slice(i, i + 400).forEach(id => batch.delete(errorReports().doc(id)));
+        await batch.commit();
+      }
+    },
     async revoke(userId, adminId) {
       const batch = db.batch();
       batch.set(subscriptions().doc(userId), { active: false, revokedAt: now(), revokedBy: adminId }, { merge: true });
