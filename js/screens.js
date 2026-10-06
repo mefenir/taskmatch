@@ -52,7 +52,8 @@ const Screens = {
         <li>Say what you like doing and what you'd rather not</li>
         <li>Get a fair split, then invite your partner to look at it</li>
       </ol>
-      <p class="fine" style="text-align:left;margin-top:12px">Setting up and seeing your plan is free.</p>`}
+      <p class="fine" style="text-align:left;margin-top:12px">Setting up and seeing your plan is free.</p>
+      <p class="fine" style="text-align:left;margin-top:8px">Did your partner send you a link? Open that link first, before you sign up here.</p>`}
       <div class="bottom-bar">
         <button class="btn primary" data-action="authMode" data-mode="signup">${invited ? 'Create account and see the plan' : 'Get started'}</button>
         <button class="btn ghost" data-action="authMode" data-mode="signin">I already have an account</button>
@@ -115,11 +116,9 @@ const Screens = {
         <button class="link-btn" data-action="signOut" style="margin:0">Sign out</button></div>
       ${houseArt}
       <h1>Hi${first}. Let's set up your home.</h1>
-      <p class="lead">It takes a few minutes. At the end you'll see a fair split, and then you invite your partner to look at it.</p>
+      <p class="lead">A few minutes, then a fair split to share with your partner.</p>
       <div class="bottom-bar">
         <button class="btn primary" data-action="createHousehold">Set up our home</button>
-        <p class="fine">Has your partner already set it up? Open the invite link they sent you.</p>
-        <button class="link-btn" data-action="confirmDeleteAccount" style="margin-top:8px;color:var(--muted)">Delete my account</button>
       </div>
     </main>`;
   },
@@ -201,6 +200,9 @@ const Screens = {
   },
 
   responsibilities() {
+    const customRow = r => `<div class="row static"><span class="check" style="color:var(--accent)" aria-hidden="true">${Icon.check}</span>
+        <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${esc(Timing.label(r))}</span></div>
+        <button class="link-btn" data-action="removeTask" data-id="${esc(r.id)}">Remove</button></div>`;
     const h = S.household;
     const setup = !h.settings.onboarded;
     const selected = Household.selectedLibraryIds(h);
@@ -212,19 +214,21 @@ const Screens = {
           <span class="check" aria-hidden="true">${Icon.check}</span>
           <div class="row-text"><span class="row-title">${esc(item.name)}</span></div>
         </button>`).join('');
+      const mine = h.responsibilities.filter(r => !r.predefined && r.category === category.id).map(customRow).join('');
       return `<section aria-labelledby="cat-${esc(category.id)}">
         <div class="section-head">
           <h2 class="section-title" id="cat-${esc(category.id)}">${esc(category.name)}</h2>
           <button class="link-btn" data-action="toggleCategory" data-cat="${esc(category.id)}">${all ? 'Clear' : 'Select all'}</button>
         </div>
-        <div class="card">${rows}</div>
+        <div class="card">${rows}${mine}</div>
       </section>`;
     }).join('');
-    const own = h.responsibilities.filter(r => !r.predefined);
-    const ownSection = own.length ? `<div class="section-head"><h2 class="section-title">Your own</h2></div>
-      <div class="card">${own.map(r => `<div class="row static"><span class="check" style="color:var(--accent)" aria-hidden="true">${Icon.check}</span>
-        <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${esc(Timing.label(r))}</span></div>
-        <button class="link-btn" data-action="removeTask" data-id="${esc(r.id)}">Remove</button></div>`).join('')}</div>` : '';
+    // A task of your own in an area that isn't listed (e.g. children, with none): still under its own area name.
+    const shown = new Set(groups.map(g => g.category.id));
+    const ownSection = LIBRARY.categories.filter(c => !shown.has(c.id)).map(c => {
+      const mine = h.responsibilities.filter(r => !r.predefined && r.category === c.id);
+      return mine.length ? `<div class="section-head"><h2 class="section-title">${esc(c.name)}</h2></div><div class="card">${mine.map(customRow).join('')}</div>` : '';
+    }).join('');
     const count = h.responsibilities.length;
     const active = Household.stage(h) === 'active';
     return `<main class="screen">
@@ -558,11 +562,14 @@ const Screens = {
       const invited = !!(h.settings && h.settings.invitedAt);
       head = 'Your plan is ready';
       lead = `Here's a fair split for you and ${partnerName}. Next, send it to ${partnerName}: they can mark anything that doesn't suit them before it starts.`;
-      top = totalCard(h) + baselineCard(h);
+      top = totalCard(h);
       bottom = `<div class="bottom-bar">${hasAccess()
         ? `${invited ? `<p class="count">${partnerName} hasn't joined yet</p>` : ''}
            <button class="btn primary" data-action="invite">${invited ? 'Send the link again' : `Invite ${partnerName} to see the plan`}</button>`
-        : `<p class="count">${trialOffer() ? `${APP_CONFIG.billing.trialDays} days free, then ${money(APP_CONFIG.billing.display.yearly)}/year` : 'One subscription covers you both'}</p>
+        : (!Backend.Billing.enabled() && S.premiumRequest && S.premiumRequest.status === 'pending')
+          ? `<p class="count">We'll unlock your home once it's approved</p>
+             <button class="btn premium" disabled>Approval pending</button>`
+          : `<p class="count">${trialOffer() ? `${APP_CONFIG.billing.trialDays} days free, then ${money(APP_CONFIG.billing.display.yearly)}/year` : 'One subscription covers you both'}</p>
            <button class="btn premium" data-action="nav" data-to="subscribe">${trialOffer() ? 'Start free and invite ' + partnerName : 'Unlock and invite ' + partnerName}</button>`}
       </div>`;
     } else if (stage === 'review') {
@@ -588,9 +595,8 @@ const Screens = {
       ${swapCards(h)}
       ${suggestionsCard(h)}
       ${top}
-      ${balanceCard(h)}
-      ${taskMap(h, true)}
-      ${isOrg ? `<button class="btn ghost" data-action="nav" data-to="frequency">Change times</button>` : ''}
+      ${planLists(h)}
+      ${isOrg ? `<button class="btn outline" data-action="nav" data-to="frequency">Change times</button>` : ''}
       ${bottom}
     </main>`;
   },
@@ -808,13 +814,34 @@ const Screens = {
 };
 
 /* ---------- Pieces of the plan and Home screens ---------- */
+/** The plan as two plain lists, one per person, all open: easy to see who has what and how it adds up. */
+function planLists(h) {
+  const me = S.user.uid;
+  const stage = Household.stage(h);
+  const loads = Household.loads(h);
+  // A tick means "agreed to this plan": the organiser made it, the others tick when they say yes.
+  const agreed = uid => (stage === 'draft' || stage === 'review') ? uid === h.ownerId : Household.hasAccepted(h, uid);
+  const people = Household.people(h).slice().sort((a, b) => (a.uid === me ? -1 : b.uid === me ? 1 : 0));
+  return people.map(m => {
+    const units = Household.tasksOf(h, m.uid);
+    const rows = units.map(u => `<button class="row task-row" data-action="openTask" data-id="${esc(u.parentId || u.id)}">
+        <div class="row-text"><span class="row-title">${u.parentName ? `${esc(u.parentName)}: ${esc(u.name)}` : esc(u.name)}</span>
+          <span class="row-sub">${esc(Timing.label(u))}</span></div></button>`).join('');
+    const ok = agreed(m.uid);
+    const name = m.uid === me ? 'You' : Household.memberName(m);
+    return `<div class="section-head plan-head"><h2 class="section-title">${esc(name)}
+        <span class="agree ${ok ? 'on' : ''}" role="img" aria-label="${ok ? 'Agreed' : 'Not yet'}">${ok ? Icon.check : ''}</span></h2>
+        <span class="section-meta">about ${formatMinutes(loads[m.uid] || 0)} a week</span></div>
+      <div class="card">${rows || '<div class="note" style="border:0">Nothing yet.</div>'}</div>`;
+  }).join('');
+}
 /** Each person's planned share of the week (the plan, not who has ticked more). */
 function balanceCard(h) {
   const me = S.user.uid;
   const loads = Household.loads(h);
   return `<div class="card balance-card">${Household.people(h).map(m =>
     `<div class="balance-line"><span class="owner ${m.uid === me ? 'me' : ''}" aria-hidden="true">${esc(initialOf(h, m.uid))}</span>
-      <span class="balance-name">${esc(m.uid === me ? 'You' : Household.memberName(m))}${m.placeholder ? ' <span class="muted">(suggested)</span>' : ''}</span>
+      <span class="balance-name">${esc(m.uid === me ? 'You' : Household.memberName(m))}</span>
       <span class="balance-sub">about ${formatMinutes(loads[m.uid] || 0)} a week</span></div>`).join('')}</div>`;
 }
 /** One or two letters for a person, unique within the household. */

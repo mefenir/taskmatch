@@ -369,3 +369,8 @@ p, .row-sub, .lead, .fine{text-wrap:pretty}
 @media (prefers-reduced-motion: reduce){.to-top{transition:none}}
 /* Phones mustn't turn plain text (an email, a date) into links */
 a[x-apple-data-detectors], .plain-text a{color:inherit!important;text-decoration:none!important;pointer-events:none}
+
+.plan-head .section-title{display:flex;align-items:center;gap:8px}
+.agree{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);display:inline-grid;place-items:center;color:transparent;flex:none}
+.agree.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.agree svg{width:11px;height:11px}

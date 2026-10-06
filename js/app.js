@@ -197,7 +197,7 @@ async function onAuth(user) {
   } catch (e) { fail(e); return; }
   S.phase = 'ready';
   watchers.user = Backend.Repo.watchUser(user.uid, onProfile, fail);
-  watchers.request = Backend.Repo.watchPremiumRequest(user.uid, req => { S.premiumRequest = req; if (currentRoute === 'subscribe') rerender(); });
+  watchers.request = Backend.Repo.watchPremiumRequest(user.uid, req => { S.premiumRequest = req; if (currentRoute === 'subscribe' || currentRoute === 'household') rerender(); });
 }
 
 function onProfile(profile) {
@@ -890,6 +890,8 @@ const Actions = {
         members: h.memberIds.length,
       });
       toast("Thanks! You're on the list.");
+      // Back to where you were: the plan, with its button now saying the approval is pending.
+      if (Household.stage(h) === 'draft') go('household');
     } catch (e) {
       console.error(e);
       toast("Couldn't send that. Check your connection and try again.");
