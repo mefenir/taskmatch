@@ -727,7 +727,7 @@ const Screens = {
     ]);
 
     return `<main class="screen">
-      ${topbar({ back: 'household' })}
+      ${topbar({ back: S.settingsFrom === 'today' ? 'today' : 'household' })}
       <h1>Settings</h1>
       ${you}${ours}${help}
       <div class="card" style="margin-top:24px">

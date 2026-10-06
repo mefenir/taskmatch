@@ -1207,7 +1207,7 @@ function render(routeChanged) {
     if (currentRoute === 'settings') S.fromSettings = name;
     else if (name === 'today' || (name === 'household' && !S.suggestMode)) S.fromSettings = null;
     if (name !== 'household') { S.suggestMode = false; S.suggestFromSettings = false; }
-    if (name === 'settings' && ['today', 'household', 'subscribe'].includes(currentRoute)) S.settingsFrom = currentRoute;
+    if (name === 'settings' && ['today', 'household'].includes(currentRoute)) S.settingsFrom = currentRoute;
     if (!['review', 'rate'].includes(name)) S.prefDraft = null;
   }
   currentRoute = name;
