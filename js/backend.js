@@ -112,13 +112,19 @@ const Backend = (() => {
       const ref = users().doc(user.uid);
       const snap = await ref.get();
       if (!snap.exists) {
-        await ref.set({
+        const profile = {
           email: user.email || '',
           displayName: user.displayName || nameHint || '',
           householdId: null,
           createdAt: now(),
-          ...(viaInvite ? { viaInvite: true } : {}),
-        });
+        };
+        try {
+          await ref.set(viaInvite ? { ...profile, viaInvite: true } : profile);
+        } catch (e) {
+          // The sign-up counter is only a statistic: never let it stop someone joining (older published rules refuse the extra field).
+          if (viaInvite && e && e.code === 'permission-denied') await ref.set(profile);
+          else throw e;
+        }
       }
     },
     watchUser: (userId, onData, onError) =>
