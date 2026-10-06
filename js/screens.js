@@ -406,9 +406,19 @@ const Screens = {
       if (isOrg && sub.source === 'stripe' && sub.status === 'past_due') {
         status += `<p class="plain" style="margin:8px 0 0"><b>Your last payment didn't go through.</b> Stripe will try again; update your card so nothing stops.</p>`;
       }
+      // When it started and what happens next, in plain rows.
+      const fact = (title, value) => `<div class="row static"><div class="row-text"><span class="row-title">${title}</span><span class="row-sub">${value}</span></div></div>`;
+      const facts = [];
+      if (sub.since) facts.push(fact('Active since', date(sub.since)));
+      if (sub.source === 'stripe' && sub.periodEnd) {
+        const label = sub.cancelAtPeriodEnd ? 'Ends on' : sub.status === 'trialing' ? 'First payment' : 'Next renewal';
+        facts.push(fact(label, date(sub.status === 'trialing' && sub.trialEnd ? sub.trialEnd : sub.periodEnd)));
+      } else if (sub.source === 'grant') {
+        facts.push(fact('Renewal', sub.expires ? `Free until ${date(sub.expires)}` : 'Nothing to renew'));
+      }
       action = `<div class="result-card">${status}</div>
-        ${isOrg && sub.source === 'stripe' ? `<button class="btn secondary" data-action="openPortal">Manage or cancel subscription</button>` : ''}
-        <button class="btn ghost" data-action="nav" data-to="${draft ? 'household' : 'today'}">Back to our home</button>`;
+        ${facts.length ? `<div class="card" style="margin-bottom:16px">${facts.join('')}</div>` : ''}
+        ${isOrg && sub.source === 'stripe' ? `<button class="btn secondary" data-action="openPortal">Manage or cancel subscription</button>` : ''}`;
     } else if (!isOrg) {
       showBenefits = false;
       head = everSubscribed() ? `${orgName}'s subscription has ended` : `${orgName} needs to start the subscription`;

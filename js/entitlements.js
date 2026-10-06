@@ -37,11 +37,11 @@ const Entitlements = {
       return {
         plan: 'premium', active: true, source: 'stripe', status: paid.status,
         interval: priceId === billing.prices.yearly ? 'year' : priceId === billing.prices.monthly ? 'month' : null,
-        trialEnd: toMillis(paid.trial_end), periodEnd: toMillis(paid.current_period_end),
+        since: toMillis(paid.created), trialEnd: toMillis(paid.trial_end), periodEnd: toMillis(paid.current_period_end),
         cancelAtPeriodEnd: !!paid.cancel_at_period_end,
       };
     }
-    if (grant) return { ...grant, source: 'grant' };
+    if (grant) return { ...grant, since: toMillis(grant.since) || toMillis(grant.grantedAt) || toMillis(grant.createdAt), expires: toMillis(grant.expiresAt), source: 'grant' };
     return null;
   },
 
