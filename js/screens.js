@@ -237,6 +237,7 @@ const Screens = {
       ${ownSection}
       <div class="section-head"><h2 class="section-title">Something missing?</h2></div>
       ${addOwnRow('Add your own task')}
+      ${setup ? '' : reshuffleBlock(h)}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${count ? `${plural(count, 'task')} · about ${formatMinutes(Household.weeklyTotal(h))} a week` : 'Nothing selected yet'}</p>
         <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'frequency' : 'settings')}" ${count ? '' : 'disabled'}>${setup ? 'Continue' : 'Done'}</button>
@@ -724,9 +725,8 @@ const Screens = {
       isOrg && usable ? row(go('home'), 'Your home', esc(homeBits.join(' · '))) : '',
       isOrg && usable ? row(go('responsibilities'), 'Tasks', plural(h.responsibilities.length, 'task')) : '',
       isOrg && usable ? row(go('frequency'), 'Times', `about ${formatMinutes(Household.weeklyTotal(h))} a week`) : '',
-      !isOrg && on ? row('data-action="suggestChanges"', 'Suggest a change to the list', `${esc(orgName)} decides`) : '',
-      on && !alone && stage !== 'setup' && !(h.reshuffle && h.reshuffle.status === 'pending')
-        ? row('data-action="askReshuffle"', 'Reshuffle the plan', `Asks ${esc(partnerName)} first`) : '',
+      !isOrg && on ? row('data-action="suggestChanges"', 'Our Tasks', `Suggest changes · ${esc(orgName)} decides`) : '',
+      on && !alone && stage !== 'setup' && h.plan ? row(go('swap'), 'Swap', `Offer one of your tasks to ${esc(partnerName)}`) : '',
     ]);
 
     const contact = APP_CONFIG.legal && APP_CONFIG.legal.email;
@@ -754,44 +754,55 @@ const Screens = {
     </main>`;
   },
 
-  /* ---------- Partner: suggest adding or removing tasks (the organiser decides) ---------- */
+  /* ---------- Our Tasks: the partner suggests changes (the organiser decides) ---------- */
   suggest() {
     const h = S.household;
     const me = S.user.uid;
     const orgName = esc(Household.memberName(Household.owner(h)));
-    const sections = Household.inventory(h).map(({ category, items }) => `<section aria-labelledby="sg-${esc(category.id)}">
-        <div class="section-head"><h2 class="section-title" id="sg-${esc(category.id)}">${esc(category.name)}</h2></div>
-        <div class="card">${items.map(r => {
-          const sug = Household.suggestionFor(h, me, 'remove', r.id);
-          return `<button class="row" data-action="suggest" data-type="remove" data-id="${esc(r.id)}" aria-pressed="${!!sug}">
-              <div class="row-text"><span class="row-title" ${sug ? 'style="text-decoration:line-through;color:var(--muted)"' : ''}>${esc(r.name)}</span></div>
-              <span class="${sug ? 'badge' : 'tag'}">${sug ? 'Suggested: remove' : 'Suggest removing'}</span>
-            </button>`;
-        }).join('')}</div>
-      </section>`).join('');
-    const selected = Household.selectedLibraryIds(h);
-    const addable = Household.discoveryGroups(h)
-      .map(g => ({ ...g, items: g.items.filter(i => !selected.has(i.id)) })).filter(g => g.items.length);
-    const addSection = addable.length ? `
-      <div class="section-head"><h2 class="section-title">Suggest adding</h2></div>
-      ${addable.map(({ category, items }) => `<div class="section-head" style="margin-top:12px"><h3 class="section-meta" style="margin:0">${esc(category.name)}</h3></div>
-        <div class="card">${items.map(i => {
-          const sug = Household.suggestionFor(h, me, 'add', i.id);
-          return `<button class="row" data-action="suggest" data-type="add" data-id="${esc(i.id)}" aria-pressed="${!!sug}">
-              <span class="check" aria-hidden="true" ${sug ? '' : 'style="color:var(--muted)"'}>${Icon.plus}</span>
-              <div class="row-text"><span class="row-title">${esc(i.name)}</span></div>
-              ${sug ? '<span class="badge">Suggested</span>' : ''}
-            </button>`;
-        }).join('')}</div>`).join('')}` : '';
     const count = Household.suggestions(h).filter(x => x.by === me).length;
     return `<main class="screen">
-      <div class="topbar"><span class="spacer"></span></div>
-      <h1 style="margin-top:0">Suggest changes</h1>
-      <p class="lead">Tap a task to suggest removing it, or suggest adding one below. ${orgName} decides.</p>
-      ${sections}
-      ${addSection}
+      <div class="topbar"><span class="spacer"></span>
+        <button class="icon-btn right" data-action="doneSuggesting" aria-label="Back">${Icon.back}</button></div>
+      <h1 style="margin-top:0">Our Tasks</h1>
+      <p class="lead">Suggest removing, breaking down, adding tasks or reshuffling the plan.</p>
+      ${suggestionsCard(h)}
+      ${taskMap(h)}
+      <div class="section-head"><h2 class="section-title">Suggest adding</h2></div>
+      <div class="card"><div class="field" style="margin:0;padding:14px 16px">
+        <label for="sg-add">What else needs doing?</label>
+        <input id="sg-add" maxlength="60" placeholder="e.g. Water the plants" autocomplete="off" enterkeyhint="done">
+        <button class="btn secondary" style="margin-top:12px" data-action="suggestAdd">Suggest adding</button>
+      </div></div>
+      ${reshuffleBlock(h)}
+      <div style="height:96px"></div>
       <div class="bottom-bar"><p class="count">${plural(count, 'suggestion')} for ${orgName}</p>
         <button class="btn primary" data-action="doneSuggesting">Done</button></div>
+    </main>`;
+  },
+
+  /* ---------- Swap: your tasks, offer any of them to your partner ---------- */
+  swap() {
+    const h = S.household;
+    const me = S.user.uid;
+    const partner = Household.people(h).find(m => m.uid !== me);
+    const pName = esc(partner ? Household.memberName(partner) : 'your partner');
+    const mine = Household.tasksOf(h, me);
+    const groups = Household.inventory(h).map(({ category }) => ({ category, items: mine.filter(u => u.category === category.id) })).filter(g => g.items.length);
+    const rows = items => items.map(u => {
+      const asked = Household.pendingFor(h, u.id);
+      const name = u.parentName ? `${esc(u.parentName)}: ${esc(u.name)}` : esc(u.name);
+      return asked
+        ? `<div class="row static"><div class="row-text"><span class="row-title">${name}</span><span class="row-sub">${esc(Timing.label(u))}</span></div><span class="tag">Swap asked</span></div>`
+        : `<button class="row" data-action="askSwap" data-id="${esc(u.id)}"><div class="row-text"><span class="row-title">${name}</span><span class="row-sub">${esc(Timing.label(u))}</span></div><span class="tag">Swap</span></button>`;
+    }).join('');
+    return `<main class="screen">
+      ${topbar({ back: 'settings' })}
+      <h1>Swap</h1>
+      <p class="lead">Offer one of your tasks to ${pName}. If they take it, they choose one of theirs in return.</p>
+      ${swapCards(h)}
+      ${groups.length ? groups.map(g => `<div class="section-head"><h2 class="section-title">${esc(g.category.name)}</h2></div><div class="card">${rows(g.items)}</div>`).join('')
+        : '<div class="note">You have no tasks to swap right now.</div>'}
+      <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
     </main>`;
   },
 };
@@ -847,7 +858,7 @@ function taskMap(h, openAll) {
         const parts = Household.parts(r).length;
         return `<button class="row task-row" data-action="openTask" data-id="${esc(r.id)}">
           <div class="row-text"><span class="row-title">${esc(r.name)}</span>
-            <span class="row-sub">${esc(Timing.label(r))}${parts ? ` · ${plural(parts, 'part')}` : ''}${r.mentalLoad ? ' · Mental load' : ''}</span></div>
+            <span class="row-sub">${esc(Timing.label(r))}${parts ? ` · ${plural(parts, 'part')}` : ''}${r.mentalLoad ? ' · Mental load' : ''}${Household.suggestionFor(h, me, 'remove', r.id) ? ' · Removal suggested' : ''}</span></div>
           ${ownerBadges(h, r)}</button>`;
       }).join('') : '';
       return `<button class="row cat-head" data-action="toggleCat" data-key="${esc(category.id)}" aria-expanded="${expanded}">
@@ -885,6 +896,16 @@ const ALL_CLEAR = Object.freeze([
 function allClearLine(now = new Date()) {
   const dayNo = Math.floor((Schedule.day(now) - new Date(now.getFullYear(), 0, 0)) / 864e5);
   return ALL_CLEAR[dayNo % ALL_CLEAR.length];
+}
+/** "Reshuffle the plan", at the bottom of the task screens (it asks the other person first). */
+function reshuffleBlock(h) {
+  const stage = Household.stage(h);
+  if (stage === 'setup' || !h.plan || Household.alone(h) || !Entitlements.active(S.subscription)) return '';
+  const partner = Household.people(h).find(m => m.uid !== S.user.uid);
+  const pName = esc(partner ? Household.memberName(partner) : 'your partner');
+  if (h.reshuffle && h.reshuffle.status === 'pending') return `<p class="fine" style="margin-top:24px">Reshuffle asked. Waiting for ${pName}.</p>`;
+  return `<div style="margin-top:24px"><button class="btn secondary" data-action="askReshuffle">Reshuffle the plan</button>
+    <p class="fine">Asks ${pName} first. A swap is usually enough.</p></div>`;
 }
 /** Suggestions: the organiser decides; the partner sees their own, waiting. */
 function suggestionsCard(h) {
@@ -1287,6 +1308,7 @@ const Sheets = {
       ${body}
       ${main}
       ${canBreak ? `<button class="btn secondary" data-action="openBreakdown" data-id="${esc(r.id)}">${isOrg ? (split ? 'Edit the parts' : 'Break into parts') : 'Suggest a breakdown'}</button>` : ''}
+      ${!isOrg && stage !== 'setup' ? `<button class="btn ghost" data-action="suggestRemoval" data-id="${esc(r.id)}">${Household.suggestionFor(h, me, 'remove', r.id) ? 'Withdraw my removal suggestion' : 'Suggest removing this task'}</button>` : ''}
       ${isOrg && !r.predefined ? `<button class="btn ghost text-danger" data-action="removeTask" data-id="${esc(r.id)}">Remove this task</button>` : ''}
       <button class="btn ghost" data-action="closeSheet">Close</button>`, r.name);
   },

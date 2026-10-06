@@ -294,10 +294,21 @@ const Household = {
       ...(type === 'add' ? { libraryId: key } : { responsibilityId: key }),
     }];
   },
+  /** Suggest a task in the partner's own words (no category: the organiser can place and time it). */
+  suggestAdd(h, userId, text) {
+    const name = String(text || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+    if (!name) return null;
+    const mine = this.suggestions(h).filter(x => x.by === userId && x.type === 'add');
+    if (mine.some(x => String(x.name).toLowerCase() === name.toLowerCase())) return 'duplicate';
+    if (mine.length >= 20) return 'limit';
+    const s = { id: uid(), by: userId, type: 'add', name, custom: true, at: new Date().toISOString() };
+    h.suggestions = [...this.suggestions(h), s];
+    return s;
+  },
   acceptSuggestion(h, id) {
     const sug = this.suggestions(h).find(x => x.id === id);
     if (!sug) return;
-    if (sug.type === 'add') this.select(h, sug.libraryId);
+    if (sug.type === 'add') { if (sug.custom) this.addCustom(h, { name: sug.name }); else this.select(h, sug.libraryId); }
     else if (sug.type === 'breakdown') this.setBreakdown(h, sug.responsibilityId, sug.parts || []);
     else h.responsibilities = h.responsibilities.filter(r => r.id !== sug.responsibilityId);
     h.suggestions = this.suggestions(h).filter(x => x.id !== id);
@@ -308,7 +319,7 @@ const Household = {
     const selected = this.selectedLibraryIds(h);
     const ids = new Set(h.responsibilities.map(r => r.id));
     const before = this.suggestions(h).length;
-    h.suggestions = this.suggestions(h).filter(x => x.type === 'add' ? !selected.has(x.libraryId) : ids.has(x.responsibilityId));
+    h.suggestions = this.suggestions(h).filter(x => x.type === 'add' ? (x.custom || !selected.has(x.libraryId)) : ids.has(x.responsibilityId));
     return h.suggestions.length !== before;
   },
 

@@ -61,14 +61,14 @@ function money(amount) {
 
 function topbar({ back, step }) {
   const backBtn = back
-    ? `<button class="icon-btn left" data-action="nav" data-to="${esc(back)}" aria-label="Back">${Icon.back}</button>`
-    : `<span style="width:34px"></span>`;
+    ? `<button class="icon-btn right" data-action="nav" data-to="${esc(back)}" aria-label="Back">${Icon.back}</button>`
+    : '';
   const i = ONBOARDING.indexOf(step);
   const progress = i >= 0
     ? `<div class="progress" aria-hidden="true">${ONBOARDING.map((_, k) => `<span class="${k <= i ? 'done' : ''}"></span>`).join('')}</div>
-       <span class="step-label">Step ${i + 1} of ${ONBOARDING.length}</span>`
+       <span class="step-label">Step ${i + 1} of ${ONBOARDING.length}</span><span class="spacer"></span>`
     : '<span class="spacer"></span>';
-  return `<div class="topbar">${backBtn}${progress}</div>`;
+  return `<div class="topbar">${progress}${backBtn}</div>`;
 }
 
 function stepperRow(key, label, sub, value) {

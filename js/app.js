@@ -6,7 +6,7 @@
 const INVITE_KEY = 'household-app/pending-invite';
 const INVITE_FROM_KEY = 'household-app/pending-invite-from';
 const HOUSEHOLD_SCREENS = ['members', 'home', 'responsibilities', 'frequency', 'rate', 'review', 'today', 'household', 'settings',
-  'subscribe', 'breakdown', 'reshare'];
+  'subscribe', 'breakdown', 'reshare', 'swap'];
 const SETUP_SCREENS = ONBOARDING;
 
 const S = {
@@ -1046,6 +1046,30 @@ const Actions = {
     save('suggestions');
     rerender();
   },
+  /** From a task's sheet: suggest removing it (or take that back). */
+  suggestRemoval(d) {
+    if (isOrganiser()) return;
+    const h = S.household;
+    const had = !!Household.suggestionFor(h, S.user.uid, 'remove', d.id);
+    Household.toggleSuggestion(h, S.user.uid, 'remove', d.id);
+    save('suggestions');
+    Sheet.close();
+    toast(had ? 'Suggestion withdrawn.' : `Suggested. ${Household.memberName(Household.owner(h))} decides.`);
+    rerender();
+  },
+  /** An open suggestion for a new task, in your own words. */
+  suggestAdd() {
+    if (isOrganiser()) return;
+    const input = document.getElementById('sg-add');
+    const h = S.household;
+    const res = Household.suggestAdd(h, S.user.uid, input ? input.value : '');
+    if (!res) { toast('Write what needs doing first.'); if (input) input.focus(); return; }
+    if (res === 'duplicate') { toast("You've suggested that already."); return; }
+    if (res === 'limit') { toast('That is plenty for now. Let the others decide first.'); return; }
+    save('suggestions');
+    toast(`Suggested. ${Household.memberName(Household.owner(h))} decides.`);
+    rerender();
+  },
   withdrawSuggestion(d) {
     const h = S.household;
     h.suggestions = Household.suggestions(h).filter(x => !(x.id === d.id && x.by === S.user.uid));
@@ -1189,6 +1213,7 @@ function resolveRoute() {
   const home = myTurn ? 'review' : stage === 'active' ? 'today' : 'household';
   let allowed = stage === 'active' ? ['today', 'household'] : ['household', 'rate'];
   if (myTurn) allowed = ['review', 'household'];
+  else if (h.plan && !Household.alone(h) && Entitlements.active(S.subscription)) allowed = allowed.concat(['swap']);
   if (organiser) allowed = allowed.concat(['members', 'home', 'responsibilities', 'frequency']);
   // When the household moves on to a new stage, everyone goes to that stage's main screen.
   const moved = S.lastStage !== undefined && S.lastStage !== stage;
