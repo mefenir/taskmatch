@@ -17,7 +17,9 @@ const A = {
   feedback: [],
   errors: [],
   feedbackFilter: 'new',
-  tab: 'funnel',        // funnel | requests | feedback | errors
+  config: {},           // config/beta: { autoApprove }
+  openCouple: null,     // journey: the couple whose people are shown
+  tab: 'funnel',        // funnel | journey | requests | feedback | errors
   range: 30,            // funnel: households created in the last N days (0 = all)
   filter: 'pending',
   busy: null,           // uid currently being changed
@@ -29,12 +31,26 @@ let unwatchMetrics = null;
 let unwatchUsers = null;
 let unwatchFeedback = null;
 let unwatchErrors = null;
-const TABS = ['funnel', 'requests', 'feedback', 'errors'];
-// In the order a household goes through them.
+let unwatchConfig = null;
+const TABS = ['funnel', 'journey', 'requests', 'feedback', 'errors'];
+// In the order a household goes through them. signedUp and requested are worked out from other data.
 const STEP_LABEL = {
-  created: 'Started setting up', listed: 'Picked their tasks', rated: 'Saw their plan', paywall: 'Saw the plans',
-  checkout: 'Opened checkout', subscribed: 'Subscribed or trial', invited: 'Invited their partner',
+  signedUp: 'Signed up', created: 'Started setting up', homeDone: 'Described their home', listed: 'Picked their tasks',
+  timesDone: 'Set their times', rated: 'Saw their plan', paywall: 'Saw the plans', requested: 'Asked for access',
+  checkout: 'Opened checkout', subscribed: 'Subscribed', invited: 'Invited their partner',
   joined: 'Partner joined', reviewed: 'Partner reviewed', started: 'Plan started',
+};
+// Which step each percentage is measured against ("of <parent>").
+const PARENT = {
+  created: 'signedUp', homeDone: 'created', listed: 'homeDone', timesDone: 'listed', rated: 'timesDone',
+  paywall: 'rated', requested: 'rated', checkout: 'rated', subscribed: 'rated',
+  invited: 'subscribed', joined: 'invited', reviewed: 'joined', started: 'reviewed',
+};
+// The main path, for the Journey tab.
+const PATH = ['signedUp', 'created', 'homeDone', 'listed', 'timesDone', 'rated', 'subscribed', 'invited', 'joined', 'reviewed', 'started'];
+const STAGE = {
+  created: 'Setting up', homeDone: 'Described home', listed: 'Picked tasks', timesDone: 'Set times', rated: 'Saw plan',
+  subscribed: 'Has access', invited: 'Invited partner', joined: 'Partner joined', reviewed: 'Partner reviewed', started: 'Plan started',
 };
 const millis = t => (!t ? null : typeof t.toMillis === 'function' ? t.toMillis() : typeof t === 'number' ? t : Date.parse(t));
 const $root = document.getElementById('app');
@@ -79,7 +95,7 @@ function view() {
   const newFeedback = A.feedback.filter(f => f.status !== 'done').length;
   const tab = (key, label) => `<button data-action="tab" data-key="${key}" aria-pressed="${A.tab === key}">${label}</button>`;
   const tabs = `<div class="seg" role="group" aria-label="Section">
-      ${tab('funnel', 'Funnel')}${tab('requests', 'Access requests')}
+      ${tab('funnel', 'Funnel')}${tab('journey', 'Journey')}${tab('requests', 'Access requests')}
       ${tab('feedback', `Feedback${newFeedback ? ` (${newFeedback})` : ''}`)}${tab('errors', `Errors${A.errors.length ? ` (${errorGroups().length})` : ''}`)}</div>`;
   const pw = A.pwOpen ? `<div class="card pw-card">
       <div class="field"><label for="a-pw-cur">Current password</label>
@@ -96,6 +112,7 @@ function view() {
       <button class="link-btn" style="margin:0" data-action="signOut">Sign out</button></div>
     <h1 style="margin-top:0">Admin</h1>${pw}${tabs}`;
   if (A.tab === 'funnel') return `<main class="screen">${head}${funnel()}</main>`;
+  if (A.tab === 'journey') return `<main class="screen">${head}${journey()}</main>`;
   if (A.tab === 'feedback') return `<main class="screen">${head}${feedbackList()}</main>`;
   if (A.tab === 'errors') return `<main class="screen">${head}${errorList()}</main>`;
 
@@ -111,57 +128,146 @@ function view() {
   };
   return `<main class="screen">${head}
     <p class="lead" style="margin-bottom:12px">Signed in as ${esc(A.user.email || '')}. Unlocking gives the whole household access without paying (for gifts and tests; paid subscriptions run through Stripe).</p>
+    <div class="card"><button class="row" role="switch" aria-checked="${A.config.autoApprove === true}" data-action="toggleAuto" ${A.busy === 'auto' ? 'disabled' : ''}>
+      <div class="row-text"><span class="row-title">Approve new requests automatically</span>
+      <span class="row-sub">${A.config.autoApprove === true ? 'On: anyone who taps Request access gets in at once. Turn it off when the testers are in.' : 'Off: you approve each request yourself.'}</span></div><span class="switch"></span></button></div>
     <div class="seg" role="group" aria-label="Filter">${FILTERS.map(([k, l]) =>
       `<button data-action="filter" data-key="${esc(k)}" aria-pressed="${A.filter === k}">${l} (${count(k)})</button>`).join('')}</div>
     <div class="card">${list.length ? list.map(r => `<div class="req">
-        <div class="top"><span class="who">${esc(r.name || 'No name')}</span><span class="status ${esc(r.status)}">${STATUS_LABEL[r.status] || esc(r.status)}</span></div>
+        <div class="top"><span class="who">${esc(r.name || 'No name')}</span><span class="status ${esc(r.status)}">${r.status === 'approved' && r.decidedBy === 'auto' ? 'Unlocked automatically' : STATUS_LABEL[r.status] || esc(r.status)}</span></div>
         <div class="meta">${esc(r.email || '')}<br>${esc(Number(r.members) || 1)} in household · asked ${when(r.requestedAt)}${r.decidedAt ? ` · changed ${when(r.decidedAt)}` : ''}</div>
         <div class="btns">${buttons(r)}</div>
       </div>`).join('') : `<div class="note" style="border:0">Nothing here.</div>`}</div>
   </main>`;
 }
 
-/** How many households reached each step, and how many came back a week after starting. */
-function funnel() {
+/** Households created in the period, the people who signed up in it (partners who joined by invite excluded), and requests by household. */
+function funnelData() {
   const since = A.range ? Date.now() - A.range * 864e5 : 0;
   const rows = A.metrics.filter(m => (millis(m.created) || 0) >= since);
+  const signups = A.users.filter(u => !u.viaInvite && (u.createdAt || 0) >= since);
+  const reqByHid = new Map(A.requests.filter(r => r.householdId).map(r => [r.householdId, r]));
+  return { since, rows, signups, reqByHid };
+}
+/** The time a household reached a step (null if it hasn't). "Asked for access" comes from the access requests. */
+const reachedAt = (m, k, reqByHid) => k === 'requested' ? millis((reqByHid.get(m.id) || {}).requestedAt) : millis(m[k]);
+
+/** How many households reached each step, and how many came back a week after starting. */
+function funnel() {
+  const { rows, signups, reqByHid } = funnelData();
   const steps = Object.keys(STEP_LABEL);
-  const n = k => rows.filter(m => m[k]).length;
-  const first = n('created') || 0;
+  const n = k => k === 'signedUp' ? signups.length : rows.filter(m => reachedAt(m, k, reqByHid)).length;
   const retained = rows.filter(m => {
     const s = millis(m.started); if (!s) return false;
     return (m.activeDays || []).some(d => Date.parse(d) >= s + 7 * 864e5);
   }).length;
   const pct = (a, b) => (b ? Math.round(a / b * 100) + '%' : '—');
   const ranges = [[30, '30 days'], [90, '90 days'], [0, 'All time']];
+  const first = n('signedUp');
   return `<div class="seg" role="group" aria-label="Period" style="margin-top:12px">${ranges.map(([k, l]) =>
       `<button data-action="range" data-key="${esc(k)}" aria-pressed="${A.range === k}">${l}</button>`).join('')}</div>
-    <div class="card">${steps.map((k, i) => {
-      const v = n(k); const prev = i ? n(steps[i - 1]) : v;
+    <div class="card">${steps.map(k => {
+      const v = n(k); const parent = PARENT[k];
       const open = A.openStep === k;
       return `<button class="row step-row" data-action="openStep" data-key="${esc(k)}" aria-expanded="${open}"><div class="row-text"><span class="row-title">${STEP_LABEL[k]}</span>
-        <span class="row-sub">${i ? `${pct(v, prev)} of the step before · ` : ''}${pct(v, first)} of all</span></div>
-        <span class="status">${v}</span></button>${open ? whoReached(rows, k) : ''}`;
+        <span class="row-sub">${parent ? `${pct(v, n(parent))} of ${STEP_LABEL[parent].replace(/^./, c => c.toLowerCase())} · ` : ''}${parent ? `${pct(v, first)} of all` : 'Accounts created, partners who joined by invite not counted'}</span></div>
+        <span class="status">${v}</span></button>${open ? (k === 'signedUp' ? whoSignedUp(signups, rows) : whoReached(rows, k, reqByHid)) : ''}`;
     }).join('')}
       <div class="row static"><div class="row-text"><span class="row-title">Still using it a week after starting</span>
         <span class="row-sub">${pct(retained, n('started'))} of plans started</span></div><span class="status">${retained}</span></div>
     </div>
-    <p class="fine" style="text-align:left">Households, not people. Counted from when each step was first reached. Tap a step to see who reached it.</p>`;
+    <p class="fine" style="text-align:left">Households, not people (except Signed up). Counted from when each step was first reached. Tap a step to see who reached it.</p>`;
+}
+
+/** Everyone who signed up in the period, newest first; "stopped here" when they never started setting up. */
+function whoSignedUp(signups, rows) {
+  if (!signups.length) return '<div class="who-list"><p class="meta">Nobody yet.</p></div>';
+  const started = new Set(rows.map(m => m.id));
+  return `<div class="who-list">${[...signups].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map(u => `<div class="who-item">
+      <div><span class="who">${esc(u.name || 'No name')}</span> <span class="meta">· ${esc(u.email)}</span></div>
+      <div class="meta">${when(u.createdAt)}${u.householdId && started.has(u.householdId) ? '' : ' <span class="status">stopped here</span>'}</div></div>`).join('')}</div>`;
 }
 
 /** The people in each household that reached a step, newest first; "stopped here" when it's their furthest step. */
-function whoReached(rows, step) {
-  const steps = Object.keys(STEP_LABEL);
+function whoReached(rows, step, reqByHid) {
+  const steps = Object.keys(STEP_LABEL).filter(k => k !== 'signedUp' && k !== 'requested');
   const furthest = m => steps.filter(k => m[k]).pop();
-  const list = rows.filter(m => m[step]).sort((a, b) => (millis(b[step]) || 0) - (millis(a[step]) || 0));
+  const list = rows.filter(m => reachedAt(m, step, reqByHid)).sort((a, b) => (reachedAt(b, step, reqByHid) || 0) - (reachedAt(a, step, reqByHid) || 0));
   if (!list.length) return '<div class="who-list"><p class="meta">Nobody yet.</p></div>';
   return `<div class="who-list">${list.map(m => {
     const people = A.users.filter(u => u.householdId === m.id);
     const names = people.length ? people.map(u => `<div><span class="who">${esc(u.name || 'No name')}</span> <span class="meta">· ${esc(u.email)}</span></div>`).join('')
       : '<span class="meta">Nobody in this household any more</span>';
     const stop = furthest(m) === step ? ' <span class="status">stopped here</span>' : '';
-    return `<div class="who-item"><div>${names}</div><div class="meta">${when(m[step])}${stop}</div></div>`;
+    return `<div class="who-item"><div>${names}</div><div class="meta">${when(reachedAt(m, step, reqByHid))}${stop}</div></div>`;
   }).join('')}</div>`;
+}
+
+/* ---------- Journey: the main path as bars, each couple's progress, and 21 days of activity ---------- */
+const DAYS = 21;
+const dayStr = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const coupleName = m => {
+  const people = A.users.filter(u => u.householdId === m.id);
+  return people.length ? people.map(u => (u.name || u.email || 'No name').split(' ')[0]).join(' & ') : 'Household';
+};
+const furthestIdx = m => { let i = -1; PATH.forEach((k, j) => { if (j && m[k]) i = j; }); return i; };
+
+function journey() {
+  const { rows, signups } = funnelData();
+  const ranges = [[30, '30 days'], [90, '90 days'], [0, 'All time']];
+  const counts = PATH.map(k => k === 'signedUp' ? signups.length : rows.filter(m => m[k]).length);
+  const max = Math.max(1, ...counts);
+  // The biggest single drop between neighbouring steps.
+  let dropAt = -1, drop = 0;
+  counts.forEach((c, i) => { if (i && counts[i - 1] - c > drop) { drop = counts[i - 1] - c; dropAt = i; } });
+  const bars = `<div class="card jbars">${PATH.map((k, i) => `<div class="jbar${i === dropAt ? ' drop' : ''}">
+      <div class="jlabel"><span>${STEP_LABEL[k]}</span><span class="jn">${counts[i]}</span></div>
+      <div class="jtrack"><div class="jfill" style="width:${Math.round(counts[i] / max * 100)}%"></div></div></div>`).join('')}</div>
+    ${dropAt > 0 ? `<p class="fine" style="text-align:left">Biggest drop: ${esc(STEP_LABEL[PATH[dropAt - 1]])} → ${esc(STEP_LABEL[PATH[dropAt]])} (${drop} fewer).</p>` : ''}`;
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayKey = dayStr(today);
+  const lastKey = m => (m.activeDays || []).reduce((a, d) => (d > a ? d : a), '');
+  const couples = rows.filter(m => millis(m.created)).sort((a, b) => lastKey(b).localeCompare(lastKey(a)) || (millis(b.created) - millis(a.created)));
+  const weekAgo = dayStr(new Date(today.getTime() - 6 * 864e5));
+  const activeNow = couples.filter(m => (m.activeDays || []).some(d => d >= weekAgo)).length;
+
+  const board = couples.length ? `<div class="card">${couples.map(m => {
+    const idx = furthestIdx(m); const open = A.openCouple === m.id;
+    const last = lastKey(m);
+    const segs = PATH.slice(1).map((k, j) => `<i class="${j + 1 <= idx ? 'on' : ''}"></i>`).join('');
+    const people = A.users.filter(u => u.householdId === m.id);
+    return `<button class="row step-row couple" data-action="openCouple" data-id="${esc(m.id)}" aria-expanded="${open}"><div class="row-text">
+        <span class="row-title">${esc(coupleName(m))}</span>
+        <span class="jsegs" aria-hidden="true">${segs}</span>
+        <span class="row-sub">${idx >= 0 ? STAGE[PATH[idx]] : 'Setting up'} · ${last ? `last active ${esc(last === todayKey ? 'today' : last)}` : 'not active yet'}</span></div></button>
+      ${open ? `<div class="who-list">${people.length ? people.map(u => `<div class="who-item"><div><span class="who">${esc(u.name || 'No name')}</span> <span class="meta">· ${esc(u.email)}</span></div></div>`).join('') : '<p class="meta">Nobody in this household any more.</p>'}</div>` : ''}`;
+  }).join('')}</div>` : '<div class="card"><div class="note" style="border:0">No couples yet.</div></div>';
+
+  // 21-day grid: one row per couple, one column per day since they started.
+  const cell = 14, gap = 3, label = 0;
+  const grid = couples.length ? `<div class="card jgrid"><div class="jgrid-scroll">${couples.map(m => {
+    const start = new Date(millis(m.created)); start.setHours(0, 0, 0, 0);
+    const set = new Set(m.activeDays || []);
+    const cells = Array.from({ length: DAYS }, (_, i) => {
+      const d = new Date(start.getTime() + i * 864e5); const key = dayStr(d);
+      const x = label + i * (cell + gap);
+      if (key > todayKey) return '';
+      return set.has(key)
+        ? `<rect x="${x}" y="0" width="${cell}" height="${cell}" rx="4" class="on"><title>${key}: active</title></rect>`
+        : `<rect x="${x + .75}" y=".75" width="${cell - 1.5}" height="${cell - 1.5}" rx="3.5" class="off"><title>${key}: not active</title></rect>`;
+    }).join('');
+    return `<div class="jrow"><span class="jname">${esc(coupleName(m))}</span>
+      <svg width="${DAYS * (cell + gap)}" height="${cell}" viewBox="0 0 ${DAYS * (cell + gap)} ${cell}" role="img" aria-label="${esc(coupleName(m))}: active on ${(m.activeDays || []).length} of the first ${DAYS} days">${cells}</svg></div>`;
+  }).join('')}</div></div>
+    <p class="fine" style="text-align:left">Each square is a day since the couple started: filled when they opened the app, outlined when they didn't.</p>` : '';
+
+  return `<div class="seg" role="group" aria-label="Period" style="margin-top:12px">${ranges.map(([k, l]) =>
+      `<button data-action="range" data-key="${esc(k)}" aria-pressed="${A.range === k}">${l}</button>`).join('')}</div>
+    <h2 class="jh">The path</h2>${bars}
+    <h2 class="jh">Couples</h2>
+    <p class="lead" style="margin:0 0 8px">Active in the last 7 days: <strong>${activeNow} of ${couples.length}</strong> couples</p>${board}
+    <h2 class="jh">First ${DAYS} days</h2>${grid || '<p class="fine" style="text-align:left">Nothing to show yet.</p>'}`;
 }
 
 /** Notes from Settings → Send feedback, newest first. */
@@ -260,6 +366,16 @@ const Actions = {
     }
     A.busy = null; render();
   },
+  openCouple(d) { A.openCouple = A.openCouple === d.id ? null : d.id; render(); },
+  async toggleAuto() {
+    if (A.busy) return;
+    const next = A.config.autoApprove !== true;
+    if (next && !confirm('Turn on automatic approval? Anyone who taps Request access from now on gets in straight away. Requests already waiting are not changed.')) return;
+    A.busy = 'auto'; render();
+    try { await Backend.Admin.setAutoApprove(next, A.user.uid); toast(next ? 'Automatic approval is on.' : 'Automatic approval is off.'); }
+    catch (e) { console.error(e); toast(`Couldn't do that (${e.code || 'error'}). Check the rules are published.`); }
+    A.busy = null; render();
+  },
   openStep(d) { A.openStep = A.openStep === d.key ? null : d.key; render(); },
   unlock(d) { act('unlock', d.id); },
   deny(d) { act('deny', d.id); },
@@ -293,6 +409,7 @@ document.addEventListener('submit', async e => {
     if (unwatchUsers) { unwatchUsers(); unwatchUsers = null; }
     if (unwatchFeedback) { unwatchFeedback(); unwatchFeedback = null; }
     if (unwatchErrors) { unwatchErrors(); unwatchErrors = null; }
+    if (unwatchConfig) { unwatchConfig(); unwatchConfig = null; }
     A.feedback = []; A.errors = [];
     A.user = user; A.busy = null; A.requests = [];
     if (!user) { A.phase = 'signedOut'; render(); return; }
@@ -307,6 +424,7 @@ document.addEventListener('submit', async e => {
     unwatchMetrics = Backend.Admin.watchMetrics(list => { A.metrics = list; render(); }, e => console.error(e));
     unwatchUsers = Backend.Admin.watchUsers(list => { A.users = list; render(); }, e => console.error(e));
     unwatchFeedback = Backend.Admin.watchFeedback(list => { A.feedback = list; render(); }, e => console.error(e));
+    unwatchConfig = Backend.Admin.watchConfig(c => { A.config = c || {}; render(); }, e => console.error(e));
     unwatchErrors = Backend.Admin.watchErrors(list => { A.errors = list; render(); }, e => console.error(e));
   });
 })();

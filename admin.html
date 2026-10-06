@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Admin · Our Household</title>
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="css/styles.css?v=47">
+<link rel="stylesheet" href="css/styles.css?v=48">
 <style>
 .req{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .step-row .status{min-width:28px;text-align:center}
@@ -34,6 +34,25 @@
 .req .who{overflow-wrap:anywhere}
 .stack summary{cursor:pointer;font-size:13px;color:var(--accent);font-weight:600}
 .stack pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:var(--surface-2);border-radius:8px;padding:10px;margin:8px 0 4px;max-height:240px;overflow:auto}
+h2.jh{font-size:15px;margin:22px 0 8px;color:var(--muted);font-weight:650}
+.jbar{padding:10px 16px}
+.jbar + .jbar{border-top:1px solid var(--line)}
+.jlabel{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px}
+.jn{font-weight:650}
+.jtrack{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.jfill{height:100%;border-radius:4px;background:var(--accent);opacity:.55;min-width:2px}
+.jbar.drop .jfill{opacity:1}
+.jbar.drop .jlabel{font-weight:650}
+.jsegs{display:flex;gap:3px;margin:6px 0 2px}
+.jsegs i{flex:1;height:6px;border-radius:3px;background:var(--line)}
+.jsegs i.on{background:var(--accent)}
+.jgrid{padding:12px 16px}
+.jgrid-scroll{overflow-x:auto}
+.jrow{display:flex;flex-direction:column;gap:4px;padding:8px 0}
+.jrow + .jrow{border-top:1px solid var(--line)}
+.jname{font-size:13px;color:var(--muted)}
+.jgrid svg rect.on{fill:var(--accent)}
+.jgrid svg rect.off{fill:none;stroke:var(--line);stroke-width:1.5}
 </style>
 </head>
 <body>
@@ -43,9 +62,9 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="js/config.js?v=47"></script>
-<script src="js/util.js?v=47"></script>
-<script src="js/backend.js?v=47"></script>
-<script src="js/admin.js?v=47"></script>
+<script src="js/config.js?v=48"></script>
+<script src="js/util.js?v=48"></script>
+<script src="js/backend.js?v=48"></script>
+<script src="js/admin.js?v=48"></script>
 </body>
 </html>

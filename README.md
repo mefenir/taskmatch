@@ -93,7 +93,11 @@ One-time setup:
 
 Then sign in on `admin.html` with that username and password.
 
-**Funnel** shows, for the last 30 / 90 days or all time, how many households reached each step (started setting up → picked tasks → saw their plan → saw the plans → opened checkout → subscribed or trial → invited → partner joined → partner reviewed → plan started), with % of the previous step, and how many were still used 7 days after starting. Data comes from `metrics/{hid}` (step times and active days only, no names or content).
+**Funnel** shows, for the last 30 / 90 days or all time, how many people and households reached each step: signed up (partners who joined by invite not counted) → started setting up → described their home → picked tasks → set their times → saw their plan → saw the plans → asked for access → opened checkout → subscribed → invited → partner joined → partner reviewed → plan started. Each row shows its % of its parent step (access, checkout, subscribed and plans are measured against "saw their plan"), and how many were still used 7 days after starting. Tap a row to see who reached it. Data comes from `metrics/{hid}` (step times and active days only, no names or content).
+
+**Journey** shows the main path as bars (the biggest drop highlighted), one row per couple with a progress bar, current stage and last active day (tap for names and emails), and a 21-day activity grid with "Active in the last 7 days: X of Y couples".
+
+**Automatic approval** (switch at the top of Access requests, stored in `config/beta`): while on, anyone who taps Request access is approved at once and marked "Unlocked automatically" (still revocable). It only affects new requests. Turn it off once the beta testers are in. Needs the latest `firestore.rules` published.
 
 **Access requests** shows every request, filtered by **Waiting / Unlocked / Closed / All**:
 - **Unlock** gives the requester's household access without paying (writes `subscriptions/{uid}`), for gifts and tests.

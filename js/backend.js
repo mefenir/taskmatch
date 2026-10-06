@@ -108,7 +108,7 @@ const Backend = (() => {
 
   /* ---------- Data ---------- */
   const Repo = {
-    async ensureUser(user, nameHint) {
+    async ensureUser(user, nameHint, viaInvite) {
       const ref = users().doc(user.uid);
       const snap = await ref.get();
       if (!snap.exists) {
@@ -117,6 +117,7 @@ const Backend = (() => {
           displayName: user.displayName || nameHint || '',
           householdId: null,
           createdAt: now(),
+          ...(viaInvite ? { viaInvite: true } : {}),
         });
       }
     },
@@ -268,8 +269,19 @@ const Backend = (() => {
     requestedAt: now(),
   });
 
+  /** Beta switch: when on, a new request is approved on the spot. Returns true if this request got access. */
+  Repo.autoApprove = async user => {
+    const cfg = await db.collection('config').doc('beta').get();
+    if (!cfg.exists || cfg.data().autoApprove !== true) return false;
+    const batch = db.batch();
+    batch.set(subscriptions().doc(user.uid), { plan: 'premium', active: true, grantedAt: now(), grantedBy: 'auto', auto: true });
+    batch.update(premiumRequests().doc(user.uid), { status: 'approved', decidedAt: now(), decidedBy: 'auto' });
+    await batch.commit();
+    return true;
+  };
+
   /* ---------- Funnel metrics (no personal data: step times per household) ---------- */
-  const METRIC_STEPS = ['created', 'listed', 'rated', 'paywall', 'checkout', 'subscribed', 'invited', 'joined', 'reviewed', 'started'];
+  const METRIC_STEPS = ['created', 'homeDone', 'listed', 'timesDone', 'rated', 'paywall', 'checkout', 'subscribed', 'invited', 'joined', 'reviewed', 'started'];
   const Metrics = {
     STEPS: METRIC_STEPS,
     mark(hid, step) {
@@ -353,10 +365,14 @@ const Backend = (() => {
       batch.update(premiumRequests().doc(userId), { status: 'approved', decidedAt: now(), decidedBy: adminId });
       await batch.commit();
     },
+    watchConfig: (onData, onError) =>
+      db.collection('config').doc('beta').onSnapshot(s => onData(s.exists ? s.data() : {}), onError),
+    setAutoApprove: (on, adminId) =>
+      db.collection('config').doc('beta').set({ autoApprove: !!on, changedAt: now(), changedBy: adminId }),
     deny: (userId, adminId) => premiumRequests().doc(userId).update({ status: 'denied', decidedAt: now(), decidedBy: adminId }),
     /** Everyone's name, email and household, to see who reached each funnel step. */
     watchUsers: (onData, onError) =>
-      users().onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, email: d.data().email || '', name: d.data().displayName || '', householdId: d.data().householdId || null }))), onError),
+      users().onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, email: d.data().email || '', name: d.data().displayName || '', householdId: d.data().householdId || null, viaInvite: !!d.data().viaInvite, createdAt: d.data().createdAt && d.data().createdAt.toMillis ? d.data().createdAt.toMillis() : 0 }))), onError),
     watchMetrics: (onData, onError) =>
       db.collection('metrics').onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, ...d.data() }))), onError),
     watchFeedback: (onData, onError) =>

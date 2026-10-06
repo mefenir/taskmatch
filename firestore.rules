@@ -20,6 +20,11 @@ service cloud.firestore {
       return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    // Beta switch, set by an admin on the Access requests tab.
+    function autoApproveOn() {
+      return get(/databases/$(database)/documents/config/beta).data.get('autoApprove', false) == true;
+    }
+
     function isMemberOf(hid) {
       return signedIn() && request.auth.uid in householdDoc(hid).data.memberIds;
     }
@@ -31,7 +36,7 @@ service cloud.firestore {
       // You read your own profile; the admin reads all (name, email, household) for the beta funnel.
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow create, update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['email', 'displayName', 'householdId', 'createdAt', 'inviteCodes'])
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'householdId', 'createdAt', 'inviteCodes', 'viaInvite'])
         && (request.resource.data.householdId == null || request.resource.data.householdId is string)
         && request.resource.data.get('inviteCodes', []).size() <= 100;
       // Deleting your account removes your profile.
@@ -198,6 +203,14 @@ service cloud.firestore {
     match /subscriptions/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || ownerOfMyHousehold(uid) || isAdmin());
       allow write: if isAdmin();
+      // Beta: while the admin's "approve automatically" switch is on, someone with a pending request
+      // can create their own grant, once (an existing, e.g. revoked, grant is never overwritten).
+      allow create: if signedIn() && request.auth.uid == uid && autoApproveOn()
+        && request.resource.data.keys().hasOnly(['plan', 'active', 'grantedAt', 'grantedBy', 'auto'])
+        && request.resource.data.plan == 'premium' && request.resource.data.active == true
+        && request.resource.data.grantedAt == request.time
+        && request.resource.data.grantedBy == 'auto' && request.resource.data.auto == true
+        && get(/databases/$(database)/documents/premiumRequests/$(uid)).data.status == 'pending';
 
       function ownerOfMyHousehold(ownerUid) {
         let hid = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId;
@@ -217,7 +230,11 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if signedIn() && request.auth.uid == uid && validRequest();
       allow update: if isAdmin()
-        || (signedIn() && request.auth.uid == uid && resource.data.status in ['denied', 'revoked', 'cancelled'] && validRequest());
+        || (signedIn() && request.auth.uid == uid && resource.data.status in ['denied', 'revoked', 'cancelled'] && validRequest())
+        || (signedIn() && request.auth.uid == uid && resource.data.status == 'pending' && autoApproveOn()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decidedAt', 'decidedBy'])
+            && request.resource.data.status == 'approved' && request.resource.data.decidedBy == 'auto'
+            && request.resource.data.decidedAt == request.time);
       allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
 
       function validRequest() {
@@ -304,7 +321,7 @@ service cloud.firestore {
       allow get: if isAdmin() || isMemberOf(hid);
       allow list: if isAdmin();
       allow create, update: if signedIn() && isMemberOf(hid)
-        && request.resource.data.keys().hasOnly(['created', 'listed', 'rated', 'paywall', 'checkout', 'subscribed',
+        && request.resource.data.keys().hasOnly(['created', 'homeDone', 'listed', 'timesDone', 'rated', 'paywall', 'checkout', 'subscribed',
                                                  'invited', 'joined', 'reviewed', 'started', 'activeDays'])
         && request.resource.data.get('activeDays', []).size() <= 400;
       allow delete: if false;
@@ -349,6 +366,14 @@ service cloud.firestore {
         && request.resource.data.at == request.time;
       allow read, delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
       allow update: if false;
+    }
+
+    // config/beta — the auto-approve switch. Any signed-in person can read it; only admins change it.
+    match /config/beta {
+      allow read: if signedIn();
+      allow write: if isAdmin()
+        && request.resource.data.keys().hasOnly(['autoApprove', 'changedAt', 'changedBy'])
+        && request.resource.data.autoApprove is bool;
     }
 
     // admins/{uid} — only readable by that admin, never writable from the app.

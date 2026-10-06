@@ -193,7 +193,7 @@ async function onAuth(user) {
   S.auth = { mode: 'signin', busy: false, error: '', note: '', values: {} };
   S.phase = 'loading'; render(true);
   try {
-    await Backend.Repo.ensureUser(user, nameHint);
+    await Backend.Repo.ensureUser(user, nameHint, !!S.pendingInvite);
   } catch (e) { fail(e); return; }
   S.phase = 'ready';
   watchers.user = Backend.Repo.watchUser(user.uid, onProfile, fail);
@@ -601,7 +601,9 @@ const Actions = {
     flushName(); flushPartnerName();
     const h = S.household;
     if (h && !h.settings.onboarded && ONBOARDING.includes(d.to) && h.settings.step !== d.to) {
+      if (currentRoute === 'home' && d.to === 'responsibilities') mark('homeDone');
       if (currentRoute === 'responsibilities' && d.to === 'frequency') mark('listed');
+      if (currentRoute === 'frequency' && d.to === 'rate') mark('timesDone');
       h.settings.step = d.to;
       save('settings');
     }
@@ -889,7 +891,10 @@ const Actions = {
         householdId: h.id,
         members: h.memberIds.length,
       });
-      toast("Thanks! You're on the list.");
+      let instant = false;
+      try { instant = await Backend.Repo.autoApprove(S.user); } catch (e) { /* stays pending */ }
+      toast(instant ? "You're in. Welcome!" : "Thanks! You're on the list.");
+      if (instant) return;
       // Back to where you were: the plan, with its button now saying the approval is pending.
       if (Household.stage(h) === 'draft') go('household');
     } catch (e) {
