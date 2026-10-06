@@ -1406,3 +1406,21 @@ document.addEventListener('keydown', e => {
     }
   }
 })();
+
+
+/* Keep a focused field above the phone's keyboard: lift sheets by the keyboard height and scroll pages to the field. */
+(function keyboardSafe() {
+  const vv = window.visualViewport;
+  const root = document.documentElement;
+  const lift = () => {
+    const kb = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+    root.style.setProperty('--kb', kb > 80 ? kb + 'px' : '0px');
+  };
+  const reveal = el => {
+    if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    setTimeout(() => { lift(); try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); } }, 320);
+  };
+  if (vv) { vv.addEventListener('resize', lift); vv.addEventListener('scroll', lift); }
+  document.addEventListener('focusin', e => reveal(e.target));
+  document.addEventListener('focusout', () => setTimeout(lift, 100));
+})();

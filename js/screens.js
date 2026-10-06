@@ -517,7 +517,8 @@ const Screens = {
     const list = (title, items) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
       <div class="card">${items.length ? items.map(r => prefRow(h, me, r)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
     return `<main class="screen">
-      <div class="title-row"><h1>${orgName} made a plan for your home</h1>${settingsButton()}</div>
+      <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
+      <h1>${orgName} made a plan for your home</h1>
       ${totalCard(h)}
       ${list('Suggested for you', mine)}
       ${list(`Suggested for ${orgName}`, theirs)}
@@ -570,7 +571,8 @@ const Screens = {
     }
 
     return `<main class="screen">
-      <div class="title-row"><h1>${head}</h1>${settingsButton()}</div>
+      <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
+      <h1>${head}</h1>
       <p class="lead" style="margin-bottom:16px">${lead}</p>
       ${swapCards(h)}
       ${suggestionsCard(h)}
@@ -592,7 +594,8 @@ const Screens = {
     const needs = statusBanner(h) + swapCards(h) + suggestionsCard(h) + newTasksCard(h);
     const names = Household.people(h).map(m => esc(Household.memberName(m).split(' ')[0])).join(' & ');
     return `<main class="screen has-nav">
-      <div class="greeting"><div class="greeting-top"><p class="hello">${names}</p>${settingsButton()}</div>
+      <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
+      <div class="greeting"><p class="hello">${names}</p>
         <h1 class="mood">Our home</h1>
       </div>
       ${balanceCard(h)}
@@ -641,7 +644,8 @@ const Screens = {
     const nothing = !today.length && !week.length && !anytime.length && !board.length;
 
     return `<main class="screen has-nav">
-      <div class="greeting"><div class="greeting-top"><p class="hello">Hello, ${first}</p>${settingsButton()}</div>
+      <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
+      <div class="greeting"><p class="hello">Hello, ${first}</p>
         <h1 class="mood">${esc(Mood.line(now, progress))}</h1>
       </div>
       ${progress.count ? progressBar(progress.pct, 'Your day', progress.left ? `${progress.doneCount} of ${progress.count} done` : 'All done') : ''}
@@ -723,7 +727,7 @@ const Screens = {
     ]);
 
     return `<main class="screen">
-      ${topbar({ back: S.settingsFrom || (stage === 'active' && on ? 'today' : 'household') })}
+      ${topbar({ back: 'household' })}
       <h1>Settings</h1>
       ${you}${ours}${help}
       <div class="card" style="margin-top:24px">

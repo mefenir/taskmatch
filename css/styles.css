@@ -148,7 +148,7 @@ button.row:active{background:var(--surface-2)}
 #sheet-root{position:fixed;inset:0;z-index:20;display:none}
 #sheet-root.open{display:block}
 .sheet-backdrop{position:absolute;inset:0;background:rgba(10,14,12,.4);opacity:0;transition:opacity .2s}
-.sheet{position:absolute;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:var(--bg);border-radius:24px 24px 0 0;padding:12px 20px calc(20px + env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .25s cubic-bezier(.2,.8,.2,1);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto}
+.sheet{position:absolute;left:0;right:0;bottom:var(--kb,0px);max-width:520px;margin:0 auto;background:var(--bg);border-radius:24px 24px 0 0;padding:12px 20px calc(20px + env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .25s cubic-bezier(.2,.8,.2,1);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px - var(--kb,0px));overflow:auto}
 .sheet-handle{display:flex;justify-content:center;padding:6px 0 18px;margin:-12px -20px 0;cursor:grab;touch-action:none}
 .sheet-handle span{display:block;width:40px;height:5px;border-radius:3px;background:var(--line)}
 .sheet{touch-action:pan-y}
@@ -314,7 +314,7 @@ button.row.pressed{animation:row-pressed .35s ease-out}
 
 /* Today: greeting, progress block, day strip */
 .greeting{margin:4px 0 20px}
-.greeting .hello{font-size:18px;font-weight:600;color:var(--muted);margin:0 0 6px;letter-spacing:-.01em}
+.greeting .hello{font-size:18px;font-weight:600;color:var(--muted);margin:0 0 4px;letter-spacing:-.01em}
 .greeting .mood{font-size:clamp(24px, 7.8vw, 30px);line-height:1.15;letter-spacing:-.025em;font-weight:700;margin:0;text-wrap:balance}
 .meter-card{margin:0 0 16px}
 .meter-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:0 4px 8px}
@@ -363,9 +363,6 @@ p, .row-sub, .lead, .fine{text-wrap:pretty}
 .title-icon{display:inline-grid;vertical-align:-3px;margin-right:6px;color:var(--muted)}
 .chip-icon{display:inline-grid;vertical-align:-4px;margin-right:6px}
 /* The settings button sits beside the first line of each screen, its top level with the text */
-.greeting-top, .title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.greeting-top .icon-btn, .title-row .icon-btn{flex:none;margin:-9px -10px 0 0}
-.title-row h1{margin-top:0}
 .to-top{position:fixed;right:max(16px, calc((100vw - 520px) / 2 + 16px));bottom:calc(var(--lift, 0px) + 16px);z-index:11;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);box-shadow:var(--shadow);display:grid;place-items:center;cursor:pointer;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .2s,transform .2s}
 .to-top.show{opacity:1;transform:none;pointer-events:auto}
 @media (prefers-reduced-motion: reduce){.to-top{transition:none}}
