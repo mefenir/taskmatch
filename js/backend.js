@@ -68,13 +68,14 @@ const Backend = (() => {
     async google() {
       const provider = new firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
-      // Pop-ups don't work in an installed iOS web app; use a full-page redirect there.
+      // Redirect sign-in loses its result in an installed iOS web app (Safari walls off storage between
+      // github.io and firebaseapp.com), so try the pop-up first everywhere and keep the redirect as a fallback.
       const redirect = () => { SafeStorage.set(REDIRECT_KEY, '1'); return auth.signInWithRedirect(provider); };
-      if (isStandalone()) return redirect();
       try {
         return await auth.signInWithPopup(provider);
       } catch (e) {
-        if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) {
+        const c = e && e.code;
+        if (c === 'auth/popup-blocked' || c === 'auth/operation-not-supported-in-this-environment' || c === 'auth/web-storage-unsupported') {
           return redirect();
         }
         throw e;
