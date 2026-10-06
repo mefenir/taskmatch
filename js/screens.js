@@ -533,14 +533,14 @@ const Screens = {
       <div class="card">${items.length ? items.map(r => prefRow(h, me, r)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
     return `<main class="screen">
       <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
-      <h1>${orgName} made a plan for your home</h1>
+      <h1>${orgName} listed the tasks. We split them fairly.</h1>
       ${totalCard(h)}
-      ${list('Suggested for you', mine)}
-      ${list(`Suggested for ${orgName}`, theirs)}
-      <button class="btn ghost" data-action="suggestChanges">Suggest a change to the list</button>
+      ${list('Your part', mine)}
+      ${list(`${orgName}'s part`, theirs)}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${marked ? `${plural(marked, 'task')} marked. The app will rebalance with your answers.` : 'Happy with it as it is?'}</p>
         <button class="btn primary" data-action="submitReview">${marked ? 'Rebalance with my answers' : "Looks good, let's start"}</button>
+        <button class="btn ghost" data-action="suggestChanges">Suggest a change to the list</button>
       </div>
     </main>`;
   },
