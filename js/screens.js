@@ -1266,8 +1266,10 @@ const Sheets = {
     const planned = stage !== 'setup' && !!h.plan;
     const split = Household.isSplit(r);
     const isOrg = Household.isOwner(h, me);
-    const canSwap = planned && !Household.alone(h);
-    const free = new Set(homeless(h).map(u => u.id));
+    // On Our Tasks (suggesting changes) the sheet is only about the list: no swapping or taking over here.
+    const suggesting = !!S.suggestMode;
+    const canSwap = planned && !Household.alone(h) && !suggesting;
+    const free = new Set(suggesting ? [] : homeless(h).map(u => u.id));
     const ownerName = uid => uid === me ? 'Yours' : Household.peopleIds(h).includes(uid) ? `${Household.memberName(Household.member(h, uid))}'s` : 'Nobody has it yet';
     const action = id => {
       const who = Household.assignee(h, id);
@@ -1308,7 +1310,7 @@ const Sheets = {
       ${body}
       ${main}
       ${canBreak ? `<button class="btn secondary" data-action="openBreakdown" data-id="${esc(r.id)}">${isOrg ? (split ? 'Edit the parts' : 'Break into parts') : 'Suggest a breakdown'}</button>` : ''}
-      ${!isOrg && stage !== 'setup' ? `<button class="btn ghost" data-action="suggestRemoval" data-id="${esc(r.id)}">${Household.suggestionFor(h, me, 'remove', r.id) ? 'Withdraw my removal suggestion' : 'Suggest removing this task'}</button>` : ''}
+      ${!isOrg && stage !== 'setup' ? `<button class="btn outline" data-action="suggestRemoval" data-id="${esc(r.id)}">${Household.suggestionFor(h, me, 'remove', r.id) ? 'Withdraw my removal suggestion' : 'Suggest removing this task'}</button>` : ''}
       ${isOrg && !r.predefined ? `<button class="btn ghost text-danger" data-action="removeTask" data-id="${esc(r.id)}">Remove this task</button>` : ''}
       <button class="btn ghost" data-action="closeSheet">Close</button>`, r.name);
   },
