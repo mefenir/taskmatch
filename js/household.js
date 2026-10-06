@@ -21,7 +21,8 @@
    plan        { status: 'proposed'|'active', assignments: { [unitId]: uid|INVITEE },
                signature, accepted: { [uid]: at }, rebalancedBy?, createdAt, startedAt }
    swaps       [{ id, from, to, respId, status: 'pending'|'done'|'declined', gave?, at, resolvedAt?, seen? }]
-   completions { [unitId]: { last, prev, by, days: ['YYYY-MM-DD'] (ticks in the last 7 days) } }
+   completions { [unitId]: { last, prev, by, days: ['YYYY-MM-DD'] (ticks in the last 7 days),
+                 feel: ['quicker'|'ok'|'longer'] (the last 4 answers to "how long did it take?") } }
    reshare, reshuffle, notes — see their sections below
    ========================================================= */
 const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], children: [0, 8] };
@@ -722,9 +723,75 @@ const Household = {
     const today = Schedule.key(now);
     const weekAgo = Schedule.addDays(Schedule.day(now), -7);
     const recent = ((c && Array.isArray(c.days)) ? c.days : []).filter(k => { const d = Schedule.fromKey(k); return d && d > weekAgo; });
-    if (c && Schedule.doneOn(c, now)) all[respId] = { last: c.prev || null, prev: null, by: userId, days: recent.filter(k => k !== today) };   // undo today's tick
-    else all[respId] = { last: now.toISOString(), prev: c ? c.last : null, by: userId, days: [...new Set([...recent, today])] };
+    const feel = (c && Array.isArray(c.feel)) ? { feel: c.feel.slice(-4) } : {};
+    if (c && Schedule.doneOn(c, now)) all[respId] = { last: c.prev || null, prev: null, by: c.prevBy || userId, days: recent.filter(k => k !== today), ...feel };   // undo today's tick
+    else all[respId] = { last: now.toISOString(), prev: c ? c.last : null, ...(c && c.by ? { prevBy: c.by } : {}), by: userId, days: [...new Set([...recent, today])], ...feel };
     h.completions = all;
+  },
+
+  /* ---------- Giving each other a hand ---------- */
+  /** Someone else's task I can tick for them now (it's due and not done yet). */
+  canCover(h, id, userId, now = new Date()) {
+    if (this.stage(h) !== 'active') return false;
+    const u = this.unit(h, id);
+    const who = this.assignee(h, id);
+    if (!u || !who || who === userId || !this.peopleIds(h).includes(who)) return false;
+    const due = this.slot(u) === 'today' || this.slot(u) === 'anytime' || this.dueThisWeek(h, u, now);
+    return due && !this.doneForNow(h, u, now) && !Schedule.doneOn(this.completion(h, id), now);
+  },
+  /** I ticked their task today (so I can undo it). */
+  coveredByMe(h, id, userId, now = new Date()) {
+    const c = (h.completions || {})[id];
+    const who = this.assignee(h, id);
+    return !!c && c.by === userId && who && who !== userId && Schedule.doneOn(c, now);
+  },
+  /** My tasks the other person did for me today. */
+  coveredForMe(h, userId, now = new Date()) {
+    if (this.stage(h) !== 'active') return [];
+    const others = this.peopleIds(h).filter(m => m !== userId);
+    return this.units(h).filter(u => this.assignee(h, u.id) === userId).map(u => ({ u, c: (h.completions || {})[u.id] }))
+      .filter(({ c }) => c && others.includes(c.by) && Schedule.doneOn(c, now)).map(({ u, c }) => ({ unit: u, by: c.by }));
+  },
+
+  /* ---------- How long things really take ---------- */
+  recordFeel(h, id, feel) {
+    if (!['quicker', 'ok', 'longer'].includes(feel)) return;
+    const all = { ...(h.completions || {}) };
+    const c = all[id];
+    if (!c) return;
+    all[id] = { ...c, feel: [...(Array.isArray(c.feel) ? c.feel : []), feel].slice(-4) };
+    h.completions = all;
+  },
+  /** If a task took longer (or was quicker) 3 of the last 4 times: the time to suggest instead. */
+  timeHint(h, id) {
+    const u = this.unit(h, id);
+    const c = (h.completions || {})[id];
+    if (!u || !c || !Array.isArray(c.feel)) return null;
+    const last = c.feel.slice(-4);
+    const dir = last.filter(x => x === 'longer').length >= 3 ? 1 : last.filter(x => x === 'quicker').length >= 3 ? -1 : 0;
+    if (!dir) return null;
+    const each = Timing.of(u).each;
+    const opts = MINUTE_OPTIONS;
+    const next = dir > 0 ? opts.find(m => m > each) : [...opts].reverse().find(m => m < each);
+    const rooms = Timing.of(u).rooms;
+    return next ? { id, unit: u, dir, from: each * rooms, to: next * rooms, minutes: next } : null;
+  },
+  timeHints(h) { return this.stage(h) === 'active' ? this.units(h).map(u => this.timeHint(h, u.id)).filter(Boolean) : []; },
+  clearFeel(h, id) {
+    const all = { ...(h.completions || {}) };
+    if (all[id]) { all[id] = { ...all[id], feel: [] }; h.completions = all; }
+  },
+  /** Change how long one unit (a whole task or a part) takes. */
+  setUnitMinutes(h, id, minutes) {
+    const m = Number(minutes);
+    if (!MINUTE_OPTIONS.includes(m)) return false;
+    const r = h.responsibilities.find(x => x.id === id);
+    if (r) { this.setTiming(h, id, { minutes: m }); return true; }
+    const parent = this.parentOf(h, id);
+    const p = parent && this.parts(parent).find(x => x.id === id);
+    if (!p) return false;
+    p.minutes = m;
+    return true;
   },
 
   setRoom(h, type, count) {

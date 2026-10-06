@@ -43,9 +43,9 @@ const Screens = {
     const from = S.inviteFrom ? esc(S.inviteFrom) : '';
     return `<main class="screen welcome">
       ${houseArt}
-      <h1>${invited ? `${from || 'Your partner'} made a plan for your home` : 'Share your home fairly, without the arguments.'}</h1>
+      <h1>${invited ? `${from || 'Your partner'} listed your home's tasks` : 'Share your home fairly, without the arguments.'}</h1>
       <p class="lead">${invited
-        ? "See who would do what, and mark anything that doesn't suit you. It takes about a minute."
+        ? "Say how you feel about each one. The split is made from both your answers. It takes about a minute."
         : 'Set up your home in a few minutes, see how much work it really is, and get a fair split for the two of you.'}</p>
       ${invited ? '' : `<ol class="how">
         <li>List what your home needs</li>
@@ -520,26 +520,25 @@ const Screens = {
     </main>`;
   },
 
-  /* ---------- Partner: the plan they were invited to ---------- */
+  /* ---------- Partner: says how they feel about each task before the split is made ---------- */
   review() {
     const h = S.household;
     const me = S.user.uid;
-    const org = Household.owner(h);
-    const orgName = esc(Household.memberName(org));
-    const mine = Household.tasksOf(h, me);
-    const theirs = Household.tasksOf(h, h.ownerId);
+    const orgName = esc(Household.memberName(Household.owner(h)));
     const marked = markedCount(h, me);
-    const list = (title, items) => `<div class="section-head"><h2 class="section-title">${title}</h2><span class="section-meta">${items.length}</span></div>
-      <div class="card">${items.length ? items.map(r => prefRow(h, me, r)).join('') : '<div class="note" style="border:0">Nothing here.</div>'}</div>`;
+    const sections = Household.inventory(h).map(({ category, items }) => `<section aria-labelledby="rv-${esc(category.id)}">
+        <div class="section-head"><h2 class="section-title" id="rv-${esc(category.id)}">${esc(category.name)}</h2></div>
+        <div class="card">${items.map(r => prefRow(h, me, r)).join('')}</div>
+      </section>`).join('');
     return `<main class="screen">
       <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
-      <h1>${orgName} listed the tasks. We split them fairly.</h1>
+      <h1>${orgName} listed the tasks. How do you feel about each?</h1>
+      <p class="lead">Only you see your answers. The split is made from both of yours, so it's fair for you both.</p>
       ${totalCard(h)}
-      ${list('Your part', mine)}
-      ${list(`${orgName}'s part`, theirs)}
+      ${sections}
       <div class="bottom-bar">
-        <p class="count" aria-live="polite">${marked ? `${plural(marked, 'task')} marked. The app will rebalance with your answers.` : 'Happy with it as it is?'}</p>
-        <button class="btn primary" data-action="submitReview">${marked ? 'Rebalance with my answers' : "Looks good, let's start"}</button>
+        <p class="count" aria-live="polite">${marked ? `${plural(marked, 'task')} marked` : "Nothing marked yet. That's fine too."}</p>
+        <button class="btn primary" data-action="submitReview">See our split</button>
         <button class="btn ghost" data-action="suggestChanges">Suggest a change to the list</button>
       </div>
     </main>`;
@@ -561,7 +560,7 @@ const Screens = {
     if (stage === 'draft') {
       const invited = !!(h.settings && h.settings.invitedAt);
       head = 'Your plan is ready';
-      lead = `Here's a fair split for you and ${partnerName}. Next, send it to ${partnerName}: they can mark anything that doesn't suit them before it starts.`;
+      lead = `Here's a first draft of a fair split. When ${partnerName} joins, they add their own answers and the split is made from both of yours.`;
       top = totalCard(h);
       bottom = `<div class="bottom-bar">${hasAccess()
         ? `${invited ? `<p class="count">${partnerName} hasn't joined yet</p>` : ''}
@@ -574,13 +573,13 @@ const Screens = {
       </div>`;
     } else if (stage === 'review') {
       head = 'Your plan';
-      lead = `${partnerName} is looking at the plan. You'll see it here when there's something to say yes to.`;
+      lead = `${partnerName} is adding their answers. Your split, made from both, shows up here when it's ready.`;
     } else {
       const by = h.plan && h.plan.rebalancedBy;
       head = "Here's your plan";
       lead = by === me ? 'Rebalanced with your answers. Have a look and say yes if it works for you.'
         : by ? `${esc(Household.memberName(Household.member(h, by)))} marked a few things, so the plan was rebalanced. Have a look and say yes if it works for you.`
-        : "If something isn't to your taste, tap it to swap. When you're both happy, say yes.";
+        : "Made from both your answers. If something isn't to your taste, tap it to swap. When you're both happy, say yes.";
       bottom = `<div class="bottom-bar">
         ${accepted
           ? `<p class="count">Waiting for ${waiting.join(' and ')} to say yes</p>`
@@ -608,7 +607,7 @@ const Screens = {
     const isOrg = Household.isOwner(h, me);
     if (!isOrg && S.suggestMode) return Screens.suggest();
     if (Household.stage(h) !== 'active') return Screens.plan();
-    const needs = statusBanner(h) + swapCards(h) + suggestionsCard(h) + newTasksCard(h);
+    const needs = statusBanner(h) + swapCards(h) + suggestionsCard(h) + newTasksCard(h) + (isOrg ? timeHintsCard(h) : '');
     const names = Household.people(h).map(m => esc(Household.memberName(m).split(' ')[0])).join(' & ');
     return `<main class="screen has-nav">
       <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
@@ -637,8 +636,17 @@ const Screens = {
     const tick = (r, sub, done) => `<button class="row ${done ? 'done' : ''}" data-action="toggleDone" data-id="${esc(r.id)}" aria-pressed="${done}">
         <span class="check" aria-hidden="true">${Icon.check}</span>
         <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${r.parentName ? esc(r.parentName) + ' · ' : ''}${sub}</span></div>
-      </button>`;
+      </button>${feelStrip(r.id)}`;
     const doneToday = r => Schedule.doneOn(Household.completion(h, r.id), now);
+    // Done for me by the other person today: off my list, with a line saying so.
+    const covered = Household.coveredForMe(h, me, now);
+    const coveredIds = new Set(covered.map(x => x.unit.id));
+    ['today', 'week', 'anytime'].forEach(k => { lists[k] = lists[k].filter(r => !coveredIds.has(r.id)); });
+    const feelFor = S.feel && S.feel.until > Date.now() ? S.feel.id : null;
+    const feelStrip = id => id !== feelFor ? '' : `<div class="feel-strip" role="group" aria-label="How long did it take?">
+        <span>How long did it take?</span>
+        <div class="chips">${[['quicker', 'Quicker'], ['ok', 'About right'], ['longer', 'Longer']].map(([k, l]) =>
+          `<button class="chip" data-action="feel" data-id="${esc(id)}" data-key="${k}">${l}</button>`).join('')}</div></div>`;
     const section = (title, rows) => rows.length ? `<div class="section-head"><h2 class="section-title">${title}</h2></div><div class="card">${rows.join('')}</div>` : '';
     const byOpen = (a, b) => Number(a.done) - Number(b.done);
 
@@ -658,7 +666,9 @@ const Screens = {
       return { r, done, sub: done ? 'Done today' : c && c.last ? `Last done ${esc(Schedule.relative(c.last, now).toLowerCase())}` : 'Whenever it\'s needed' };
     }).sort(byOpen).map(x => tick(x.r, x.sub, x.done));
     const board = Household.myNoteTasks(h, me);
-    const nothing = !today.length && !week.length && !anytime.length && !board.length;
+    const nothing = !today.length && !week.length && !anytime.length && !board.length && !covered.length;
+    const helped = covered.length ? `<div class="card helped">${covered.map(x =>
+      `<div class="row static"><span class="helped-mark" aria-hidden="true">💛</span><div class="row-text"><span class="row-title">${esc(HelpLines.line(Household.memberName(Household.member(h, x.by)).split(' ')[0], x.unit.name, x.unit.id + Schedule.key(now)))}</span></div></div>`).join('')}</div>` : '';
 
     return `<main class="screen has-nav">
       <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
@@ -666,6 +676,7 @@ const Screens = {
         <h1 class="mood">${esc(Mood.line(now, progress))}</h1>
       </div>
       ${progress.count ? progressBar(progress.pct, 'Your day', progress.left ? `${progress.doneCount} of ${progress.count} done` : 'All done') : ''}
+      ${helped}
       ${board.length ? `<div class="section-head"><h2 class="section-title">From the board</h2></div>
         <div class="card">${board.map(n => noteTaskRow(h, n, me, false)).join('')}</div>` : ''}
       ${section('Today', today)}
@@ -855,6 +866,16 @@ function initialOf(h, uid) {
   return clash ? name(m).slice(0, 2).replace(/^./, c => c.toUpperCase()) : one;
 }
 /** Who looks after a task, as small round initials (dashed when nobody has it yet). */
+/** Tasks that keep taking longer (or less) than planned: the organiser can change the time. */
+function timeHintsCard(h) {
+  return Household.timeHints(h).map(t => `<div class="card"><div class="row static col">
+      <div class="row-text"><span class="row-title">${esc(t.unit.name)} usually takes ${t.dir > 0 ? 'longer' : 'less time'}</span>
+      <span class="row-sub">Planned ${esc(formatMinutes(t.from))}. It was ${t.dir > 0 ? 'longer' : 'quicker'} 3 of the last 4 times. Change it to ${esc(formatMinutes(t.to))}?</span></div>
+      <div class="btns" style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn primary" style="flex:1" data-action="applyTime" data-id="${esc(t.id)}" data-key="${esc(t.minutes)}">Change to ${esc(formatMinutes(t.to))}</button>
+        <button class="btn secondary" style="flex:1" data-action="keepTime" data-id="${esc(t.id)}">Keep it</button></div>
+    </div></div>`).join('');
+}
 function ownerBadges(h, r) {
   const me = S.user.uid;
   const people = Household.peopleIds(h);
@@ -960,6 +981,21 @@ function suggestionsCard(h) {
       <button class="link-btn" data-action="withdrawSuggestion" data-id="${esc(x.id)}">Withdraw</button></div>`).join('')}</div>`;
 }
 /* ---------- The line under "Hello, Ian": by time of day and how my day is going. Never about the partner. ---------- */
+/** Warm one-liners for when the other person did one of your tasks. Picked by task and day, so they don't jump around. */
+const HelpLines = (() => {
+  const LINES = [
+    (n, t) => `${n} did ${t} today. One less thing for you.`,
+    (n, t) => `${t} is done. ${n} took care of it.`,
+    (n, t) => `${n} covered ${t} for you today.`,
+    (n, t) => `Good news: ${n} already did ${t}.`,
+    (n, t) => `${t}? Done, thanks to ${n}.`,
+    (n, t) => `${n} gave you a hand with ${t} today.`,
+    (n, t) => `${n} beat you to ${t}. Lucky you.`,
+    (n, t) => `${t} is off your list. ${n} did it.`,
+  ];
+  const hash = str => [...String(str)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  return { line: (name, task, key) => LINES[hash(key) % LINES.length](name, task), LINES };
+})();
 const Mood = (() => {
   const LINES = {
     early: {
@@ -1300,6 +1336,8 @@ const Sheets = {
     const ownerName = uid => uid === me ? 'Yours' : Household.peopleIds(h).includes(uid) ? `${Household.memberName(Household.member(h, uid))}'s` : 'Nobody has it yet';
     const action = id => {
       const who = Household.assignee(h, id);
+      if (!suggesting && Household.canCover(h, id, me)) return `<button class="mini" data-action="coverTask" data-id="${esc(id)}">I did it</button>`;
+      if (!suggesting && Household.coveredByMe(h, id, me)) return `<button class="mini" data-action="coverTask" data-id="${esc(id)}">Undo</button>`;
       if (free.has(id)) return `<button class="mini" data-action="claim" data-id="${esc(id)}">I'll take it</button>`;
       if (who !== me || !canSwap) return '';
       return Household.pendingFor(h, id) ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(id)}">Swap</button>`;
@@ -1326,6 +1364,10 @@ const Sheets = {
     }
     const who = Household.assignee(h, r.id);
     const main = split || !planned ? ''
+      : !suggesting && Household.canCover(h, r.id, me) ? `<button class="btn primary" data-action="coverTask" data-id="${esc(r.id)}">I did this</button>
+         <p class="fine" style="margin:-4px 0 12px">It comes off ${esc(Household.memberName(Household.member(h, who)))}'s list for now.</p>`
+      : !suggesting && Household.coveredByMe(h, r.id, me) ? `<p class="fine" style="margin:0 0 12px">You did this today. Thank you!</p>
+         <button class="btn secondary" data-action="coverTask" data-id="${esc(r.id)}">Undo</button>`
       : free.has(r.id) ? `<button class="btn primary" data-action="claim" data-id="${esc(r.id)}">I'll take it</button>`
       : who === me && canSwap ? (Household.pendingFor(h, r.id)
         ? '<p class="fine" style="margin:0 0 12px">Swap asked. Waiting for an answer.</p>'
@@ -1383,6 +1425,14 @@ const Sheets = {
   },
 
   /** Asking to start the whole split over. Not recommended, so it's worded honestly. */
+  /** After a time change makes the split uneven. */
+  timeRebalance() {
+    const others = S.household.members.filter(m => m.uid !== S.user.uid).map(m => esc(Household.memberName(m)));
+    Sheet.open(`<h2>The split is a little uneven now</h2>
+      <p>With the new time, one of you has more to do each week. A reshuffle makes a fresh, fair split from the same answers. ${others.join(' and ')} will be asked to agree first.</p>
+      <button class="btn primary" data-action="requestReshuffle">Ask ${others.join(' and ')} to reshuffle</button>
+      <button class="btn ghost" data-action="closeSheet">Not now</button>`, 'Rebalance');
+  },
   askReshuffle() {
     const others = S.household.members.filter(m => m.uid !== S.user.uid).map(m => esc(Household.memberName(m)));
     Sheet.open(`<h2>Reshuffle the whole plan?</h2>

@@ -374,3 +374,9 @@ a[x-apple-data-detectors], .plain-text a{color:inherit!important;text-decoration
 .agree{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);display:inline-grid;place-items:center;color:transparent;flex:none}
 .agree.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .agree svg{width:11px;height:11px}
+
+/* Giving each other a hand, and "how long did it take?" */
+.helped .row.static{gap:12px;align-items:center}
+.helped-mark{font-size:18px;flex:none}
+.feel-strip{display:flex;flex-direction:column;gap:8px;padding:10px 16px 14px 52px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+.feel-strip .chip{min-height:36px;padding:6px 14px;font-size:14px}

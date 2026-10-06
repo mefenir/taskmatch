@@ -82,6 +82,12 @@ On GitHub: **Settings → Pages → Build and deployment → Source: Deploy from
 
 The app is live at `https://mefenir.github.io/taskmatch/` a minute or two later. Every push to `main` redeploys it.
 
+### How the plan is made and used
+
+- **Partner joins → rates first.** The partner sees the full list and marks how they feel about each task (answers are private). "See our split" makes the split from both answers; then both say yes. The organiser's plan before that is a first draft.
+- **Giving each other a hand.** On Us, tapping one of the other person's tasks that's due shows **I did this**. It's ticked off for them, disappears from their Me list, and they see a warm line ("Sam gave you a hand with Laundry today."). Undo is in the same sheet.
+- **How long did it take?** After ticking a task, Me briefly offers Quicker · About right · Longer. If a task was longer (or quicker) 3 of the last 4 times, the organiser gets a card on Us to change its time; if that makes the split uneven, the app offers to ask for a reshuffle. Stored with the task's ticks (`completions[id].feel`), so no rules change is needed.
+
 ### 5. Admin panel (funnel, access requests, feedback, errors)
 
 The panel is at **`https://mefenir.github.io/taskmatch/admin.html`**. It isn't linked from the app.

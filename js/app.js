@@ -398,7 +398,7 @@ const INVITE_LINK_KEY = 'household-app/invite-link/';
 function inviteText() {
   const h = S.household;
   const me = Household.memberName(Household.member(h, S.user.uid));
-  return `${me} made a plan for our home: who does what, split fairly. Have a look and mark anything that doesn't suit you.`;
+  return `${me} listed everything our home needs. Say how you feel about each task, and the app makes a fair split from both our answers.`;
 }
 function prepareInvite() {
   const h = S.household;
@@ -706,21 +706,17 @@ const Actions = {
     toast('Saved. The plan follows your answers.');
     go(S.fromSettings === 'rate' ? 'settings' : 'household');
   },
-  /** The partner, after looking at the plan: start it, or rebalance with their answers first. */
+  /** The partner, after saying how they feel: the split is made from both answers, then both say yes. */
   submitReview() {
     const h = S.household;
     const me = S.user.uid;
-    if (Household.isOwner(h, me)) return;
+    if (Household.isOwner(h, me) || Household.prefsComplete(h, me)) { go('household'); return; }
     applyPrefDraft();
-    const changes = Household.marked(h, me) > 0;
     Household.submitPrefs(h, me);
-    Household.buildPlan(h, changes ? null : me);
-    if (changes) h.plan = { ...h.plan, rebalancedBy: me };
-    else if (Household.hasAccepted(h, me)) Household.acceptPlan(h, me);
+    Household.buildPlan(h, null);
     save('preferences', 'plan', 'swaps', 'planSeed');
     mark('reviewed');
-    if (h.plan.status === 'active') { mark('started'); toast("You're all set. Let's go!"); go('today'); return; }
-    toast(changes ? "Rebalanced with your answers. Have a look and say yes." : 'Thanks! The plan starts once you both say yes.');
+    toast("Here's your split. Say yes when it works for you.");
     go('household');
   },
 
@@ -787,6 +783,53 @@ const Actions = {
     const h = S.household;
     Household.toggleDone(h, d.id, S.user.uid);
     save('completions');
+    // Just ticked off: ask, once and briefly, how long it took.
+    const done = Schedule.doneOn((h.completions || {})[d.id], new Date());
+    S.feel = done && Household.stage(h) === 'active' ? { id: d.id, until: Date.now() + 10000 } : null;
+    clearTimeout(Actions._feelT);
+    if (S.feel) Actions._feelT = setTimeout(() => { S.feel = null; if (currentRoute === 'today') rerender(); }, 10200);
+    rerender();
+  },
+  feel(d) {
+    if (!S.feel || S.feel.id !== d.id) return;
+    S.feel = null; clearTimeout(Actions._feelT);
+    Household.recordFeel(S.household, d.id, d.key);
+    save('completions');
+    toast('Thanks, noted.');
+    rerender();
+  },
+  /** Tick the other person's task for them (or undo it). */
+  coverTask(d) {
+    const h = S.household;
+    const me = S.user.uid;
+    const undo = Household.coveredByMe(h, d.id, me);
+    if (!undo && !Household.canCover(h, d.id, me)) return;
+    Household.toggleDone(h, d.id, me);
+    save('completions');
+    Sheet.close();
+    const who = Household.memberName(Household.member(h, Household.assignee(h, d.id))).split(' ')[0];
+    toast(undo ? 'Undone. It\'s back on their list.' : `Thank you! ${who} will see you did it.`);
+    rerender();
+  },
+  applyTime(d) {
+    const h = S.household;
+    if (!isOrganiser() || !Household.timeHint(S.household, d.id)) return;
+    const before = Split.isEven(Household.loads(h));
+    if (!Household.setUnitMinutes(h, d.id, d.key)) return;
+    Household.clearFeel(h, d.id);
+    save('responsibilities', 'completions');
+    const name = Household.unitName(h, d.id);
+    if (before && !Split.isEven(Household.loads(h)) && !Household.alone(h)) {
+      toast(`${name} now takes ${formatMinutes(Timing.of(Household.unit(h, d.id)).minutes)}.`);
+      Sheets.timeRebalance();
+    } else toast(`Changed. ${name} now takes ${formatMinutes(Timing.of(Household.unit(h, d.id)).minutes)}.`);
+    rerender();
+  },
+  keepTime(d) {
+    if (!isOrganiser()) return;
+    Household.clearFeel(S.household, d.id);
+    save('completions');
+    toast('Kept as it is.');
     rerender();
   },
 
