@@ -83,7 +83,8 @@ const Screens = {
       : (mode === 'signup' ? field('name', 'Your name', 'text', 'given-name', 'maxlength="40"') : '') +
         field('email', 'Email', 'email', 'email', 'required inputmode="email"') +
         field('password', 'Password', 'password', mode === 'signup' ? 'new-password' : 'current-password',
-          `required minlength="${APP_CONFIG.minPasswordLength}"`);
+          `required minlength="${APP_CONFIG.minPasswordLength}"`) +
+        (mode === 'signup' ? field('password2', 'Repeat password', 'password', 'new-password', `required minlength="${APP_CONFIG.minPasswordLength}"`) : '');
 
     const submit = { signup: 'Create account', signin: 'Sign in', reset: 'Send reset link' }[mode];
     const links = {
@@ -618,7 +619,7 @@ const Screens = {
       ${boardCard(h)}
       <div class="section-head"><h2 class="section-title">Needs you</h2></div>
       ${needs || `<p class="all-clear">${esc(allClearLine())}</p>`}
-      ${taskMap(h, false)}
+      ${personLists(h)}
       ${isOrg ? addOwnRow('Add your own task') : ''}
       <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
       ${bottomNav('household', navDots(h))}
@@ -913,6 +914,39 @@ function taskMap(h, openAll) {
           <div class="row-text"><span class="row-title">${esc(category.name)}</span><span class="row-sub">${sub}</span></div>
           <span class="chev" aria-hidden="true">${Icon.chev}</span></button>${rows}`;
     }).join('')}</div>`;
+}
+/** Us: everyone's tasks, split by person, then by when. Tapping a task opens its sheet. */
+function personLists(h) {
+  const me = S.user.uid;
+  const now = new Date();
+  const ids = Household.peopleIds(h).sort((a, b) => (a === me ? -1 : b === me ? 1 : 0));
+  const status = (u, uid) => {
+    const c = Household.completion(h, u.id);
+    if (Schedule.doneOn(c, now)) return c && c.by && c.by !== uid ? `Done today by ${esc(Household.memberName(Household.member(h, c.by)).split(' ')[0])}` : 'Done today';
+    if (Household.slot(u) === 'week' && Household.doneForNow(h, u, now)) return 'Done this week';
+    return esc(Timing.label(u));
+  };
+  const row = (u, uid) => {
+    const done = Household.doneForNow(h, u, now) || Schedule.doneOn(Household.completion(h, u.id), now);
+    return `<button class="row task-row${done ? ' is-done' : ''}" data-action="openTask" data-id="${esc(u.parentId || u.id)}">
+      <div class="row-text"><span class="row-title">${esc(u.name)}</span><span class="row-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${status(u, uid)}</span></div></button>`;
+  };
+  return ids.map(uid => {
+    const units = Household.units(h).filter(u => Household.assignee(h, u.id) === uid);
+    const groups = [
+      ['Today', units.filter(u => Household.slot(u) === 'today')],
+      ['This week', units.filter(u => Household.dueThisWeek(h, u, now))],
+      ['Anytime', units.filter(u => Household.slot(u) === 'anytime')],
+      ['Later', units.filter(u => Household.slot(u) === 'week' && !Household.dueThisWeek(h, u, now))],
+    ].filter(([, list]) => list.length);
+    const name = uid === me ? 'Your part' : `${esc(Household.memberName(Household.member(h, uid)).split(' ')[0])}'s part`;
+    return `<section class="person-part ${uid === me ? 'is-me' : 'is-partner'}" aria-label="${name}">
+      <div class="section-head"><h2 class="section-title">${name}</h2><span class="section-meta">${units.length}</span></div>
+      ${groups.length ? groups.map(([title, list]) => `<h3 class="sub-title">${title}</h3>
+        <div class="card">${list.map(u => row(u, uid)).join('')}</div>`).join('') : '<p class="fine" style="text-align:left">Nothing here yet.</p>'}
+    </section>`;
+  }).join('') + (homeless(h).length ? `<div class="section-head"><h2 class="section-title">Nobody has these yet</h2></div>
+    <div class="card">${homeless(h).map(u => row(u, null)).join('')}</div>` : '');
 }
 /** Tasks nobody has yet (after "not now" in a share-out). */
 function homeless(h) {
@@ -1368,19 +1402,27 @@ const Sheets = {
          <p class="fine" style="margin:-4px 0 12px">It comes off ${esc(Household.memberName(Household.member(h, who)))}'s list for now.</p>`
       : !suggesting && Household.coveredByMe(h, r.id, me) ? `<p class="fine" style="margin:0 0 12px">You did this today. Thank you!</p>
          <button class="btn secondary" data-action="coverTask" data-id="${esc(r.id)}">Undo</button>`
-      : free.has(r.id) ? `<button class="btn primary" data-action="claim" data-id="${esc(r.id)}">I'll take it</button>`
-      : who === me && canSwap ? (Household.pendingFor(h, r.id)
-        ? '<p class="fine" style="margin:0 0 12px">Swap asked. Waiting for an answer.</p>'
-        : `<button class="btn primary" data-action="askSwap" data-id="${esc(r.id)}">Swap</button>`) : '';
+      : free.has(r.id) ? `<button class="btn primary" data-action="claim" data-id="${esc(r.id)}">I'll take it</button>` : '';
     const canBreak = (split || Library.parts(r.libraryId).length) && stage !== 'setup';
+    // Secondary actions: one row of labelled icons instead of a stack of buttons.
+    const act = (action, icon, label, opts = {}) => `<button class="icon-action${opts.on ? ' on' : ''}${opts.danger ? ' danger' : ''}" data-action="${action}" data-id="${esc(r.id)}"${opts.disabled ? ' disabled' : ''}>
+        <span class="ia-circle" aria-hidden="true">${Icon[icon]}</span><span class="ia-label">${label}</span></button>`;
+    const actions = [];
+    if (!split && planned && who === me && canSwap) {
+      actions.push(Household.pendingFor(h, r.id) ? act('askSwap', 'swap', 'Asked', { on: true, disabled: true }) : act('askSwap', 'swap', 'Swap'));
+    }
+    if (canBreak) actions.push(act('openBreakdown', 'parts', isOrg ? (split ? 'Parts' : 'Split up') : 'Suggest parts'));
+    if (!isOrg && stage !== 'setup') {
+      const asked = Household.suggestionFor(h, me, 'remove', r.id);
+      actions.push(act('suggestRemoval', 'trash', asked ? 'Suggested' : 'Remove?', { on: !!asked }));
+    }
+    if (isOrg && !r.predefined) actions.push(act('removeTask', 'trash', 'Remove', { danger: true }));
     Sheet.open(`<h2>${esc(r.name)}</h2>
       ${owner}
       <p class="sheet-facts">${facts.join(' · ')}</p>
       ${body}
       ${main}
-      ${canBreak ? `<button class="btn secondary" data-action="openBreakdown" data-id="${esc(r.id)}">${isOrg ? (split ? 'Edit the parts' : 'Break into parts') : 'Suggest a breakdown'}</button>` : ''}
-      ${!isOrg && stage !== 'setup' ? `<button class="btn outline" data-action="suggestRemoval" data-id="${esc(r.id)}">${Household.suggestionFor(h, me, 'remove', r.id) ? 'Withdraw my removal suggestion' : 'Suggest removing this task'}</button>` : ''}
-      ${isOrg && !r.predefined ? `<button class="btn ghost text-danger" data-action="removeTask" data-id="${esc(r.id)}">Remove this task</button>` : ''}
+      ${actions.length ? `<div class="icon-actions">${actions.join('')}</div>` : ''}
       <button class="btn ghost" data-action="closeSheet">Close</button>`, r.name);
   },
 
@@ -1407,6 +1449,8 @@ const Sheets = {
           <input id="pw-current" type="password" autocomplete="current-password" required></div>
         <div class="field"><label for="pw-new">New password</label>
           <input id="pw-new" type="password" autocomplete="new-password" minlength="8" required></div>
+        <div class="field"><label for="pw-new2">Repeat new password</label>
+          <input id="pw-new2" type="password" autocomplete="new-password" minlength="8" required></div>
         <p class="fine" style="text-align:left;margin:0;padding:0 16px 12px">At least 8 characters.</p>
       </form>
       <button class="btn primary" data-action="savePassword">Save new password</button>

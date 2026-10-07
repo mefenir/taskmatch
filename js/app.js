@@ -428,6 +428,7 @@ async function submitAuth() {
   let error = '';
   if (!email) error = 'Enter your email address.';
   else if (mode === 'signup' && password.length < min) error = `Use at least ${min} characters for your password.`;
+  else if (mode === 'signup' && password !== (v.password2 || '')) error = "The passwords don't match. Type the same password twice.";
   else if (mode === 'signin' && !password) error = 'Enter your password.';
   if (error) { S.auth.error = error; S.auth.note = ''; rerender(); return; }
 
@@ -848,6 +849,7 @@ const Actions = {
     if (!cur) { toast('Type your current password.'); return; }
     if (next.length < 8) { toast('The new password needs at least 8 characters.'); return; }
     if (next === cur) { toast('That is your current password.'); return; }
+    if (next !== ((document.getElementById('pw-new2') || {}).value || '')) { toast("The new passwords don't match."); return; }
     try {
       await Backend.Auth.changePassword(cur, next);
       Sheet.close();

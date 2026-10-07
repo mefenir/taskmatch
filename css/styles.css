@@ -380,3 +380,17 @@ a[x-apple-data-detectors], .plain-text a{color:inherit!important;text-decoration
 .helped-mark{font-size:18px;flex:none}
 .feel-strip{display:flex;flex-direction:column;gap:8px;padding:10px 16px 14px 52px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
 .feel-strip .chip{min-height:36px;padding:6px 14px;font-size:14px}
+
+/* Task sheet: secondary actions as one row of labelled icons */
+.icon-actions{display:flex;justify-content:center;gap:16px;margin:16px 0 4px}
+.icon-action{flex:0 1 76px;min-width:64px;display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;border:0;padding:0;cursor:pointer;color:var(--ink);font:inherit}
+.icon-action .ia-circle{width:52px;height:52px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;transition:transform .1s,background .15s}
+.icon-action:active .ia-circle{transform:scale(.94)}
+.icon-action .ia-label{font-size:12px;line-height:16px;font-weight:600;color:var(--muted);white-space:nowrap}
+.icon-action.on .ia-circle{background:var(--accent-soft);color:var(--accent)}
+.icon-action.danger .ia-circle{color:var(--danger)}
+.icon-action[disabled]{cursor:default}
+/* Us: tasks split by person */
+.person-part .sub-title{font-size:15px;font-weight:600;color:var(--muted);margin:12px 4px 6px}
+.person-part .card{margin-bottom:4px}
+.task-row.is-done .row-title{color:var(--muted)}
