@@ -8,6 +8,7 @@ const Icon = {
   back:    svg('<path d="M15 18l-6-6 6-6"/>'),
   chev:    svg('<path d="M9 6l6 6-6 6"/>', 18),
   check:   svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 15, 3),
+  done:    svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
   swap:    svg('<path d="M7 4L3 8l4 4"/><path d="M3 8h14"/><path d="M17 20l4-4-4-4"/><path d="M21 16H7"/>'),
   parts:   svg('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'),
   trash:   svg('<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 12.5h9l1-12.5"/>'),

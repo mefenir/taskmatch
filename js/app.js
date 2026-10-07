@@ -809,7 +809,7 @@ const Actions = {
     save('completions');
     Sheet.close();
     const who = Household.memberName(Household.member(h, Household.assignee(h, d.id))).split(' ')[0];
-    toast(undo ? 'Undone. It\'s back on their list.' : `Thank you! ${who} will see you did it.`);
+    toast(undo ? 'Undone. It\'s back on their list.' : `Thank you! It's off ${who}'s list for today.`);
     rerender();
   },
   applyTime(d) {
