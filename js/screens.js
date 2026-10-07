@@ -620,7 +620,7 @@ const Screens = {
       <div class="section-head"><h2 class="section-title">Needs you</h2></div>
       ${needs || `<p class="all-clear">${esc(allClearLine())}</p>`}
       ${personLists(h)}
-      ${isOrg ? `<button class="plain-row add" data-action="addCustomTask"><span class="plus" aria-hidden="true">${Icon.plus}</span><span class="pr-title">Add your own task</span></button>` : ''}
+      ${isOrg ? `<button class="plain-row add" data-action="addCustomTask"><span class="plus" aria-hidden="true">${Icon.plus}</span><span class="pr-title">Add a task</span></button>` : ''}
       <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
       ${bottomNav('household', navDots(h))}
     </main>`;
@@ -915,34 +915,31 @@ function taskMap(h, openAll) {
           <span class="chev" aria-hidden="true">${Icon.chev}</span></button>${rows}`;
     }).join('')}</div>`;
 }
-/** Us: everyone's tasks, split by person. One heading each, then a plain list in the order things come up. */
+/** Us: everyone's tasks, split by person. Each part opens from its heading; inside, a plain list of the tasks. */
 function personLists(h) {
   const me = S.user.uid;
   const now = new Date();
+  const open = S.openParts || {};
   const ids = Household.peopleIds(h).sort((a, b) => (a === me ? -1 : b === me ? 1 : 0));
-  const status = (u, uid) => {
-    const c = Household.completion(h, u.id);
-    if (Schedule.doneOn(c, now)) return c && c.by && c.by !== uid ? `Done today by ${esc(Household.memberName(Household.member(h, c.by)).split(' ')[0])}` : 'Done today';
-    if (Household.slot(u) === 'week' && Household.doneForNow(h, u, now)) return 'Done this week';
-    return esc(Timing.label(u));
-  };
-  const row = (u, uid) => {
-    const done = Household.doneForNow(h, u, now) || Schedule.doneOn(Household.completion(h, u.id), now);
-    return `<button class="plain-row task-row${done ? ' is-done' : ''}" data-action="openTask" data-id="${esc(u.parentId || u.id)}">
-      <span class="pr-title">${esc(u.name)}</span><span class="pr-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${status(u, uid)}</span></button>`;
-  };
-  // Today first, then this week, anytime, and what's due later; the line under each name says how often.
+  // The whole list, not this week's: each line says how often and how long, never whether it's done.
+  const row = u => `<button class="plain-row task-row" data-action="openTask" data-id="${esc(u.parentId || u.id)}">
+      <span class="pr-title">${esc(u.name)}</span><span class="pr-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${esc(Timing.label(u))}</span></button>`;
+  // Daily first, then weekly, anytime and the rarer ones.
   const rank = u => Household.slot(u) === 'today' ? 0 : Household.dueThisWeek(h, u, now) ? 1 : Household.slot(u) === 'anytime' ? 2 : 3;
   const ordered = list => list.map((u, i) => ({ u, i, k: rank(u) })).sort((x, y) => x.k - y.k || x.i - y.i).map(x => x.u);
-  const part = (cls, title, meta, units, uid) => `<section class="person-part ${cls}" aria-label="${title}">
-      <div class="part-head"><h2 class="part-title">${title}</h2>${meta ? `<span class="section-meta">${meta}</span>` : ''}</div>
-      ${units.length ? `<div class="plain-list">${units.map(u => row(u, uid)).join('')}</div>` : '<p class="part-empty">Nothing here yet.</p>'}
+  const part = (key, cls, title, units) => {
+    const expanded = !!open[key];
+    return `<section class="person-part ${cls}">
+      <h2 class="part-head"><button class="part-toggle" data-action="togglePart" data-key="${esc(key)}" aria-expanded="${expanded}" aria-controls="part-${esc(key)}">
+        <span class="part-title">${title}</span><span class="part-meta">${units.length}</span><span class="chev" aria-hidden="true">${Icon.chev}</span></button></h2>
+      <div class="plain-list" id="part-${esc(key)}"${expanded ? '' : ' hidden'}>${units.length ? units.map(row).join('') : '<p class="part-empty">Nothing here yet.</p>'}</div>
     </section>`;
+  };
   return ids.map(uid => {
     const units = ordered(Household.units(h).filter(u => Household.assignee(h, u.id) === uid));
     const name = uid === me ? 'Your part' : `${esc(Household.memberName(Household.member(h, uid)).split(' ')[0])}'s part`;
-    return part(uid === me ? 'is-me' : 'is-partner', name, units.length, units, uid);
-  }).join('') + (homeless(h).length ? part('is-free', 'Nobody has these yet', '', homeless(h), null) : '');
+    return part(uid, uid === me ? 'is-me' : 'is-partner', name, units);
+  }).join('') + (homeless(h).length ? part('free', 'is-free', 'Nobody has these yet', homeless(h)) : '');
 }
 /** Tasks nobody has yet (after "not now" in a share-out). */
 function homeless(h) {
@@ -1395,21 +1392,20 @@ const Sheets = {
     const who = Household.assignee(h, r.id);
     const canBreak = (split || Library.parts(r.libraryId).length) && stage !== 'setup';
     // Every action is the same outlined tile, in one row across the sheet: no stack of long buttons.
-    const act = (action, icon, label, opts = {}) => `<button class="icon-action${opts.on ? ' on' : ''}${opts.danger ? ' danger' : ''}" data-action="${action}" data-id="${esc(r.id)}"${opts.on ? ' aria-pressed="true"' : ''}${opts.disabled ? ' disabled' : ''}>
-        <span class="ia-icon" aria-hidden="true">${Icon[icon]}</span><span class="ia-label">${label}</span></button>`;
+    const act = (action, label, opts = {}) => `<button class="icon-action${opts.on ? ' on' : ''}${opts.danger ? ' danger' : ''}" data-action="${action}" data-id="${esc(r.id)}"${opts.on ? ' aria-pressed="true"' : ''}${opts.disabled ? ' disabled' : ''}>${label}</button>`;
     const actions = [];
-    if (!split && planned && !suggesting && Household.canCover(h, r.id, me)) actions.push(act('coverTask', 'done', 'I did this'));
-    else if (!split && planned && !suggesting && Household.coveredByMe(h, r.id, me)) actions.push(act('coverTask', 'done', 'Undo', { on: true }));
-    else if (!split && planned && free.has(r.id)) actions.push(act('claim', 'plus', 'I\'ll take it'));
+    if (!split && planned && !suggesting && Household.canCover(h, r.id, me)) actions.push(act('coverTask', 'I did this'));
+    else if (!split && planned && !suggesting && Household.coveredByMe(h, r.id, me)) actions.push(act('coverTask', 'Undo', { on: true }));
+    else if (!split && planned && free.has(r.id)) actions.push(act('claim', 'I\'ll take it'));
     if (!split && planned && who === me && canSwap) {
-      actions.push(Household.pendingFor(h, r.id) ? act('askSwap', 'swap', 'Asked', { on: true, disabled: true }) : act('askSwap', 'swap', 'Swap'));
+      actions.push(Household.pendingFor(h, r.id) ? act('askSwap', 'Asked', { on: true, disabled: true }) : act('askSwap', 'Swap'));
     }
-    if (canBreak) actions.push(act('openBreakdown', 'parts', isOrg ? (split ? 'Parts' : 'Split up') : 'Suggest parts'));
+    if (canBreak) actions.push(act('openBreakdown', isOrg ? (split ? 'Parts' : 'Split up') : 'Split up?'));
     if (!isOrg && stage !== 'setup') {
       const asked = Household.suggestionFor(h, me, 'remove', r.id);
-      actions.push(act('suggestRemoval', 'trash', asked ? 'Suggested' : 'Remove?', { on: !!asked }));
+      actions.push(act('suggestRemoval', asked ? 'Suggested' : 'Remove?', { on: !!asked }));
     }
-    if (isOrg && !r.predefined) actions.push(act('removeTask', 'trash', 'Remove', { danger: true }));
+    if (isOrg && !r.predefined) actions.push(act('removeTask', 'Remove', { danger: true }));
     Sheet.open(`<h2>${esc(r.name)}</h2>
       ${owner}
       <p class="sheet-facts">${facts.join(' · ')}</p>

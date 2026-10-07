@@ -29,6 +29,7 @@ const S = {
   checkoutReturn: null,      // 'success' | 'cancel' after coming back from Stripe
   inviteLink: null,          // ready-made invite (so sharing can open straight from the tap)
   openCats: {},              // categories opened in the task list on Us
+  openParts: {},             // people's parts opened on Us (all start closed)
   pendingInvite: null,
   inviteFrom: null,
   auth: { mode: 'signup', busy: false, error: '', note: '', values: {} },
@@ -882,6 +883,10 @@ const Actions = {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) open(); else setTimeout(open, 170);
   },
   /** Open or close a category in the task list. */
+  togglePart(d) {
+    S.openParts = { ...(S.openParts || {}), [d.key]: !(S.openParts || {})[d.key] };
+    rerender();
+  },
   toggleCat(d) {
     const open = { ...(S.openCats || {}) };
     const now = d.key in open ? open[d.key] : Household.stage(S.household) !== 'active';

@@ -384,25 +384,27 @@ a[x-apple-data-detectors], .plain-text a{color:inherit!important;text-decoration
 /* Task sheet: secondary actions as one row of labelled icons */
 /* Task sheet actions: equal outlined tiles across the full width, styled like the picked rating buttons */
 .icon-actions{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:12px;margin:20px 0 8px}
-.icon-action{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;min-height:72px;padding:14px 6px 12px;border-radius:14px;border:1.5px solid var(--accent);background:var(--accent-soft);color:var(--accent);font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:transform .12s cubic-bezier(.2,.8,.2,1),background-color .15s,color .15s,border-color .15s}
+.icon-action{display:flex;align-items:center;justify-content:center;min-height:44px;padding:8px 6px;border-radius:12px;border:1.5px solid var(--accent);background:var(--accent-soft);color:var(--accent);font:inherit;font-size:14px;line-height:18px;font-weight:600;text-align:center;text-wrap:balance;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:transform .12s cubic-bezier(.2,.8,.2,1),background-color .15s,color .15s,border-color .15s}
 .icon-action:active{transform:scale(.96)}
-.icon-action .ia-icon{display:grid;place-items:center;width:24px;height:24px}
-.icon-action .ia-icon svg{width:22px;height:22px;stroke-width:1.9}
-.icon-action .ia-label{font-size:13px;line-height:16px;font-weight:600;text-align:center;text-wrap:balance}
 .icon-action.on{background:var(--accent);color:var(--accent-ink)}
 .icon-action.danger{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,transparent);color:var(--danger)}
 .icon-action[disabled]{cursor:default;transform:none}
 /* Us: each person's part is a heading and a plain list. Names in bold read as tappable; no boxes. */
-.person-part{margin-top:28px}
-.part-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 4px 4px}
-.part-title{font-size:20px;line-height:26px;font-weight:650;letter-spacing:-.01em;color:var(--ink);margin:0}
+.person-part{margin-top:16px}
+.person-part + .person-part{margin-top:4px}
+.part-head{margin:0;font:inherit}
+.part-toggle{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:6px 4px;background:transparent;border:0;border-bottom:1px solid var(--line);text-align:left;font:inherit;color:var(--ink);cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.part-title{flex:1;min-width:0;font-size:20px;line-height:26px;font-weight:650;letter-spacing:-.01em}
+.part-meta{font-size:13px;color:var(--muted)}
+.part-toggle .chev{transition:transform .2s cubic-bezier(.2,.8,.2,1)}
+.part-toggle[aria-expanded="true"] .chev{transform:rotate(90deg)}
+@media (prefers-reduced-motion: reduce){.part-toggle .chev{transition:none}}
 .plain-list{margin:0 0 8px}
 .plain-row{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:56px;padding:10px 4px;background:transparent;border:0;border-bottom:1px solid var(--line);text-align:left;font:inherit;color:var(--ink);cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:background-color .15s}
 .plain-row:last-child{border-bottom:0}
 .plain-row:active{background:color-mix(in srgb,var(--surface-2) 60%,transparent)}
 .plain-row .pr-title{font-size:16px;line-height:22px;font-weight:650}
 .plain-row .pr-sub{font-size:13px;line-height:18px;color:var(--muted)}
-.plain-row.is-done .pr-title{color:var(--muted);font-weight:500}
 .plain-row.add{margin-top:12px;border-top:1px solid var(--line);border-bottom:0;flex-direction:row;align-items:center;gap:10px;color:var(--accent)}
 .plain-row.add .pr-title{font-weight:600}
 .plain-row.add .plus{display:grid;place-items:center;flex:none}
