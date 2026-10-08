@@ -29,7 +29,8 @@ const S = {
   checkoutReturn: null,      // 'success' | 'cancel' after coming back from Stripe
   inviteLink: null,          // ready-made invite (so sharing can open straight from the tap)
   openCats: {},              // categories opened in the task list on Us
-  openParts: {},             // people's parts opened on Us (all start closed)
+  openParts: {},
+  needsIndex: 0,             // which request the "Needs you" carousel shows             // people's parts opened on Us (all start closed)
   pendingInvite: null,
   inviteFrom: null,
   auth: { mode: 'signup', busy: false, error: '', note: '', values: {} },
@@ -903,6 +904,7 @@ const Actions = {
     S.openParts = { ...(S.openParts || {}), [d.key]: !(S.openParts || {})[d.key] };
     rerender();
   },
+  needsGo(d) { Needs.go(Number(d.key) || 0); },
   toggleCat(d) {
     const open = { ...(S.openCats || {}) };
     const now = d.key in open ? open[d.key] : Household.stage(S.household) !== 'active';
@@ -1318,6 +1320,7 @@ function render(routeChanged) {
   fitButtons($app);
   applyBusy($app);
   animateMeters($app);
+  Needs.mount($app);
   ToTop.place();
   if (changed) {
     window.scrollTo(0, 0);
@@ -1387,6 +1390,34 @@ function go(name) {
 }
 
 /* ---------- Back to the top: a round arrow, bottom right, once the page has scrolled ---------- */
+/** The "Needs you" carousel: keeps the slide you were on across re-renders and moves the dots as you swipe. */
+const Needs = (() => {
+  const track = () => $app.querySelector('.needs-track');
+  const width = t => (t.firstElementChild ? t.firstElementChild.offsetWidth : t.clientWidth) + (parseFloat(getComputedStyle(t).columnGap) || 0);
+  const sync = t => {
+    const i = Math.round(t.scrollLeft / width(t));
+    S.needsIndex = i;
+    $app.querySelectorAll('.needs-dot').forEach((d, k) => d.toggleAttribute('aria-current', k === i));
+  };
+  return {
+    mount(root) {
+      const t = root.querySelector('.needs-track');
+      if (!t) { S.needsIndex = 0; return; }
+      const n = t.children.length;
+      const i = Math.min(S.needsIndex || 0, n - 1);
+      t.scrollLeft = i * width(t);
+      let raf = 0;
+      t.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => sync(t)); }, { passive: true });
+      sync(t);
+    },
+    go(i) {
+      const t = track(); if (!t) return;
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      t.scrollTo({ left: i * width(t), behavior: reduce ? 'auto' : 'smooth' });
+    },
+  };
+})();
+
 const ToTop = (() => {
   let btn = null;
   const ensure = () => {

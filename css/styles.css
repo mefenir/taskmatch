@@ -410,3 +410,15 @@ a[x-apple-data-detectors], .plain-text a{color:inherit!important;text-decoration
 .plain-row.add .plus{display:grid;place-items:center;flex:none}
 .part-empty{font-size:14px;color:var(--muted);margin:4px 4px 8px}
 .task-row.is-done .row-title{color:var(--muted)}
+
+/* "Needs you": one request at a time, side by side, with dots underneath. The next card peeks in. */
+.needs{margin:0 -16px 8px}
+.needs-track{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-inline:16px;padding:2px 16px 6px;scrollbar-width:none;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.needs-track::-webkit-scrollbar{display:none}
+.needs-slide{flex:0 0 100%;scroll-snap-align:start;scroll-snap-stop:always;display:flex;flex-direction:column}
+.needs-slide > *{flex:1;margin-bottom:0}
+.needs-dots{display:flex;justify-content:center;gap:0;margin-top:6px}
+.needs-dot{width:24px;height:24px;border:0;padding:0;background:transparent;cursor:pointer;display:grid;place-items:center;-webkit-tap-highlight-color:transparent}
+.needs-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--line);transition:background-color .2s,transform .2s}
+.needs-dot[aria-current]::before{background:var(--accent);transform:scale(1.15)}
+@media (prefers-reduced-motion: reduce){.needs-dot::before{transition:none}}

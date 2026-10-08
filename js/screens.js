@@ -608,7 +608,7 @@ const Screens = {
     const isOrg = Household.isOwner(h, me);
     if (!isOrg && S.suggestMode) return Screens.suggest();
     if (Household.stage(h) !== 'active') return Screens.plan();
-    const needs = statusBanner(h) + swapCards(h) + suggestionsCard(h) + newTasksCard(h) + (isOrg ? timeHintsCard(h) : '');
+    const needs = needsCarousel(statusBanner(h) + swapCards(h) + suggestionsCard(h, true) + newTasksCard(h) + (isOrg ? timeHintsCard(h) : ''));
     const names = Household.people(h).map(m => esc(Household.memberName(m).split(' ')[0])).join(' & ');
     return `<main class="screen has-nav">
       <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
@@ -983,14 +983,15 @@ function reshuffleBlock(h) {
     <p class="fine">Asks ${pName} first. A swap is usually enough.</p></div>`;
 }
 /** Suggestions: the organiser decides; the partner sees their own, waiting. */
-function suggestionsCard(h) {
+function suggestionsCard(h, oneEach) {
   const me = S.user.uid;
   const isOrg = Household.isOwner(h, me);
   const orgName = esc(Household.memberName(Household.owner(h)));
   const all = Household.suggestions(h);
   const label = x => x.type === 'breakdown' ? `Break down: ${esc(x.name)}` : `${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}`;
   if (isOrg && all.length) {
-    return `<div class="card">${all.map(x => {
+    const wrap = rows => oneEach ? rows.map(r => `<div class="card">${r}</div>`).join('') : `<div class="card">${rows.join('')}</div>`;
+    return wrap(all.map(x => {
       const by = esc(Household.memberName(Household.member(h, x.by) || {}));
       return `<div class="row static col">
         <div class="row-text"><span class="row-title">${label(x)}</span>
@@ -999,7 +1000,7 @@ function suggestionsCard(h) {
           <button class="btn primary" data-action="acceptSuggestion" data-id="${esc(x.id)}">${x.type === 'add' ? 'Add it' : x.type === 'breakdown' ? 'Use these parts' : 'Remove it'}</button>
           <button class="btn secondary" data-action="declineSuggestion" data-id="${esc(x.id)}">Keep as is</button>
         </div></div>`;
-    }).join('')}</div>`;
+    }));
   }
   const mine = isOrg ? [] : all.filter(x => x.by === me);
   if (!mine.length) return '';
@@ -1172,7 +1173,23 @@ function homeNeedsMe(h) {
   if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) return true;
   if (Household.isOwner(h, me) && Household.suggestions(h).length) return true;
   if (boardWaiting(h).size) return true;
+  if (newTasksCard(h)) return true;
+  if (Household.isOwner(h, me) && Household.timeHints(h).length) return true;
   return !!statusBanner(h);
+}
+
+/** "Needs you" as one card at a time: each request is a slide, swiped sideways, with dots underneath.
+ *  The builders return cards side by side; each top-level card becomes one slide. */
+function needsCarousel(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  const slides = [...t.content.children].map(el => el.outerHTML);
+  if (slides.length < 2) return html;
+  const i = Math.min(S.needsIndex || 0, slides.length - 1);
+  return `<div class="needs" role="region" aria-roledescription="carousel" aria-label="Needs you">
+      <div class="needs-track" tabindex="-1">${slides.map((x, k) => `<div class="needs-slide" role="group" aria-roledescription="slide" aria-label="${k + 1} of ${slides.length}">${x}</div>`).join('')}</div>
+      <div class="needs-dots">${slides.map((_, k) => `<button class="needs-dot" data-action="needsGo" data-key="${k}" aria-label="Request ${k + 1} of ${slides.length}"${k === i ? ' aria-current="true"' : ''}></button>`).join('')}</div>
+    </div>`;
 }
 
 /** Red dots on the bottom tabs: every tab where an action is waiting for me. */
