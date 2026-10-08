@@ -644,11 +644,27 @@ const Actions = {
     items.forEach(i => (all ? Household.deselect(h, i.id) : Household.select(h, i.id)));
     saveResponsibilities();
   },
-  addCustomTask() { if (isOrganiser()) Sheets.customTask(); },
+  addCustomTask() {
+    if (isOrganiser() || (S.household && Household.stage(S.household) === 'active')) Sheets.customTask();
+  },
   saveCustomTask() {
     const h = S.household;
     const d = S.customDraft || {};
-    if (!isOrganiser()) return;
+    if (!isOrganiser()) {
+      // The partner suggests; the organiser decides. Same form, same details.
+      if (!h || Household.stage(h) !== 'active') return;
+      const res = Household.suggestAdd(h, S.user.uid, d.name, d);
+      const input = document.getElementById('ct-name');
+      if (!res) { toast('Write what needs doing first.'); if (input) input.focus(); return; }
+      if (res === 'duplicate') { toast("You've suggested that already."); return; }
+      if (res === 'limit') { toast('That is plenty for now. Let the others decide first.'); return; }
+      S.customDraft = null;
+      Sheet.close();
+      save('suggestions');
+      toast(`Suggested. ${Household.memberName(Household.owner(h)).split(' ')[0]} decides.`);
+      rerender();
+      return;
+    }
     const r = Household.addCustom(h, d);
     if (!r) { toast('Give the task a name first.'); const i = document.getElementById('ct-name'); if (i) i.focus(); return; }
     S.customDraft = null;

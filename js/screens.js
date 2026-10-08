@@ -620,7 +620,7 @@ const Screens = {
       <div class="section-head"><h2 class="section-title">Needs you</h2></div>
       ${needs || `<p class="all-clear">${esc(allClearLine())}</p>`}
       ${personLists(h)}
-      ${isOrg ? `<button class="plain-row add" data-action="addCustomTask"><span class="plus" aria-hidden="true">${Icon.plus}</span><span class="pr-title">Add a task</span></button>` : ''}
+      <button class="plain-row add" data-action="addCustomTask"><span class="plus" aria-hidden="true">${Icon.plus}</span><span class="pr-title">Add a task</span></button>
       <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
       ${bottomNav('household', navDots(h))}
     </main>`;
@@ -994,7 +994,7 @@ function suggestionsCard(h) {
       const by = esc(Household.memberName(Household.member(h, x.by) || {}));
       return `<div class="row static col">
         <div class="row-text"><span class="row-title">${label(x)}</span>
-          <span class="row-sub">${x.type === 'breakdown' ? `Into ${esc((x.parts || []).map(p => p.name).join(', '))} · ` : ''}Suggested by ${by}</span></div>
+          <span class="row-sub">${x.type === 'breakdown' ? `Into ${esc((x.parts || []).map(p => p.name).join(', '))} · ` : ''}${x.type === 'add' && x.frequency ? `${esc(Timing.label({ frequency: x.frequency, minutes: x.minutes || 15 }))} · ` : ''}Suggested by ${by}</span></div>
         <div class="btn-pair">
           <button class="btn primary" data-action="acceptSuggestion" data-id="${esc(x.id)}">${x.type === 'add' ? 'Add it' : x.type === 'breakdown' ? 'Use these parts' : 'Remove it'}</button>
           <button class="btn secondary" data-action="declineSuggestion" data-id="${esc(x.id)}">Keep as is</button>
@@ -1334,7 +1334,12 @@ const Sheets = {
   /** A task of your own. */
   customTask() {
     const d = S.customDraft || (S.customDraft = { name: '', category: 'organisation', frequency: 'weekly', minutes: 15 });
-    Sheet.open(`<h2>Add your own task</h2>
+    const h = S.household;
+    const suggesting = !Household.isOwner(h, S.user.uid);
+    const org = esc(Household.memberName(Household.owner(h)).split(' ')[0]);
+    const title = suggesting ? 'Suggest a task' : 'Add a task';
+    Sheet.open(`<h2>${title}</h2>
+      ${suggesting ? `<p>${org} decides. If it's a yes, you both say how you feel about it, then it's shared out fairly.</p>` : ''}
       <div class="field"><label for="ct-name">What needs doing?</label>
         <input id="ct-name" data-input="customName" maxlength="60" placeholder="e.g. Clean the aquarium" value="${esc(d.name)}" autocomplete="off" enterkeyhint="done"></div>
       <div class="field"><label for="ct-cat">Area</label>
@@ -1344,8 +1349,8 @@ const Sheets = {
           <select class="select" data-change="customFrequency" aria-label="How often">${frequencyOptions(d.frequency)}</select>
           <select class="select minutes" data-change="customMinutes" aria-label="How long each time">${minuteOptions(d.minutes)}</select>
         </div></div>
-      <button class="btn primary" data-action="saveCustomTask">Add task</button>
-      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Add your own task');
+      <button class="btn primary" data-action="saveCustomTask">${suggesting ? 'Send suggestion' : 'Add task'}</button>
+      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, title);
   },
 
   /** One task: who has it, what it includes, and everything you can do with it (nothing is ticked here). */

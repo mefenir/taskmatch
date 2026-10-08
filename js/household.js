@@ -296,20 +296,25 @@ const Household = {
     }];
   },
   /** Suggest a task in the partner's own words (no category: the organiser can place and time it). */
-  suggestAdd(h, userId, text) {
+  suggestAdd(h, userId, text, details = {}) {
     const name = String(text || '').trim().replace(/\s+/g, ' ').slice(0, 60);
     if (!name) return null;
     const mine = this.suggestions(h).filter(x => x.by === userId && x.type === 'add');
     if (mine.some(x => String(x.name).toLowerCase() === name.toLowerCase())) return 'duplicate';
     if (mine.length >= 20) return 'limit';
-    const s = { id: uid(), by: userId, type: 'add', name, custom: true, at: new Date().toISOString() };
+    // Optional area and timing from the "Add a task" form; checked again when the organiser accepts.
+    const extra = {};
+    if (LIBRARY.categories.some(c => c.id === details.category)) extra.category = details.category;
+    if (FREQUENCIES.some(f => f.id === details.frequency)) extra.frequency = details.frequency;
+    if (MINUTE_OPTIONS.includes(Number(details.minutes))) extra.minutes = Number(details.minutes);
+    const s = { id: uid(), by: userId, type: 'add', name, custom: true, ...extra, at: new Date().toISOString() };
     h.suggestions = [...this.suggestions(h), s];
     return s;
   },
   acceptSuggestion(h, id) {
     const sug = this.suggestions(h).find(x => x.id === id);
     if (!sug) return;
-    if (sug.type === 'add') { if (sug.custom) this.addCustom(h, { name: sug.name }); else this.select(h, sug.libraryId); }
+    if (sug.type === 'add') { if (sug.custom) this.addCustom(h, { name: sug.name, category: sug.category, frequency: sug.frequency, minutes: sug.minutes }); else this.select(h, sug.libraryId); }
     else if (sug.type === 'breakdown') this.setBreakdown(h, sug.responsibilityId, sug.parts || []);
     else h.responsibilities = h.responsibilities.filter(r => r.id !== sug.responsibilityId);
     h.suggestions = this.suggestions(h).filter(x => x.id !== id);
