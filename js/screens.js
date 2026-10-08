@@ -1184,11 +1184,12 @@ function needsCarousel(html) {
   const t = document.createElement('template');
   t.innerHTML = html;
   const slides = [...t.content.children].map(el => el.outerHTML);
-  if (slides.length < 2) return html;
+  if (!slides.length) return '';
   const i = Math.min(S.needsIndex || 0, slides.length - 1);
-  return `<div class="needs" role="region" aria-roledescription="carousel" aria-label="Needs you">
-      <div class="needs-track" tabindex="-1">${slides.map((x, k) => `<div class="needs-slide" role="group" aria-roledescription="slide" aria-label="${k + 1} of ${slides.length}">${x}</div>`).join('')}</div>
-      <div class="needs-dots">${slides.map((_, k) => `<button class="needs-dot" data-action="needsGo" data-key="${k}" aria-label="Request ${k + 1} of ${slides.length}"${k === i ? ' aria-current="true"' : ''}></button>`).join('')}</div>
+  const many = slides.length > 1;
+  return `<div class="needs${many ? '' : ' single'}"${many ? ' role="region" aria-roledescription="carousel" aria-label="Needs you"' : ''}>
+      <div class="needs-track" tabindex="-1">${slides.map((x, k) => `<div class="needs-slide"${many ? ` role="group" aria-roledescription="slide" aria-label="${k + 1} of ${slides.length}"` : ''}>${x}</div>`).join('')}</div>
+      ${many ? `<div class="needs-dots">${slides.map((_, k) => `<button class="needs-dot" data-action="needsGo" data-key="${k}" aria-label="Request ${k + 1} of ${slides.length}"${k === i ? ' aria-current="true"' : ''}></button>`).join('')}</div>` : ''}
     </div>`;
 }
 

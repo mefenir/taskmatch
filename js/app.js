@@ -1315,12 +1315,13 @@ function render(routeChanged) {
   // New tasks are shared out when you arrive on Today or Home, so several added in a row go out together.
   if (SHARE_FROM.includes(name) && changed) shareNewTasks();
   if (name === 'subscribe' && isOrganiser() && !hasAccess()) mark('paywall');
+  const leaving = changed ? null : Needs.capture($app);
   $app.innerHTML = Screens[name]();
   tidyText($app);
   fitButtons($app);
   applyBusy($app);
   animateMeters($app);
-  Needs.mount($app);
+  Needs.mount($app, leaving);
   ToTop.place();
   if (changed) {
     window.scrollTo(0, 0);
@@ -1399,9 +1400,43 @@ const Needs = (() => {
     S.needsIndex = i;
     $app.querySelectorAll('.needs-dot').forEach((d, k) => d.toggleAttribute('aria-current', k === i));
   };
+  // A slide is known by what its first button acts on, so a re-render with fresh text is still the same request.
+  const keyOf = slide => {
+    const b = slide.querySelector('[data-id]') || slide.querySelector('[data-action]');
+    return b ? `${b.dataset.action || ''}:${b.dataset.id || b.dataset.to || ''}` : slide.textContent.trim().slice(0, 80);
+  };
+  const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** The answered card fades away where it stood, while the next one slides into its place. */
+  const play = (leaving, t) => {
+    const ghost = leaving.node;
+    Object.assign(ghost.style, { position: 'fixed', left: leaving.rect.left + 'px', top: leaving.rect.top + 'px',
+      width: leaving.rect.width + 'px', height: leaving.rect.height + 'px', margin: '0', zIndex: '5', pointerEvents: 'none' });
+    ghost.classList.add('needs-ghost');
+    document.body.appendChild(ghost);
+    ghost.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(-24px) scale(.96)' }],
+      { duration: 240, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' }).finished.then(() => ghost.remove(), () => ghost.remove());
+    const next = t && t.children[Math.min(S.needsIndex || 0, t.children.length - 1)];
+    if (next) next.animate([{ opacity: 0, transform: 'translateX(40px)' }, { opacity: 1, transform: 'none' }],
+      { duration: 320, delay: 120, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' });
+    const after = $app.querySelector('.all-clear');
+    if (!t && after) after.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 280, delay: 160, fill: 'backwards' });
+  };
   return {
-    mount(root) {
+    /** Before a re-render: the card in view, in case it is the one being answered. */
+    capture(root) {
       const t = root.querySelector('.needs-track');
+      if (!t || reduce()) return null;
+      const slide = t.children[Math.min(S.needsIndex || 0, t.children.length - 1)];
+      if (!slide) return null;
+      const rect = slide.getBoundingClientRect();
+      const node = slide.cloneNode(true);
+      node.querySelectorAll('button').forEach(b => { b.disabled = true; b.removeAttribute('data-action'); });
+      return { key: keyOf(slide), rect, node };
+    },
+    mount(root, leaving) {
+      const t = root.querySelector('.needs-track');
+      const gone = leaving && (!t || ![...t.children].some(x => keyOf(x) === leaving.key));
+      if (gone) play(leaving, t);
       if (!t) { S.needsIndex = 0; return; }
       const n = t.children.length;
       const i = Math.min(S.needsIndex || 0, n - 1);
@@ -1412,8 +1447,7 @@ const Needs = (() => {
     },
     go(i) {
       const t = track(); if (!t) return;
-      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      t.scrollTo({ left: i * width(t), behavior: reduce ? 'auto' : 'smooth' });
+      t.scrollTo({ left: i * width(t), behavior: reduce() ? 'auto' : 'smooth' });
     },
   };
 })();

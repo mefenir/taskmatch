@@ -413,6 +413,9 @@ a[x-apple-data-detectors], .plain-text a{color:inherit!important;text-decoration
 
 /* "Needs you": one request at a time, side by side, with dots underneath. The next card peeks in. */
 .needs{margin:0 -16px 8px}
+.needs.single{margin-bottom:16px}
+.needs.single .needs-track{overflow:visible}
+.needs-ghost{box-sizing:border-box}
 .needs-track{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-inline:16px;padding:2px 16px 6px;scrollbar-width:none;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
 .needs-track::-webkit-scrollbar{display:none}
 .needs-slide{flex:0 0 100%;scroll-snap-align:start;scroll-snap-stop:always;display:flex;flex-direction:column}
