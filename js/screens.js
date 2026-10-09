@@ -1189,7 +1189,7 @@ function needsCarousel(html) {
   const many = slides.length > 1;
   return `<div class="needs${many ? '' : ' single'}"${many ? ' role="region" aria-roledescription="carousel" aria-label="Needs you"' : ''}>
       <div class="needs-track" tabindex="-1">${slides.map((x, k) => `<div class="needs-slide"${many ? ` role="group" aria-roledescription="slide" aria-label="${k + 1} of ${slides.length}"` : ''}>${x}</div>`).join('')}</div>
-      ${many ? `<div class="needs-dots">${slides.map((_, k) => `<button class="needs-dot" data-action="needsGo" data-key="${k}" aria-label="Request ${k + 1} of ${slides.length}"${k === i ? ' aria-current="true"' : ''}></button>`).join('')}</div>` : ''}
+      ${many ? `<div class="needs-dots${slides.length > 5 ? ' windowed' : ''}"><div class="needs-dots-strip">${slides.map((_, k) => `<button class="needs-dot" data-action="needsGo" data-key="${k}" aria-label="Request ${k + 1} of ${slides.length}"${k === i ? ' aria-current="true"' : ''}></button>`).join('')}</div></div>` : ''}
     </div>`;
 }
 

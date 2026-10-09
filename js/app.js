@@ -1398,7 +1398,22 @@ const Needs = (() => {
   const sync = t => {
     const i = Math.round(t.scrollLeft / width(t));
     S.needsIndex = i;
-    $app.querySelectorAll('.needs-dot').forEach((d, k) => d.toggleAttribute('aria-current', k === i));
+    const dots = [...$app.querySelectorAll('.needs-dot')];
+    dots.forEach((d, k) => d.toggleAttribute('aria-current', k === i));
+    // More than 5: show a window of 5 that follows you, the edge dots smaller when there are more beyond them.
+    const strip = $app.querySelector('.needs-dots.windowed .needs-dots-strip');
+    if (!strip) return;
+    const n = dots.length, size = dots[0].offsetWidth || 24;
+    const start = Math.max(0, Math.min(i - 2, n - 5));
+    strip.style.transform = `translateX(${-start * size}px)`;
+    dots.forEach((d, k) => {
+      const out = k < start || k >= start + 5;
+      const edge = (k === start && start > 0) || (k === start + 4 && start + 5 < n);
+      d.classList.toggle('far', out);
+      d.classList.toggle('edge', !out && edge);
+      d.tabIndex = out ? -1 : 0;
+      d.toggleAttribute('aria-hidden', out);
+    });
   };
   // A slide is known by what its first button acts on, so a re-render with fresh text is still the same request.
   const keyOf = slide => {
