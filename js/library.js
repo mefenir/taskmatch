@@ -8,6 +8,8 @@
    `tasks` = the usual parts of a task, offered when it's
    broken into parts.
    ========================================================= */
+/** How a counted room is named in "Time for each …". */
+const ROOM_WORD = Object.freeze({ bathroom: 'bathroom', kitchen: 'kitchen', vehicle: 'vehicle' });
 const roomCount = (h, type) => (h.rooms.find(r => r.type === type) || {}).count || 0;
 
 const When = {
@@ -35,7 +37,7 @@ const LIBRARY = Object.freeze({
     { id: 'children',     name: 'Children' },
     { id: 'pets',         name: 'Pets' },
     { id: 'garden',       name: 'Garden & outdoors' },
-    { id: 'car',          name: 'Car' },
+    { id: 'car',          name: 'Vehicles' },
   ]),
   responsibilities: Object.freeze([
     // Each task bundles its usual parts; breaking it down turns them into
@@ -48,7 +50,7 @@ const LIBRARY = Object.freeze({
     R('cleaning', 'tidy_office', 'Tidy home office', When.room('office'), { tasks: ['Clear the desk', 'Sort papers'] }),
     // Kitchen & dishes
     R('kitchen', 'dishes', 'Dishes', When.room('kitchen'), { tasks: ['Load dishwasher', 'Unload dishwasher', 'Wash up by hand'] }),
-    R('kitchen', 'clean_kitchen', 'Clean kitchen', When.room('kitchen'), { tasks: ['Wipe surfaces', 'Clean sink', 'Clean appliances'] }),
+    R('kitchen', 'clean_kitchen', 'Clean kitchen', When.room('kitchen'), { perRoom: 'kitchen', tasks: ['Wipe surfaces', 'Clean sink', 'Clean appliances'] }),
     // Laundry
     R('laundry', 'laundry', 'Laundry', When.always, { tasks: ['Wash clothes', 'Dry & hang up', 'Fold', 'Put away', 'Wash towels'] }),
     // Food
@@ -86,8 +88,8 @@ const LIBRARY = Object.freeze({
     R('garden', 'water_garden', 'Water the garden', When.flag('garden'), { tasks: ['Water beds', 'Water pots'] }),
     R('garden', 'garden_tidy', 'Weeding & garden tidying', When.flag('garden'), { tasks: ['Weeding', 'Rake leaves', 'Tidy outdoor space'] }),
     // Car
-    R('car', 'car_care', 'Car care', When.flag('car'), { tasks: ['Refuel / charge', 'Clean the car'] }),
-    R('car', 'car_service', 'Service & tyres', When.flag('car'), { mentalLoad: true, tasks: ['Service & inspection', 'Seasonal tyre change'] }),
+    R('car', 'car_care', 'Vehicle care', When.room('vehicle'), { perRoom: 'vehicle', tasks: ['Refuel / charge', 'Clean the vehicle'] }),
+    R('car', 'car_service', 'Service & tyres', When.room('vehicle'), { perRoom: 'vehicle', mentalLoad: true, tasks: ['Service & inspection', 'Seasonal tyre change'] }),
   ]),
 });
 
@@ -146,7 +148,7 @@ const MINUTE_OPTIONS = Object.freeze([5, 10, 15, 20, 25, 30, 45, 60, 90, 120, 18
 
 const TIMING_DEFAULTS = Object.freeze({
   // Times cover all the parts of a task together (e.g. one whole bathroom). A task with `perRoom`
-  // (the bathroom) is timed per room: the total is this time × the number of those rooms.
+  // (bathroom, kitchen, vehicle) is timed per room: the total is this time × the number of those rooms.
   clean_bathroom: [60, 'weekly'], clean_floors: [50, 'weekly'], tidying: [25, 'daily'], clean_windows: [60, 'monthly'], tidy_office: [15, 'weekly'],
   dishes: [25, 'daily'], clean_kitchen: [15, 'daily'],
   laundry: [60, 'several'],

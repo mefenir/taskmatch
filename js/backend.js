@@ -375,6 +375,23 @@ const Backend = (() => {
       db.collection('config').doc('beta').onSnapshot(s => onData(s.exists ? s.data() : {}), onError),
     setAutoApprove: (on, adminId) =>
       db.collection('config').doc('beta').set({ autoApprove: !!on, changedAt: now(), changedBy: adminId }),
+    watchStats: (onData, onError) =>
+      db.collection('config').doc('stats').onSnapshot(s => {
+        const d = s.exists ? s.data() : {};
+        onData({ resetAt: d.resetAt && d.resetAt.toMillis ? d.resetAt.toMillis() : 0 });
+      }, onError),
+    /** Statistics start over: every household's step times and active days are deleted, and the
+     *  panel counts sign-ups and requests from now on. Accounts, homes and access are untouched. */
+    async resetStats(adminId) {
+      const q = await db.collection('metrics').get();
+      for (let i = 0; i < q.docs.length; i += 400) {
+        const batch = db.batch();
+        q.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
+      await db.collection('config').doc('stats').set({ resetAt: now(), resetBy: adminId });
+      return q.docs.length;
+    },
     deny: (userId, adminId) => premiumRequests().doc(userId).update({ status: 'denied', decidedAt: now(), decidedBy: adminId }),
     /** Everyone's name, email and household, to see who reached each funnel step. */
     watchUsers: (onData, onError) =>

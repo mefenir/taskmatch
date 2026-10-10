@@ -82,6 +82,7 @@ button.row:active{background:var(--surface-2)}
 /* Buttons */
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;border-radius:14px;border:0;font-weight:600;font-size:16px;cursor:pointer;padding:0 20px;transition:opacity .15s,transform .1s}
 .btn:active{transform:scale(.99)}
+a.btn{text-decoration:none}
 .btn.primary{background:var(--accent);color:var(--accent-ink)}
 .btn.outline{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--muted)}
 .btn.secondary{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
@@ -432,3 +433,6 @@ a[x-apple-data-detectors], .plain-text a{color:inherit!important;text-decoration
 .needs-dot[aria-current]::before{background:var(--accent);transform:scale(1.15)}
 .needs-dot.far{pointer-events:none}
 @media (prefers-reduced-motion: reduce){.needs-dot::before,.needs-dots.windowed .needs-dots-strip{transition:none}}
+
+/* While the keyboard is up, pages get room below their last field so it can scroll above the keyboard. */
+.kb-open .screen{padding-bottom:calc(var(--kb, 0px) + 96px)}

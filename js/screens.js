@@ -183,8 +183,8 @@ const Screens = {
       <div class="card">
         ${stepperRow('bedroom', 'Bedrooms', '', roomCount(h, 'bedroom'))}
         ${stepperRow('bathroom', 'Bathrooms', 'Including guest toilets', roomCount(h, 'bathroom'))}
-        ${switchRow('toggleRoom', 'kitchen', 'Kitchen', '', roomCount(h, 'kitchen') > 0)}
-        ${switchRow('toggleRoom', 'living', 'Living room', '', roomCount(h, 'living') > 0)}
+        ${stepperRow('kitchen', 'Kitchens', '', roomCount(h, 'kitchen'))}
+        ${stepperRow('living', 'Living rooms', '', roomCount(h, 'living'))}
         ${switchRow('toggleRoom', 'office', 'Home office', '', roomCount(h, 'office') > 0)}
       </div>
       <div class="card">
@@ -194,7 +194,7 @@ const Screens = {
           <div class="chips" role="group" aria-label="Pets">${pets}</div>
         </div>
         ${switchRow('toggleFlag', 'garden', 'Garden or outdoor space', '', !!h.circumstances.garden)}
-        ${switchRow('toggleFlag', 'car', 'Car', '', !!h.circumstances.car)}
+        ${stepperRow('vehicle', 'Vehicles', 'Cars, motorbikes, vans', roomCount(h, 'vehicle'))}
       </div>
       <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'responsibilities' : 'settings')}">${setup ? 'Show what needs doing' : 'Done'}</button></div>
     </main>`;
@@ -261,7 +261,7 @@ const Screens = {
         <div class="card">${items.map(r => {
           const t = Timing.of(r);
           return `<div class="timing-row">
-            <span class="row-title" id="t-${esc(r.id)}">${esc(r.name)}${t.rooms > 1 ? `<span class="row-sub" style="display:block">Time for each bathroom · ${formatMinutes(t.minutes)} for all ${t.rooms}</span>` : (Library.get(r.libraryId) || {}).perRoom ? '<span class="row-sub">Time for each bathroom</span>' : ''}</span>
+            <span class="row-title" id="t-${esc(r.id)}">${esc(r.name)}${roomWord(r) ? `<span class="row-sub" style="display:block">Time for each ${roomWord(r)}${t.rooms > 1 ? ` · ${formatMinutes(t.minutes)} for all ${t.rooms}` : ''}</span>` : ''}</span>
             <div class="timing-controls">
               <select class="select" data-change="frequency" data-id="${esc(r.id)}" aria-label="How often: ${esc(r.name)}">${frequencyOptions(t.frequency)}</select>
               <select class="select minutes" data-change="minutes" data-id="${esc(r.id)}" aria-label="How long each time: ${esc(r.name)}">${minuteOptions(t.each)}</select>
@@ -736,7 +736,7 @@ const Screens = {
     if (h.children.length) homeBits.push(plural(h.children.length, 'child', 'children'));
     if (h.pets.length) homeBits.push(h.pets.map(p => p.type === 'other' ? 'pet' : p.type).join(', '));
     if (h.circumstances.garden) homeBits.push('garden');
-    if (h.circumstances.car) homeBits.push('car');
+    if (roomsOf('vehicle')) homeBits.push(plural(roomsOf('vehicle'), 'vehicle'));
     const ours = group('Our home', [
       isOrg && usable ? row(go('members'), 'People', alone ? `${esc(people)} · ${invited ? 'invite sent' : 'not joined yet'}` : esc(people)) : info('People', esc(people)),
       isOrg && alone && h.settings.onboarded ? row('data-action="invite"', `Invite ${esc(partnerName)}`, hasAccess() ? (invited ? 'Send the link again' : 'Send them the plan') : 'Starts with your subscription') : '',
@@ -1253,6 +1253,8 @@ function swapCards(h) {
 
 
 /* ---------- Shared pieces ---------- */
+/** "kitchen", "bathroom", "vehicle" for a task timed per room; '' otherwise. */
+function roomWord(r) { const lib = Library.get(r && r.libraryId); return lib && lib.perRoom ? (ROOM_WORD[lib.perRoom] || '') : ''; }
 function frequencyOptions(sel) {
   return FREQUENCIES.map(f => `<option value="${esc(f.id)}" ${f.id === sel ? 'selected' : ''}>${f.label}</option>`).join('');
 }
@@ -1339,16 +1341,6 @@ const Sheets = {
       <button class="btn ghost" data-action="closeSheet">Not now</button>`, 'Break tasks into parts');
   },
 
-  unlocked() {
-    const h = S.household;
-    const name = esc(Household.memberName(Household.invitee(h)));
-    Sheet.open(`<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
-      <h2>You're all set 🎉</h2>
-      <p>Now send the plan to ${name}. They mark anything that doesn't suit them, and you start together.</p>
-      <button class="btn primary" data-action="invite">Invite ${name}</button>
-      <button class="btn ghost" data-action="closeSheet">Later</button>`, "You're all set");
-  },
-
   /** A task of your own. */
   customTask() {
     const d = S.customDraft || (S.customDraft = { name: '', category: 'organisation', frequency: 'weekly', minutes: 15 });
@@ -1393,7 +1385,7 @@ const Sheets = {
       return Household.pendingFor(h, id) ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(id)}">Swap</button>`;
     };
     const facts = [esc(Timing.label(r))];
-    if (Timing.of(r).rooms > 1) facts.push(`${formatMinutes(Timing.of(r).each)} for each bathroom`);
+    if (Timing.of(r).rooms > 1 && roomWord(r)) facts.push(`${formatMinutes(Timing.of(r).each)} for each ${roomWord(r)}`);
     if (r.mentalLoad) facts.push('Mental load');
 
     let owner = '', body = '';
@@ -1468,15 +1460,18 @@ const Sheets = {
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Change password');
   },
 
-  /** The invite link, when the phone's share sheet isn't available (or was closed). */
-  invite({ link, text, name }) {
+  /** Invite the partner: WhatsApp first, then the phone's share sheet, then the link to copy. */
+  invite({ link, text, name, fresh }) {
     const canShare = typeof navigator.share === 'function';
-    Sheet.open(`<h2>Send ${esc(name)} the plan</h2>
-      <p>${esc(text)}</p>
-      <div class="link-box"><code>${esc(link)}</code></div>
-      ${canShare ? `<button class="btn primary" data-action="shareInvite">Share</button>` : ''}
-      <button class="btn ${canShare ? 'secondary' : 'primary'}" data-action="copyInvite">${Icon.copy} Copy message and link</button>
-      <p class="fine">The link works once and expires in ${APP_CONFIG.inviteValidDays} days.</p>`, 'Invite');
+    const wa = `https://wa.me/?text=${encodeURIComponent(`${text}\n${link}`)}`;
+    Sheet.open(`${fresh ? `<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>` : ''}
+      <h2>${fresh ? "You're in. " : ''}Invite ${esc(name)}</h2>
+      <p>Send ${esc(name)} the link. They say how they feel about each task, and the app makes a fair split from both your answers.</p>
+      <a class="btn primary" href="${esc(wa)}" target="_blank" rel="noopener" data-invite-sent="whatsapp">${Icon.note} Send on WhatsApp</a>
+      ${canShare ? `<button class="btn secondary" data-action="shareInvite">Share another way</button>` : ''}
+      <button class="btn secondary" data-action="copyInvite">${Icon.copy} Copy the link</button>
+      <p class="fine">The link works once and expires in ${APP_CONFIG.inviteValidDays} days.</p>
+      <button class="btn ghost" data-action="closeSheet">Later</button>`, `Invite ${name}`);
   },
 
   /** Asking to start the whole split over. Not recommended, so it's worded honestly. */

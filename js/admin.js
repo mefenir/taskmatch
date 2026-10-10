@@ -32,6 +32,7 @@ let unwatchUsers = null;
 let unwatchFeedback = null;
 let unwatchErrors = null;
 let unwatchConfig = null;
+let unwatchStats = null;
 const TABS = ['funnel', 'journey', 'requests', 'feedback', 'errors'];
 // In the order a household goes through them. signedUp and requested are worked out from other data.
 const STEP_LABEL = {
@@ -143,7 +144,8 @@ function view() {
 
 /** Households created in the period, the people who signed up in it (partners who joined by invite excluded), and requests by household. */
 function funnelData() {
-  const since = A.range ? Date.now() - A.range * 864e5 : 0;
+  // Counting starts at the chosen period or the last reset, whichever is later.
+  const since = Math.max(A.range ? Date.now() - A.range * 864e5 : 0, A.statsResetAt || 0);
   const rows = A.metrics.filter(m => (millis(m.created) || 0) >= since);
   const signups = A.users.filter(u => !u.viaInvite && (u.createdAt || 0) >= since);
   const reqByHid = new Map(A.requests.filter(r => r.householdId).map(r => [r.householdId, r]));
@@ -176,7 +178,17 @@ function funnel() {
       <div class="row static"><div class="row-text"><span class="row-title">Still using it a week after starting</span>
         <span class="row-sub">${pct(retained, n('started'))} of plans started</span></div><span class="status">${retained}</span></div>
     </div>
-    <p class="fine" style="text-align:left">Households, not people (except Signed up). Counted from when each step was first reached. Tap a step to see who reached it.</p>`;
+    <p class="fine" style="text-align:left">Households, not people (except Signed up). Counted from when each step was first reached. Tap a step to see who reached it.</p>
+    ${resetBlock()}`;
+}
+
+/** Start the statistics over (Funnel and Journey). */
+function resetBlock() {
+  return `<div class="card" style="margin-top:24px"><div class="row static col">
+      <div class="row-text"><span class="row-title">Reset statistics</span>
+      <span class="row-sub">${A.statsResetAt ? `Last reset ${when(A.statsResetAt)}. ` : ''}Deletes every household's steps and active days, and counts sign-ups and requests from now on. Accounts, homes and access are not touched.</span></div>
+      <div class="btns"><button class="btn danger" data-action="resetStats" ${A.busy === 'reset' ? 'disabled' : ''}>${A.busy === 'reset' ? 'Resetting…' : 'Reset statistics'}</button></div>
+    </div></div>`;
 }
 
 /** Everyone who signed up in the period, newest first; "stopped here" when they never started setting up. */
@@ -376,6 +388,14 @@ const Actions = {
     catch (e) { console.error(e); toast(`Couldn't do that (${e.code || 'error'}). Check the rules are published.`); }
     A.busy = null; render();
   },
+  async resetStats() {
+    if (A.busy) return;
+    if (!confirm('Reset all statistics?\n\nThis deletes every household\'s funnel steps and active days for good, and the Funnel and Journey start counting from now. Accounts, homes and access are not touched.\n\nThis can\'t be undone.')) return;
+    A.busy = 'reset'; render();
+    try { const n = await Backend.Admin.resetStats(A.user.uid); A.openStep = null; A.openCouple = null; toast(`Statistics reset. ${n} household record${n === 1 ? '' : 's'} deleted.`); }
+    catch (e) { console.error(e); toast(`Couldn't reset (${e.code || 'error'}). Check the rules are published.`); }
+    A.busy = null; render();
+  },
   openStep(d) { A.openStep = A.openStep === d.key ? null : d.key; render(); },
   unlock(d) { act('unlock', d.id); },
   deny(d) { act('deny', d.id); },
@@ -410,6 +430,7 @@ document.addEventListener('submit', async e => {
     if (unwatchFeedback) { unwatchFeedback(); unwatchFeedback = null; }
     if (unwatchErrors) { unwatchErrors(); unwatchErrors = null; }
     if (unwatchConfig) { unwatchConfig(); unwatchConfig = null; }
+    if (unwatchStats) { unwatchStats(); unwatchStats = null; }
     A.feedback = []; A.errors = [];
     A.user = user; A.busy = null; A.requests = [];
     if (!user) { A.phase = 'signedOut'; render(); return; }
@@ -425,6 +446,23 @@ document.addEventListener('submit', async e => {
     unwatchUsers = Backend.Admin.watchUsers(list => { A.users = list; render(); }, e => console.error(e));
     unwatchFeedback = Backend.Admin.watchFeedback(list => { A.feedback = list; render(); }, e => console.error(e));
     unwatchConfig = Backend.Admin.watchConfig(c => { A.config = c || {}; render(); }, e => console.error(e));
+    unwatchStats = Backend.Admin.watchStats(st => { A.statsResetAt = (st && st.resetAt) || 0; render(); }, e => console.error(e));
     unwatchErrors = Backend.Admin.watchErrors(list => { A.errors = list; render(); }, e => console.error(e));
   });
+})();
+
+/* Keep a focused field above the phone's keyboard (the admin panel on a phone). */
+(function keyboardSafe() {
+  const vv = window.visualViewport;
+  const place = () => {
+    const el = document.activeElement;
+    if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    const top = (vv ? vv.offsetTop : 0) + 16, bottom = (vv ? vv.offsetTop + vv.height : innerHeight) - 16;
+    const r = (el.closest('.field') || el).getBoundingClientRect();
+    if (r.bottom > bottom) window.scrollBy(0, r.bottom - bottom);
+    else if (r.top < top) window.scrollBy(0, r.top - top);
+  };
+  document.documentElement.style.scrollPaddingBottom = '120px';
+  if (vv) vv.addEventListener('resize', () => setTimeout(place, 60));
+  document.addEventListener('focusin', () => { setTimeout(place, 60); setTimeout(place, 350); });
 })();

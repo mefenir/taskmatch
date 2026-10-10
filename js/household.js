@@ -25,7 +25,7 @@
                  feel: ['quicker'|'ok'|'longer'] (the last 4 answers to "how long did it take?") } }
    reshare, reshuffle, notes — see their sections below
    ========================================================= */
-const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], children: [0, 8] };
+const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], kitchen: [0, 4], living: [0, 4], vehicle: [0, 5], children: [0, 8] };
 
 /* Running low → which task it belongs to. First match wins; otherwise Household supplies, then Grocery. */
 const SUPPLY_ROUTES = [
@@ -72,6 +72,9 @@ const Household = {
     if (h.reshuffle != null && !isObj(h.reshuffle)) h.reshuffle = null;
     if (!isObj(h.settings)) h.settings = {};
     if (!isObj(h.preferences)) h.preferences = {};
+    // Rooms are counted; vehicles used to be an on/off "car" switch.
+    h.rooms = list(h.rooms, r => typeof r.type === 'string').map(r => ({ type: r.type, count: Math.max(0, Math.min(10, Math.floor(Number(r.count) || 0))) }));
+    if (!h.rooms.some(r => r.type === 'vehicle')) h.rooms.push({ type: 'vehicle', count: isObj(h.circumstances) && h.circumstances.car ? 1 : 0 });
     // Day choices from an earlier version: the app now spreads tasks itself.
     delete h.when; delete h.weekdays;
     return h;
@@ -89,6 +92,7 @@ const Household = {
         { type: 'kitchen', count: 1 },
         { type: 'living', count: 1 },
         { type: 'office', count: 0 },
+        { type: 'vehicle', count: 1 },
       ],
       children: [],
       pets: [],

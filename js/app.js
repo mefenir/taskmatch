@@ -339,7 +339,7 @@ function watchAccess(ownerId, attempt = 0) {
       if (Household.stage(S.household) === 'draft') {
         prepareInvite();
         // Just subscribed (back from Stripe, or a grant arriving while the app is open): straight on to the invite.
-        if (S.checkoutReturn === 'success' || (!was && !firstLoad)) setTimeout(() => { if (!Sheet.isOpen()) Sheets.unlocked(); }, 300);
+        offerInvite(S.checkoutReturn === 'success' || (!was && !firstLoad));
       }
     }
     if (now) { S.checkoutReturn = null; markActiveDay(); }
@@ -401,6 +401,23 @@ function inviteText() {
   const h = S.household;
   const me = Household.memberName(Household.member(h, S.user.uid));
   return `${me} listed everything our home needs. Say how you feel about each task, and the app makes a fair split from both our answers.`;
+}
+/** The invite went out (WhatsApp, share or copy): remember it, so the plan says "hasn't joined yet". */
+function markInvited() {
+  const h = S.household;
+  if (!h || !isOrganiser()) return;
+  if (!h.settings.invitedAt) { h.settings.invitedAt = new Date().toISOString(); save('settings'); }
+  mark('invited');
+  rerender();
+}
+/** Right after access is granted (or on the first open after it), the invite opens by itself, once per device. */
+const INVITE_SHOWN_KEY = 'household-app/invite-shown/';
+function offerInvite(fresh) {
+  const h = S.household;
+  if (!h || !isOrganiser() || !Household.alone(h) || (h.settings && h.settings.invitedAt)) return;
+  if (SafeStorage.get(INVITE_SHOWN_KEY + h.id)) return;
+  SafeStorage.set(INVITE_SHOWN_KEY + h.id, '1');
+  setTimeout(() => { if (!Sheet.isOpen()) Actions.invite({ fresh }); }, 300);
 }
 function prepareInvite() {
   const h = S.household;
@@ -567,35 +584,26 @@ const Actions = {
   },
 
   /* invite: the phone's share sheet straight away; a sheet with the link otherwise */
-  async invite() {
+  /** Opens the invite sheet once the link is ready (made in advance, so this is usually instant). */
+  async invite(d = {}) {
     const h = S.household;
     if (!isOrganiser() || !Household.alone(h)) return;
     if (!hasAccess()) { Sheet.close(); go('subscribe'); return; }
-    const name = Household.memberName(Household.invitee(h));
-    const text = inviteText();
     if (!S.inviteLink) {
       prepareInvite();
       for (let i = 0; i < 40 && !S.inviteLink; i++) await new Promise(r => setTimeout(r, 250));
       if (!S.inviteLink) { toast("Couldn't create an invite link. Check your connection and try again."); return; }
-      Sheets.invite({ link: S.inviteLink, text, name });   // the tap's moment to share has passed
-    } else if (typeof navigator.share === 'function') {
-      try { await navigator.share({ title: 'Our home plan', text, url: S.inviteLink }); }
-      catch (e) { if (e && e.name === 'AbortError') return; Sheets.invite({ link: S.inviteLink, text, name }); }
-    } else {
-      Sheets.invite({ link: S.inviteLink, text, name });
     }
-    if (!h.settings.invitedAt) { h.settings.invitedAt = new Date().toISOString(); save('settings'); }
-    mark('invited');
-    rerender();
+    Sheets.invite({ link: S.inviteLink, text: inviteText(), name: Household.memberName(Household.invitee(h)), fresh: d.fresh === true || d.fresh === 'true' });
   },
   copyInvite() {
     const value = `${inviteText()}\n${S.inviteLink}`;
-    const done = () => toast('Copied. Paste it into a message.');
+    const done = () => { markInvited(); toast('Copied. Paste it into a message.'); };
     const failCopy = () => toast("Copying didn't work. Press and hold the link to copy it.");
     try { navigator.clipboard.writeText(value).then(done, failCopy); } catch (e) { failCopy(); }
   },
   async shareInvite() {
-    try { await navigator.share({ title: 'Our home plan', text: inviteText(), url: S.inviteLink }); Sheet.close(); }
+    try { await navigator.share({ title: 'Our home plan', text: inviteText(), url: S.inviteLink }); markInvited(); Sheet.close(); }
     catch (e) { /* closed the share sheet: the link stays on screen */ }
   },
 
@@ -961,8 +969,10 @@ const Actions = {
       });
       let instant = false;
       try { instant = await Backend.Repo.autoApprove(S.user); } catch (e) { /* stays pending */ }
-      toast(instant ? "You're in. Welcome!" : "Thanks! You're on the list.");
-      if (instant) return;
+      // Instant: the invite opens by itself and says "You're in", so no message on top of it.
+      if (!instant) toast("Thanks! You're on the list.");
+      // Instant: back to the plan, where the invite opens as soon as the access arrives.
+      if (instant) { if (Household.stage(h) === 'draft') go('household'); return; }
       // Back to where you were: the plan, with its button now saying the approval is pending.
       if (Household.stage(h) === 'draft') go('household');
     } catch (e) {
@@ -1502,6 +1512,7 @@ window.addEventListener('hashchange', () => render(true));
  */
 const lastTap = new Map();
 document.addEventListener('click', e => {
+  if (e.target.closest('[data-invite-sent]')) { setTimeout(markInvited, 0); return; }
   const el = e.target.closest('[data-action]');
   if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
   const action = el.dataset.action;
@@ -1586,19 +1597,53 @@ document.addEventListener('keydown', e => {
 })();
 
 
-/* Keep a focused field above the phone's keyboard: lift sheets by the keyboard height and scroll pages to the field. */
+/* Keep a focused field above the phone's keyboard, everywhere: sheets are lifted by the keyboard
+   height and scroll inside; pages get room at the bottom and scroll so the field sits in the visible
+   part, above anything fixed at the bottom (a bottom bar) and below the top edge. */
 (function keyboardSafe() {
   const vv = window.visualViewport;
   const root = document.documentElement;
+  const isField = el => !!el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && el.type !== 'checkbox' && el.type !== 'radio' && !el.hidden;
+  const kbHeight = () => (vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0);
   const lift = () => {
-    const kb = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
-    root.style.setProperty('--kb', kb > 80 ? kb + 'px' : '0px');
+    const kb = kbHeight();
+    const open = kb > 80;
+    root.style.setProperty('--kb', open ? kb + 'px' : '0px');
+    root.classList.toggle('kb-open', open);
   };
-  const reveal = el => {
-    if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
-    setTimeout(() => { lift(); try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); } }, 320);
+  const MARGIN = 16;
+  const place = el => {
+    if (!isField(el) || document.activeElement !== el) return;
+    lift();
+    const sheet = el.closest('.sheet');
+    if (sheet) {
+      // The sheet already sits above the keyboard; bring the field into its visible part.
+      const box = sheet.getBoundingClientRect(), r = el.getBoundingClientRect();
+      const top = box.top + MARGIN, bottom = Math.min(box.bottom, vv ? vv.offsetTop + vv.height : innerHeight) - MARGIN;
+      if (r.bottom > bottom) sheet.scrollTop += r.bottom - bottom;
+      else if (r.top < top) sheet.scrollTop -= top - r.top;
+      return;
+    }
+    const viewTop = (vv ? vv.offsetTop : 0) + MARGIN;
+    let viewBottom = (vv ? vv.offsetTop + vv.height : innerHeight) - MARGIN;
+    // A bar fixed at the bottom that ends up above the keyboard (Android) covers the field too.
+    document.querySelectorAll('.bottom-bar, .bottom-nav').forEach(bar => {
+      const b = bar.getBoundingClientRect();
+      if (getComputedStyle(bar).position === 'fixed' && b.top < viewBottom && b.bottom > viewTop + 120) viewBottom = Math.min(viewBottom, b.top - 8);
+    });
+    // Keep the field's label in view with it.
+    const field = el.closest('.field') || el;
+    const r = field.getBoundingClientRect();
+    if (r.bottom > viewBottom) window.scrollBy(0, r.bottom - viewBottom);
+    else if (r.top < viewTop) window.scrollBy(0, r.top - viewTop);
   };
-  if (vv) { vv.addEventListener('resize', lift); vv.addEventListener('scroll', lift); }
-  document.addEventListener('focusin', e => reveal(e.target));
+  let timer = 0;
+  const later = (ms = 60) => { clearTimeout(timer); timer = setTimeout(() => place(document.activeElement), ms); };
+  if (vv) {
+    vv.addEventListener('resize', () => { lift(); later(); });
+    vv.addEventListener('scroll', lift);
+  }
+  // The keyboard takes a moment to slide up: place the field now, and again once it has settled.
+  document.addEventListener('focusin', e => { if (!isField(e.target)) return; later(60); setTimeout(() => place(e.target), 350); });
   document.addEventListener('focusout', () => setTimeout(lift, 100));
 })();
