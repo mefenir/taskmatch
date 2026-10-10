@@ -635,11 +635,9 @@ const Actions = {
     const [min, max] = LIMITS[d.key];
     const delta = Number(d.delta);
     if (d.key === 'children') { Household.setChildren(h, clamp(h.children.length + delta, min, max)); saveSetup('children'); }
+    else if (PET_KEYS[d.key]) { const t = PET_KEYS[d.key]; Household.setPets(h, t, clamp(Household.petCount(h, t) + delta, min, max)); saveSetup('pets'); }
     else { Household.setRoom(h, d.key, clamp(roomCount(h, d.key) + delta, min, max)); saveSetup('rooms'); }
   },
-  toggleFlag(d) { if (!isOrganiser()) return; const h = S.household; h.circumstances[d.key] = !h.circumstances[d.key]; saveSetup('circumstances'); },
-  togglePet(d) { if (!isOrganiser()) return; Household.togglePet(S.household, d.key); saveSetup('pets'); },
-  clearPets() { if (!isOrganiser()) return; S.household.pets = []; saveSetup('pets'); },
 
   /* tasks */
   toggleResp(d) { if (!isOrganiser()) return; Household.toggle(S.household, d.id); saveResponsibilities(); },
@@ -1521,7 +1519,8 @@ document.addEventListener('click', e => {
   if (Busy.has(action)) return;
   const tapKey = JSON.stringify(el.dataset);
   const now = Date.now();
-  if (now - (lastTap.get(tapKey) || 0) < 350) return;
+  // Counters (+ / −) are meant to be tapped quickly several times; everything else ignores a double tap.
+  if (action !== 'step' && now - (lastTap.get(tapKey) || 0) < 350) return;
   lastTap.set(tapKey, now);
   el.classList.remove('pressed'); void el.offsetWidth; el.classList.add('pressed');
   let result;

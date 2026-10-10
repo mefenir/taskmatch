@@ -25,7 +25,11 @@
                  feel: ['quicker'|'ok'|'longer'] (the last 4 answers to "how long did it take?") } }
    reshare, reshuffle, notes — see their sections below
    ========================================================= */
-const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], kitchen: [0, 4], living: [0, 4], office: [0, 4], vehicle: [0, 5], children: [0, 8] };
+const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], kitchen: [0, 4], living: [0, 4], office: [0, 4], garden: [0, 3], vehicle: [0, 5], children: [0, 8], dog: [0, 6], cat: [0, 6], otherpet: [0, 6] };
+/** The rooms of the home itself: at least one is needed before tasks can be suggested. */
+const HOME_ROOMS = Object.freeze(['bedroom', 'bathroom', 'kitchen', 'living', 'office']);
+/** Pet counters on the home screen and the pet type each one stands for. */
+const PET_KEYS = Object.freeze({ dog: 'dog', cat: 'cat', otherpet: 'other' });
 
 /* Running low → which task it belongs to. First match wins; otherwise Household supplies, then Grocery. */
 const SUPPLY_ROUTES = [
@@ -74,7 +78,10 @@ const Household = {
     if (!isObj(h.preferences)) h.preferences = {};
     // Rooms are counted; vehicles used to be an on/off "car" switch.
     h.rooms = list(h.rooms, r => typeof r.type === 'string').map(r => ({ type: r.type, count: Math.max(0, Math.min(10, Math.floor(Number(r.count) || 0))) }));
+    // Garden and vehicles used to be on/off switches.
     if (!h.rooms.some(r => r.type === 'vehicle')) h.rooms.push({ type: 'vehicle', count: isObj(h.circumstances) && h.circumstances.car ? 1 : 0 });
+    if (!h.rooms.some(r => r.type === 'garden')) h.rooms.push({ type: 'garden', count: isObj(h.circumstances) && h.circumstances.garden ? 1 : 0 });
+    h.pets = list(h.pets, p => ['dog', 'cat', 'other'].includes(p.type));
     // Day choices from an earlier version: the app now spreads tasks itself.
     delete h.when; delete h.weekdays;
     return h;
@@ -86,17 +93,11 @@ const Household = {
       ownerId,
       memberIds: [ownerId],
       members: [{ uid: ownerId, name: (ownerName || '').slice(0, 40), role: 'owner', joinedAt: new Date().toISOString() }],
-      rooms: [
-        { type: 'bedroom', count: 1 },
-        { type: 'bathroom', count: 1 },
-        { type: 'kitchen', count: 1 },
-        { type: 'living', count: 1 },
-        { type: 'office', count: 1 },
-        { type: 'vehicle', count: 1 },
-      ],
+      // Everything starts at 0: the person counts what their home has.
+      rooms: ['bedroom', 'bathroom', 'kitchen', 'living', 'office', 'garden', 'vehicle'].map(type => ({ type, count: 0 })),
       children: [],
       pets: [],
-      circumstances: { garden: false, car: false },
+      circumstances: {},
       responsibilities: [],
       suggestions: [],
       settings: { step: 'members', onboarded: false, partnerName: '', libraryVersion: LIBRARY.version },
@@ -811,10 +812,16 @@ const Household = {
     while (h.children.length < n) h.children.push({ id: uid() });
     h.children.length = n;
   },
-  togglePet(h, type) {
-    const i = h.pets.findIndex(p => p.type === type);
-    if (i >= 0) h.pets.splice(i, 1); else h.pets.push({ id: uid(), type });
+  petCount: (h, type) => (h.pets || []).filter(p => p.type === type).length,
+  /** How many pets of a kind (dogs, cats, other). */
+  setPets(h, type, n) {
+    const others = (h.pets || []).filter(p => p.type !== type);
+    const same = (h.pets || []).filter(p => p.type === type).slice(0, n);
+    while (same.length < n) same.push({ id: uid(), type });
+    h.pets = [...others, ...same];
   },
+  /** At least one room of the home is counted. */
+  hasRooms: h => HOME_ROOMS.some(t => roomCount(h, t) > 0),
 
   selectedLibraryIds(h) { return new Set(h.responsibilities.filter(r => r.predefined).map(r => r.libraryId)); },
   select(h, libId) {

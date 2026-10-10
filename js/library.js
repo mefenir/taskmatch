@@ -84,9 +84,9 @@ const LIBRARY = Object.freeze({
     R('pets', 'litter', 'Clean litter', When.pet('cat'), { tasks: ['Scoop litter', 'Change litter'] }),
     R('pets', 'pet_care', 'Vet & pet supplies', When.pets, { mentalLoad: true, tasks: ['Vet appointments', 'Buy food & supplies'] }),
     // Garden
-    R('garden', 'mow', 'Mow the lawn', When.flag('garden'), { tasks: ['Mow', 'Edges & clippings'] }),
-    R('garden', 'water_garden', 'Water the garden', When.flag('garden'), { tasks: ['Water beds', 'Water pots'] }),
-    R('garden', 'garden_tidy', 'Weeding & garden tidying', When.flag('garden'), { tasks: ['Weeding', 'Rake leaves', 'Tidy outdoor space'] }),
+    R('garden', 'mow', 'Mow the lawn', When.room('garden'), { tasks: ['Mow', 'Edges & clippings'] }),
+    R('garden', 'water_garden', 'Water the garden', When.room('garden'), { tasks: ['Water beds', 'Water pots'] }),
+    R('garden', 'garden_tidy', 'Weeding & garden tidying', When.room('garden'), { tasks: ['Weeding', 'Rake leaves', 'Tidy outdoor space'] }),
     // Car
     R('car', 'car_care', 'Vehicle care', When.room('vehicle'), { perRoom: 'vehicle', tasks: ['Refuel / charge', 'Clean the vehicle'] }),
     R('car', 'car_service', 'Service & tyres', When.room('vehicle'), { perRoom: 'vehicle', mentalLoad: true, tasks: ['Service & inspection', 'Seasonal tyre change'] }),

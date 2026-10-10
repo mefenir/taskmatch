@@ -173,13 +173,11 @@ const Screens = {
   home() {
     const h = S.household;
     const setup = !h.settings.onboarded;
-    const petTypes = [['dog', 'Dog'], ['cat', 'Cat'], ['other', 'Other pet']];
-    const pets = `<button class="chip" data-action="clearPets" aria-pressed="${h.pets.length === 0}">None</button>` +
-      petTypes.map(([t, l]) => `<button class="chip" data-action="togglePet" data-key="${esc(t)}" aria-pressed="${h.pets.some(p => p.type === t)}">${l}</button>`).join('');
+    const ready = Household.hasRooms(h);
     return `<main class="screen">
       ${topbar({ back: setup ? 'members' : 'settings', step: setup ? 'home' : null })}
       <h1>Your home</h1>
-      <p class="lead">So we only suggest what applies to you.</p>
+      <p class="lead">Count what your home has, so we only suggest what applies to you.</p>
       <div class="card">
         ${stepperRow('bedroom', 'Bedrooms', '', roomCount(h, 'bedroom'))}
         ${stepperRow('bathroom', 'Bathrooms', 'Including guest toilets', roomCount(h, 'bathroom'))}
@@ -189,14 +187,15 @@ const Screens = {
       </div>
       <div class="card">
         ${stepperRow('children', 'Children', 'Adds childcare and school/Kita', h.children.length)}
-        <div class="row static col">
-          <div class="row-text"><span class="row-title">Pets</span><span class="row-sub">Adds feeding, walks and vet visits</span></div>
-          <div class="chips" role="group" aria-label="Pets">${pets}</div>
-        </div>
-        ${switchRow('toggleFlag', 'garden', 'Garden or outdoor space', '', !!h.circumstances.garden)}
+        ${stepperRow('dog', 'Dogs', 'Adds feeding, walks and vet visits', Household.petCount(h, 'dog'))}
+        ${stepperRow('cat', 'Cats', 'Adds feeding, litter and vet visits', Household.petCount(h, 'cat'))}
+        ${stepperRow('otherpet', 'Other pets', 'Adds feeding and vet visits', Household.petCount(h, 'other'))}
+        ${stepperRow('garden', 'Gardens & outdoor spaces', 'Garden, terrace, yard', roomCount(h, 'garden'))}
         ${stepperRow('vehicle', 'Vehicles', 'Cars, motorbikes, vans', roomCount(h, 'vehicle'))}
       </div>
-      <div class="bottom-bar"><button class="btn primary" data-action="nav" data-to="${esc(setup ? 'responsibilities' : 'settings')}">${setup ? 'Show what needs doing' : 'Done'}</button></div>
+      <div class="bottom-bar">
+        ${ready ? '' : '<p class="count">Add at least one room to continue</p>'}
+        <button class="btn primary" data-action="nav" data-to="${esc(setup ? 'responsibilities' : 'settings')}" ${ready ? '' : 'disabled'}>${setup ? 'Show what needs doing' : 'Done'}</button></div>
     </main>`;
   },
 
@@ -734,8 +733,8 @@ const Screens = {
     const roomsOf = type => roomCount(h, type);
     const homeBits = [plural(roomsOf('bedroom'), 'bedroom'), plural(roomsOf('bathroom'), 'bathroom')];
     if (h.children.length) homeBits.push(plural(h.children.length, 'child', 'children'));
-    if (h.pets.length) homeBits.push(h.pets.map(p => p.type === 'other' ? 'pet' : p.type).join(', '));
-    if (h.circumstances.garden) homeBits.push('garden');
+    [['dog', 'dog'], ['cat', 'cat'], ['other', 'pet']].forEach(([t, w]) => { const n = Household.petCount(h, t); if (n) homeBits.push(plural(n, w)); });
+    if (roomsOf('garden')) homeBits.push(plural(roomsOf('garden'), 'garden'));
     if (roomsOf('vehicle')) homeBits.push(plural(roomsOf('vehicle'), 'vehicle'));
     const ours = group('Our home', [
       isOrg && usable ? row(go('members'), 'People', alone ? `${esc(people)} · ${invited ? 'invite sent' : 'not joined yet'}` : esc(people)) : info('People', esc(people)),
