@@ -9,7 +9,7 @@
    broken into parts.
    ========================================================= */
 /** How a counted room is named in "Time for each …". */
-const ROOM_WORD = Object.freeze({ bathroom: 'bathroom', kitchen: 'kitchen', vehicle: 'vehicle' });
+const ROOM_WORD = Object.freeze({ bathroom: 'bathroom', kitchen: 'kitchen', office: 'home office', vehicle: 'vehicle' });
 const roomCount = (h, type) => (h.rooms.find(r => r.type === type) || {}).count || 0;
 
 const When = {
@@ -47,7 +47,7 @@ const LIBRARY = Object.freeze({
     R('cleaning', 'clean_floors', 'Clean floors', When.always, { tasks: ['Vacuum', 'Mop'] }),
     R('cleaning', 'tidying', 'General tidying', When.always, { tasks: ['Tidy up', 'Dusting', 'Change bed linen'] }),
     R('cleaning', 'clean_windows', 'Clean windows', When.always, { tasks: ['Clean windows', 'Wipe frames & sills'] }),
-    R('cleaning', 'tidy_office', 'Tidy home office', When.room('office'), { tasks: ['Clear the desk', 'Sort papers'] }),
+    R('cleaning', 'tidy_office', 'Tidy home office', When.room('office'), { perRoom: 'office', tasks: ['Clear the desk', 'Sort papers'] }),
     // Kitchen & dishes
     R('kitchen', 'dishes', 'Dishes', When.room('kitchen'), { tasks: ['Load dishwasher', 'Unload dishwasher', 'Wash up by hand'] }),
     R('kitchen', 'clean_kitchen', 'Clean kitchen', When.room('kitchen'), { perRoom: 'kitchen', tasks: ['Wipe surfaces', 'Clean sink', 'Clean appliances'] }),
@@ -148,7 +148,7 @@ const MINUTE_OPTIONS = Object.freeze([5, 10, 15, 20, 25, 30, 45, 60, 90, 120, 18
 
 const TIMING_DEFAULTS = Object.freeze({
   // Times cover all the parts of a task together (e.g. one whole bathroom). A task with `perRoom`
-  // (bathroom, kitchen, vehicle) is timed per room: the total is this time × the number of those rooms.
+  // (bathroom, kitchen, home office, vehicle) is timed per room: the total is this time × the number of those rooms.
   clean_bathroom: [60, 'weekly'], clean_floors: [50, 'weekly'], tidying: [25, 'daily'], clean_windows: [60, 'monthly'], tidy_office: [15, 'weekly'],
   dishes: [25, 'daily'], clean_kitchen: [15, 'daily'],
   laundry: [60, 'several'],

@@ -25,7 +25,7 @@
                  feel: ['quicker'|'ok'|'longer'] (the last 4 answers to "how long did it take?") } }
    reshare, reshuffle, notes — see their sections below
    ========================================================= */
-const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], kitchen: [0, 4], living: [0, 4], vehicle: [0, 5], children: [0, 8] };
+const LIMITS = { bedroom: [0, 10], bathroom: [0, 6], kitchen: [0, 4], living: [0, 4], office: [0, 4], vehicle: [0, 5], children: [0, 8] };
 
 /* Running low → which task it belongs to. First match wins; otherwise Household supplies, then Grocery. */
 const SUPPLY_ROUTES = [
@@ -91,7 +91,7 @@ const Household = {
         { type: 'bathroom', count: 1 },
         { type: 'kitchen', count: 1 },
         { type: 'living', count: 1 },
-        { type: 'office', count: 0 },
+        { type: 'office', count: 1 },
         { type: 'vehicle', count: 1 },
       ],
       children: [],

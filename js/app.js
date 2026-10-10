@@ -637,7 +637,6 @@ const Actions = {
     if (d.key === 'children') { Household.setChildren(h, clamp(h.children.length + delta, min, max)); saveSetup('children'); }
     else { Household.setRoom(h, d.key, clamp(roomCount(h, d.key) + delta, min, max)); saveSetup('rooms'); }
   },
-  toggleRoom(d) { if (!isOrganiser()) return; const h = S.household; Household.setRoom(h, d.key, roomCount(h, d.key) > 0 ? 0 : 1); saveSetup('rooms'); },
   toggleFlag(d) { if (!isOrganiser()) return; const h = S.household; h.circumstances[d.key] = !h.circumstances[d.key]; saveSetup('circumstances'); },
   togglePet(d) { if (!isOrganiser()) return; Household.togglePet(S.household, d.key); saveSetup('pets'); },
   clearPets() { if (!isOrganiser()) return; S.household.pets = []; saveSetup('pets'); },

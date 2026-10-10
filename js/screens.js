@@ -185,7 +185,7 @@ const Screens = {
         ${stepperRow('bathroom', 'Bathrooms', 'Including guest toilets', roomCount(h, 'bathroom'))}
         ${stepperRow('kitchen', 'Kitchens', '', roomCount(h, 'kitchen'))}
         ${stepperRow('living', 'Living rooms', '', roomCount(h, 'living'))}
-        ${switchRow('toggleRoom', 'office', 'Home office', '', roomCount(h, 'office') > 0)}
+        ${stepperRow('office', 'Home offices', '', roomCount(h, 'office'))}
       </div>
       <div class="card">
         ${stepperRow('children', 'Children', 'Adds childcare and school/Kita', h.children.length)}
