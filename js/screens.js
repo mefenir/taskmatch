@@ -190,7 +190,7 @@ const Screens = {
         ${stepperRow('dog', 'Dogs', 'Adds feeding, walks and vet visits', Household.petCount(h, 'dog'))}
         ${stepperRow('cat', 'Cats', 'Adds feeding, litter and vet visits', Household.petCount(h, 'cat'))}
         ${stepperRow('otherpet', 'Other pets', 'Adds feeding and vet visits', Household.petCount(h, 'other'))}
-        ${stepperRow('garden', 'Gardens & outdoor spaces', 'Garden, terrace, yard', roomCount(h, 'garden'))}
+        ${stepperRow('garden', 'Gardens', 'Including terraces and yards', roomCount(h, 'garden'))}
         ${stepperRow('vehicle', 'Vehicles', 'Cars, motorbikes, vans', roomCount(h, 'vehicle'))}
       </div>
       <div class="bottom-bar">
