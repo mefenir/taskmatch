@@ -19,10 +19,11 @@ const Screens = {
   },
 
   setup() {
+    console.warn('Not connected to Firebase yet: add your project\'s web config to js/config.js (the README walks through it).');
     return `<main class="screen">
       ${houseArt}
       <h1>Almost there</h1>
-      <p class="lead">This copy of the app isn't connected to Firebase yet. Add your project's web config to <code>js/config.js</code> — the README walks through it.</p>
+      <p class="lead">The app isn't ready yet. Please try again later.</p>
     </main>`;
   },
 
@@ -31,7 +32,7 @@ const Screens = {
       ${houseArt}
       <h1>Something went wrong</h1>
       <p class="lead">${esc(S.fatal || "We couldn't load your household.")}</p>
-      ${S.fatalCode ? `<p class="fine" style="text-align:left">Error code: ${esc(S.fatalCode)}</p>` : ''}
+      ${S.fatalCode ? `<p class="fine" style="text-align:left">Code for support: ${esc(S.fatalCode)}</p>` : ''}
       <div class="bottom-bar"><button class="btn primary" data-action="reload">Try again</button>
       <button class="btn ghost" data-action="signOut">Sign out</button></div>
     </main>`;
@@ -43,14 +44,14 @@ const Screens = {
     const from = S.inviteFrom ? esc(S.inviteFrom) : '';
     return `<main class="screen welcome">
       ${houseArt}
-      <h1>${invited ? `${from || 'Your partner'} listed your home's tasks` : 'Share your home fairly, without the arguments.'}</h1>
+      <h1>${invited ? `${from || 'Your partner'} listed your home's tasks` : 'Share the housework fairly, without arguments.'}</h1>
       <p class="lead">${invited
-        ? "Say how you feel about each one. The split is made from both your answers. It takes about a minute."
-        : 'Set up your home in a few minutes, see how much work it really is, and get a fair split for the two of you.'}</p>
+        ? "Say how you feel about each one. The app uses both your answers to make a fair plan. It takes about a minute."
+        : 'Set up your home in a few minutes, see how much work it really is, and get a fair plan for the two of you.'}</p>
       ${invited ? '' : `<ol class="how">
         <li>List what your home needs</li>
         <li>Say what you like doing and what you'd rather not</li>
-        <li>Get a fair split, then invite your partner to look at it</li>
+        <li>Get a fair plan, then invite your partner</li>
       </ol>
       <p class="fine" style="text-align:left;margin-top:12px">Setting up and seeing your plan is free.</p>
       <p class="fine" style="text-align:left;margin-top:8px">Did your partner send you a link? Open that link first, before you sign up here.</p>`}
@@ -97,7 +98,7 @@ const Screens = {
     return `<main class="screen">
       ${topbar({ back: 'welcome' })}
       <h1>${titles[mode]}</h1>
-      ${S.pendingInvite ? `<p class="lead">You'll join your household straight after.</p>` : '<p class="lead" style="margin-bottom:20px"></p>'}
+      ${S.pendingInvite ? `<p class="lead">After this, you'll join your household.</p>` : '<p class="lead" style="margin-bottom:20px"></p>'}
       ${err}${note}
       ${google}
       <form class="auth-form" data-form="auth" novalidate>
@@ -117,7 +118,7 @@ const Screens = {
         <button class="link-btn" data-action="signOut" style="margin:0">Sign out</button></div>
       ${houseArt}
       <h1>Hi${first}. Let's set up your home.</h1>
-      <p class="lead">A few minutes, then a fair split to share with your partner.</p>
+      <p class="lead">It takes a few minutes. Then you get a fair plan to share with your partner.</p>
       <div class="bottom-bar">
         <button class="btn primary" data-action="createHousehold">Set up our home</button>
       </div>
@@ -133,7 +134,7 @@ const Screens = {
         ${settingsButton()}</div>
       ${houseArt}
       <h1>We couldn't check your subscription</h1>
-      <p class="lead">Check your connection. We'll keep trying, and your home opens as soon as it works.</p>
+      <p class="lead">Check your internet connection. We'll keep trying and open your home as soon as we can.</p>
       <div class="bottom-bar"><button class="btn primary" data-action="reload">Try again</button></div>
     </main>`;
   },
@@ -180,18 +181,18 @@ const Screens = {
       <p class="lead">Count what your home has, so we only suggest what applies to you.</p>
       <div class="card">
         ${stepperRow('bedroom', 'Bedrooms', '', roomCount(h, 'bedroom'))}
-        ${stepperRow('bathroom', 'Bathrooms', 'Including guest toilets', roomCount(h, 'bathroom'))}
+        ${stepperRow('bathroom', 'Bathrooms', '', roomCount(h, 'bathroom'))}
         ${stepperRow('kitchen', 'Kitchens', '', roomCount(h, 'kitchen'))}
         ${stepperRow('living', 'Living rooms', '', roomCount(h, 'living'))}
         ${stepperRow('office', 'Home offices', '', roomCount(h, 'office'))}
       </div>
       <div class="card">
-        ${stepperRow('children', 'Children', 'Adds childcare and school/Kita', h.children.length)}
-        ${stepperRow('dog', 'Dogs', 'Adds feeding, walks and vet visits', Household.petCount(h, 'dog'))}
-        ${stepperRow('cat', 'Cats', 'Adds feeding, litter and vet visits', Household.petCount(h, 'cat'))}
-        ${stepperRow('otherpet', 'Other pets', 'Adds feeding and vet visits', Household.petCount(h, 'other'))}
-        ${stepperRow('garden', 'Gardens', 'Including terraces and yards', roomCount(h, 'garden'))}
-        ${stepperRow('vehicle', 'Vehicles', 'Cars, motorbikes, vans', roomCount(h, 'vehicle'))}
+        ${stepperRow('children', 'Children', '', h.children.length)}
+        ${stepperRow('dog', 'Dogs', '', Household.petCount(h, 'dog'))}
+        ${stepperRow('cat', 'Cats', '', Household.petCount(h, 'cat'))}
+        ${stepperRow('otherpet', 'Other pets', '', Household.petCount(h, 'other'))}
+        ${stepperRow('garden', 'Gardens', '', roomCount(h, 'garden'))}
+        ${stepperRow('vehicle', 'Vehicles', '', roomCount(h, 'vehicle'))}
       </div>
       <div class="bottom-bar">
         ${ready ? '' : '<p class="count">Add at least one room to continue</p>'}
@@ -235,7 +236,7 @@ const Screens = {
       ${topbar({ back: setup ? 'home' : 'settings', step: setup ? 'responsibilities' : null })}
       <h1>What needs doing in your home?</h1>
       <p class="lead" style="margin-bottom:0">${setup ? "Tick everything that applies. You're not deciding who does it yet."
-        : active ? "Tick anything new. You'll both say how you feel about new tasks, and they're shared out fairly."
+        : active ? "Tick anything new. You'll both say how you feel about new tasks, then the app shares them fairly."
         : 'Tick everything that applies. The plan updates straight away.'}</p>
       ${sections}
       ${ownSection}
@@ -260,7 +261,7 @@ const Screens = {
         <div class="card">${items.map(r => {
           const t = Timing.of(r);
           return `<div class="timing-row">
-            <span class="row-title" id="t-${esc(r.id)}">${esc(r.name)}${roomWord(r) ? `<span class="row-sub" style="display:block">Time for each ${roomWord(r)}${t.rooms > 1 ? ` · ${formatMinutes(t.minutes)} for all ${t.rooms}` : ''}</span>` : ''}</span>
+            <span class="row-title" id="t-${esc(r.id)}">${esc(r.name)}${roomWord(r) ? `<span class="row-sub" style="display:block">Time for each ${roomWord(r)}${t.rooms > 1 ? ` · ${formatMinutes(t.minutes)} in total` : ''}</span>` : ''}</span>
             <div class="timing-controls">
               <select class="select" data-change="frequency" data-id="${esc(r.id)}" aria-label="How often: ${esc(r.name)}">${frequencyOptions(t.frequency)}</select>
               <select class="select minutes" data-change="minutes" data-id="${esc(r.id)}" aria-label="How long each time: ${esc(r.name)}">${minuteOptions(t.each)}</select>
@@ -272,7 +273,7 @@ const Screens = {
       ${topbar({ back: setup ? 'responsibilities' : 'settings', step: setup ? 'frequency' : null })}
       <h1>How often, and how long?</h1>
       <p class="lead" style="margin-bottom:0">We've filled in what's typical. Change anything that's different in your home.</p>
-      ${stage === 'active' ? `<p class="form-note" style="margin-top:16px">Your plan is running. Changes here affect when tasks come up, not who does them.</p>` : ''}
+      ${stage === 'active' ? `<p class="form-note" style="margin-top:16px">Your plan is running. Times you change here only change when tasks are due, not who does them.</p>` : ''}
       ${sections}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">About ${formatMinutes(Household.weeklyTotal(h))} a week in total</p>
@@ -304,9 +305,9 @@ const Screens = {
     const wasSplit = Household.parts(r).length > 0;
     return `<main class="screen">
       ${topbar({ back: 'household' })}
-      <h1>Break down ${esc(r.name)}</h1>
+      <h1>Split ${esc(r.name)} into parts</h1>
       <p class="lead" style="margin-bottom:0">${isOwner
-        ? 'Tick the parts you want as separate items. Each gets its own time and rhythm, and can go to a different person.'
+        ? 'Tick the parts you want as separate tasks. Each one gets its own time and can go to a different person.'
         : `Pick the parts you'd like as separate tasks. ${ownerName} decides.`}</p>
       <div class="section-head"><h2 class="section-title">Parts</h2><span class="section-meta">${on.length} chosen</span></div>
       <div class="card">${rows}
@@ -314,13 +315,13 @@ const Screens = {
           <div class="field-line"><input id="bd-new" maxlength="60" placeholder="e.g. ${esc(Library.partExample(r))}" value="${esc(bd.newName || '')}" data-input="breakNew" enterkeyhint="done" autocomplete="off">
           <button class="mini add-part" data-action="addBreakPart" ${(bd.newName || '').trim() ? '' : 'disabled'}>Add</button></div></div>
       </div>
-      <p class="fine" style="text-align:left;margin:0 4px 6px">Each part becomes its own item in your plan and is shared out fairly between you.</p>
+      <p class="fine" style="text-align:left;margin:0 4px 6px">Each part becomes its own task. The app shares them fairly between you.</p>
       <p class="fine" style="text-align:left;margin:0 4px">Together about ${formatMinutes(total)} a week. As one task it was ${formatMinutes(Timing.weeklyMinutes(r))}.</p>
       <div class="bottom-bar">
         ${isOwner
-          ? `<button class="btn primary" data-action="saveBreakdown" ${on.length < 2 ? 'disabled' : ''}>${wasSplit ? 'Save the parts' : 'Break it down'}</button>
-             ${wasSplit ? `<button class="btn ghost" data-action="mergeBreakdown">Put it back together</button>` : ''}`
-          : `<button class="btn primary" data-action="suggestBreakdown" ${on.length < 2 ? 'disabled' : ''}>Suggest this breakdown</button>`}
+          ? `<button class="btn primary" data-action="saveBreakdown" ${on.length < 2 ? 'disabled' : ''}>${wasSplit ? 'Save the parts' : 'Split into parts'}</button>
+             ${wasSplit ? `<button class="btn ghost" data-action="mergeBreakdown">Make it one task again</button>` : ''}`
+          : `<button class="btn primary" data-action="suggestBreakdown" ${on.length < 2 ? 'disabled' : ''}>Suggest these parts</button>`}
         ${on.length < 2 ? '<p class="fine">Pick at least two parts.</p>' : ''}
       </div>
     </main>`;
@@ -349,8 +350,8 @@ const Screens = {
     }
     if (rsh.status === 'rating') {
       return `<main class="screen">${topbar({ back: 'household' })}${houseArt}
-        <h1>Thanks!</h1><p class="lead">As soon as everyone has rated the new ${noun}s, you'll see how they'd be shared out.</p>
-        <div class="bottom-bar"><button class="btn secondary" data-action="nav" data-to="household">Back to Home</button></div></main>`;
+        <h1>Thanks!</h1><p class="lead">When you have both answered, you'll see who gets the new ${noun}s.</p>
+        <div class="bottom-bar"><button class="btn secondary" data-action="nav" data-to="household">Back to Us</button></div></main>`;
     }
     const accepted = (rsh.accepted || {})[me];
     const waiting = h.members.filter(m => !(rsh.accepted || {})[m.uid]).map(m => esc(Household.memberName(m)));
@@ -358,23 +359,23 @@ const Screens = {
     const changeRow = u => {
       const now = Household.assignee(h, u.id), next = (rsh.proposal || {})[u.id];
       return `<div class="row static"><div class="row-text"><span class="row-title">${esc(u.name)}</span>
-        <span class="row-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${esc(Timing.label(u))}${now !== next && h.memberIds.includes(now) ? ` · was ${who(now)}` : ''}</span></div>
+        <span class="row-sub">${u.parentName ? esc(u.parentName) + ' · ' : ''}${esc(Timing.label(u))}${now !== next && h.memberIds.includes(now) ? ` · before: ${now === me ? 'you' : who(now)}` : ''}</span></div>
         <span class="tag" style="${next === me ? 'background:var(--accent-soft);color:var(--ink)' : ''}">${who(next)}</span></div>`;
     };
     return `<main class="screen">
       ${topbar({ back: 'household' })}
       <h1>Here's how the new ${noun}s would be shared</h1>
       <p class="lead" style="margin-bottom:12px">${moved.length
-        ? `The new ${noun}s take quite some time, so a few other tasks change hands too, to keep things even.`
+        ? `The new ${noun}s take a lot of time, so a few other tasks also move, to keep things fair.`
         : `Only the new ${noun}s are shared. Everything else in your plan stays as it is.`}</p>
       <div class="card">${units.map(changeRow).join('')}</div>
-      ${moved.length ? `<div class="section-head"><h2 class="section-title">Also changing hands</h2></div>
+      ${moved.length ? `<div class="section-head"><h2 class="section-title">Also moving</h2></div>
         <div class="card">${moved.map(changeRow).join('')}</div>` : ''}
       ${rsh.loads ? `<div class="card" style="margin-top:16px"><div class="balance" style="flex-direction:column;align-items:stretch;gap:6px">${h.members.map(m =>
         `<div style="display:flex;justify-content:space-between"><span>${who(m.uid)}</span><span class="sub">about ${formatMinutes(rsh.loads[m.uid] || 0)} a week</span></div>`).join('')}</div></div>` : ''}
       <div class="bottom-bar">${accepted
         ? `<p class="count">Waiting for ${waiting.join(' and ')} to say yes</p>`
-        : `<button class="btn primary" data-action="acceptReshare">Yes, share it like this</button>
+        : `<button class="btn primary" data-action="acceptReshare">Yes, looks good</button>
            <button class="btn ghost" data-action="declineReshare">${noun === 'part' ? 'Keep things as they are' : "Not now, we'll pick them ourselves"}</button>`}</div>
     </main>`;
   },
@@ -401,7 +402,7 @@ const Screens = {
       let status;
       if (sub.source === 'stripe' && sub.status === 'trialing' && sub.trialEnd) {
         status = `<p class="joke">Free trial until ${date(sub.trialEnd)}</p>
-          <p class="plain" style="margin:0">${sub.cancelAtPeriodEnd ? "You've cancelled, so you won't be charged." : `Then ${money(sub.interval === 'month' ? price.monthly : price.yearly)} per ${sub.interval || 'year'}. Cancel any time before ${date(sub.trialEnd)} and you won't be charged.`}</p>`;
+          <p class="plain" style="margin:0">${sub.cancelAtPeriodEnd ? "You've cancelled, so you won't be charged." : `Then ${money(sub.interval === 'month' ? price.monthly : price.yearly)} a ${sub.interval || 'year'}. Cancel any time before ${date(sub.trialEnd)} and you won't be charged.`}</p>`;
       } else if (sub.source === 'stripe' && sub.periodEnd) {
         status = `<p class="joke">${sub.interval === 'month' ? 'Monthly' : 'Yearly'} plan</p>
           <p class="plain" style="margin:0">${sub.cancelAtPeriodEnd ? `Ends on ${date(sub.periodEnd)}.` : `Renews on ${date(sub.periodEnd)}.`}</p>`;
@@ -409,7 +410,7 @@ const Screens = {
         status = `<p class="joke">Your home is unlocked 🎉</p><p class="plain" style="margin:0">It covers both of you.</p>`;
       }
       if (isOrg && sub.source === 'stripe' && sub.status === 'past_due') {
-        status += `<p class="plain" style="margin:8px 0 0"><b>Your last payment didn't go through.</b> Stripe will try again; update your card so nothing stops.</p>`;
+        status += `<p class="plain" style="margin:8px 0 0"><b>Your last payment didn't go through.</b> We'll try again. Please update your card so your plan keeps running.</p>`;
       }
       // When it started and what happens next, in plain rows.
       const fact = (title, value) => `<div class="row static"><div class="row-text"><span class="row-title">${title}</span><span class="row-sub">${value}</span></div></div>`;
@@ -440,13 +441,13 @@ const Screens = {
           <p class="joke">Unlocking your home…</p><p class="plain" style="margin:0">This usually takes a few seconds.</p></div>`;
       } else if (billing && (!watchers.subLoaded || !Array.isArray(S.stripeSubs))) {
         action = !watchers.subLoaded
-          ? `<div class="result-card" role="status"><div class="spinner small" aria-hidden="true"></div><p class="plain" style="margin:0">Checking your plan…</p></div>`
-          : `<div class="result-card" role="status"><p class="joke">We couldn't check your plan</p>
-              <p class="plain" style="margin:0">So nothing is charged twice, buying waits until we can. Check your connection and try again.</p></div>
+          ? `<div class="result-card" role="status"><div class="spinner small" aria-hidden="true"></div><p class="plain" style="margin:0">Checking your subscription…</p></div>`
+          : `<div class="result-card" role="status"><p class="joke">We couldn't check your subscription</p>
+              <p class="plain" style="margin:0">To make sure you're not charged twice, please check your internet connection and try again.</p></div>
              <button class="btn secondary" data-action="reload">Try again</button>`;
       } else if (billing && Entitlements.paymentProblem(S.stripeSubs)) {
         action = `<div class="result-card" role="status"><p class="joke">There's a problem with your payment</p>
-            <p class="plain" style="margin:0">Your bank declined it or it needs confirming. Fix it in your subscription settings; there's nothing new to buy.</p></div>
+            <p class="plain" style="margin:0">Your bank said no, or the payment needs your OK. Fix it in your subscription settings. You don't need to buy again.</p></div>
           <button class="btn premium" data-action="openPortal">Fix payment</button>`;
       } else if (billing) {
         const choice = S.planChoice || 'yearly';
@@ -466,7 +467,7 @@ const Screens = {
             : `${money(price.yearly)} a year, billed yearly. Renews automatically until you cancel.`)
           : `${money(price.monthly)} a month, billed monthly from today. Renews automatically until you cancel.`;
         action = `${S.checkoutReturn === 'cancel' ? '<p class="form-note" role="status">No worries, nothing was charged.</p>' : ''}
-          <div class="plans" role="radiogroup" aria-label="Choose a plan">
+          <div class="plans" role="radiogroup" aria-label="Choose how to pay">
             ${card('yearly', 'Yearly', money(price.yearly / 12), '/month', `${money(price.yearly)} billed yearly · save ${saving}%`, trial ? `${days} days free` : `Save ${saving}%`)}
             ${card('monthly', 'Monthly', money(price.monthly), '/month', 'Billed monthly, no trial', '')}
           </div>
@@ -533,12 +534,12 @@ const Screens = {
     return `<main class="screen">
       <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
       <h1>${orgName} listed the tasks. How do you feel about each?</h1>
-      <p class="lead">Only you see your answers. The split is made from both of yours, so it's fair for you both.</p>
+      <p class="lead">Only you see your answers. The app uses both your answers to make a fair plan.</p>
       ${totalCard(h)}
       ${sections}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${marked ? `${plural(marked, 'task')} marked` : "Nothing marked yet. That's fine too."}</p>
-        <button class="btn primary" data-action="submitReview">See our split</button>
+        <button class="btn primary" data-action="submitReview">See our plan</button>
         <button class="btn ghost" data-action="suggestChanges">Suggest a change to the list</button>
       </div>
     </main>`;
@@ -560,26 +561,26 @@ const Screens = {
     if (stage === 'draft') {
       const invited = !!(h.settings && h.settings.invitedAt);
       head = 'Your plan is ready';
-      lead = `Here's a first draft of a fair split. When ${partnerName} joins, they add their own answers and the split is made from both of yours.`;
+      lead = `Here's a first draft. When ${partnerName} joins, they add their answers and the app makes the plan from both.`;
       top = totalCard(h);
       bottom = `<div class="bottom-bar">${hasAccess()
         ? `${invited ? `<p class="count">${partnerName} hasn't joined yet</p>` : ''}
            <button class="btn primary" data-action="invite">${invited ? 'Send the link again' : `Invite ${partnerName} to see the plan`}</button>`
         : (!Backend.Billing.enabled() && S.premiumRequest && S.premiumRequest.status === 'pending')
           ? `<p class="count">We'll unlock your home once it's approved</p>
-             <button class="btn premium" disabled>Approval pending</button>`
+             <button class="btn premium" disabled>Waiting for approval</button>`
           : `<p class="count">${trialOffer() ? `${APP_CONFIG.billing.trialDays} days free, then ${money(APP_CONFIG.billing.display.yearly)}/year` : 'One subscription covers you both'}</p>
            <button class="btn premium" data-action="nav" data-to="subscribe">${trialOffer() ? 'Start free and invite ' + partnerName : 'Unlock and invite ' + partnerName}</button>`}
       </div>`;
     } else if (stage === 'review') {
       head = 'Your plan';
-      lead = `${partnerName} is adding their answers. Your split, made from both, shows up here when it's ready.`;
+      lead = `${partnerName} is adding their answers. When they're done, your plan shows here.`;
     } else {
       const by = h.plan && h.plan.rebalancedBy;
       head = "Here's your plan";
-      lead = by === me ? 'Rebalanced with your answers. Have a look and say yes if it works for you.'
-        : by ? `${esc(Household.memberName(Household.member(h, by)))} marked a few things, so the plan was rebalanced. Have a look and say yes if it works for you.`
-        : "Made from both your answers. If something isn't to your taste, tap it to swap. When you're both happy, say yes.";
+      lead = by === me ? 'We updated the plan with your answers. Have a look and tap Start this plan if it works for you.'
+        : by ? `${esc(Household.memberName(Household.member(h, by)))} changed some answers, so we updated the plan. Have a look and tap Start this plan if it works for you.`
+        : "Made from both your answers. If you don't like something, tap it to swap. When you both agree, tap Start this plan.";
       bottom = `<div class="bottom-bar">
         ${accepted
           ? `<p class="count">Waiting for ${waiting.join(' and ')} to say yes</p>`
@@ -663,7 +664,7 @@ const Screens = {
     const anytime = lists.anytime.map(r => {
       const c = Household.completion(h, r.id);
       const done = doneToday(r);
-      return { r, done, sub: done ? 'Done today' : c && c.last ? `Last done ${esc(Schedule.relative(c.last, now).toLowerCase())}` : 'Whenever it\'s needed' };
+      return { r, done, sub: done ? 'Done today' : c && c.last ? `Last done ${esc((rel => /^(Today|Tomorrow|Yesterday)$/.test(rel) ? rel.toLowerCase() : rel)(Schedule.relative(c.last, now)))}` : 'Whenever it\'s needed' };
     }).sort(byOpen).map(x => tick(x.r, x.sub, x.done));
     const board = Household.myNoteTasks(h, me);
     const nothing = !today.length && !week.length && !anytime.length && !board.length && !covered.length;
@@ -723,7 +724,7 @@ const Screens = {
     const you = group('You', [
       usable ? row('data-action="editName"', 'Your name', esc(myName)) : info('Your name', esc(myName)),
       `<div class="row static"><div class="row-text"><span class="row-title">Signed in as</span><span class="row-sub plain-text">${esc(S.user.email || '')}</span></div></div>`,
-      usable && stage !== 'active' ? row(go('rate'), 'My answers', marked ? `${plural(marked, 'task')} marked` : 'Nothing marked') : '',
+      usable && stage !== 'active' ? row(go('rate'), 'Your answers', marked ? `${plural(marked, 'task')} marked` : 'Nothing marked') : '',
       (isOrg || on) && stage !== 'setup' ? row(go('subscribe'), 'Your subscription', subStatus) : info('Your subscription', subStatus),
     ]);
 
@@ -738,18 +739,18 @@ const Screens = {
     if (roomsOf('vehicle')) homeBits.push(plural(roomsOf('vehicle'), 'vehicle'));
     const ours = group('Our home', [
       isOrg && usable ? row(go('members'), 'People', alone ? `${esc(people)} · ${invited ? 'invite sent' : 'not joined yet'}` : esc(people)) : info('People', esc(people)),
-      isOrg && alone && h.settings.onboarded ? row('data-action="invite"', `Invite ${esc(partnerName)}`, hasAccess() ? (invited ? 'Send the link again' : 'Send them the plan') : 'Starts with your subscription') : '',
+      isOrg && alone && h.settings.onboarded ? row('data-action="invite"', `Invite ${esc(partnerName)}`, hasAccess() ? (invited ? 'Send the link again' : 'Send the invite link') : 'Starts with your subscription') : '',
       isOrg && usable ? row(go('home'), 'Your home', esc(homeBits.join(' · '))) : '',
       isOrg && usable ? row(go('responsibilities'), 'Tasks', plural(h.responsibilities.length, 'task')) : '',
       isOrg && usable ? row(go('frequency'), 'Times', `about ${formatMinutes(Household.weeklyTotal(h))} a week`) : '',
-      !isOrg && on ? row('data-action="suggestChanges"', 'Our Tasks', `Suggest changes · ${esc(orgName)} decides`) : '',
+      !isOrg && on ? row('data-action="suggestChanges"', 'Our tasks', `Suggest changes · ${esc(orgName)} decides`) : '',
       on && !alone && stage !== 'setup' && h.plan ? row(go('swap'), 'Swap', `Offer one of your tasks to ${esc(partnerName)}`) : '',
     ]);
 
     const contact = APP_CONFIG.legal && APP_CONFIG.legal.email;
     const help = group('Help & legal', [
       `<button class="row" data-action="openFeedback"><div class="row-text"><span class="row-title">Send feedback</span><span class="row-sub">What works, what doesn't, what confused you</span></div><span class="chev">${Icon.chev}</span></button>`,
-      `<a class="row" href="legal.html" target="_blank" rel="noopener"><div class="row-text"><span class="row-title">Imprint, privacy and terms</span></div><span class="chev">${Icon.chev}</span></a>`,
+      `<a class="row" href="legal.html" target="_blank" rel="noopener"><div class="row-text"><span class="row-title">Legal notice, privacy and terms</span></div><span class="chev">${Icon.chev}</span></a>`,
       contact ? `<a class="row" href="mailto:${esc(contact)}"><div class="row-text"><span class="row-title">Contact us</span><span class="row-sub">${esc(contact)}</span></div><span class="chev">${Icon.chev}</span></a>` : '',
     ]);
 
@@ -763,7 +764,7 @@ const Screens = {
       </div>
       <div class="card danger-zone">
         ${!isOrg || !alone ? `<button class="row" data-action="confirmLeave"><div class="row-text"><span class="row-title text-danger">Leave household</span>
-          <span class="row-sub">${isOrg ? `${esc(partnerName)} becomes the organiser` : "You'd need a new invite to come back"}</span></div></button>` : ''}
+          <span class="row-sub">${isOrg ? `${esc(partnerName)} will manage the household` : "You'd need a new invite to come back"}</span></div></button>` : ''}
         ${isOrg ? `<button class="row" data-action="confirmDelete"><div class="row-text"><span class="row-title text-danger">Delete household</span><span class="row-sub">${alone ? 'Removes it and everything in it' : 'Removes it for both of you'}</span></div></button>` : ''}
         <button class="row" data-action="confirmDeleteAccount"><div class="row-text"><span class="row-title text-danger">Delete my account</span><span class="row-sub">Your name, email, sign-in and data</span></div></button>
       </div>
@@ -780,15 +781,15 @@ const Screens = {
     return `<main class="screen">
       <div class="topbar"><span class="spacer"></span>
         <button class="icon-btn right" data-action="doneSuggesting" aria-label="Back">${Icon.back}</button></div>
-      <h1 style="margin-top:0">Our Tasks</h1>
-      <p class="lead">Suggest removing, breaking down, adding tasks or reshuffling the plan.</p>
+      <h1 style="margin-top:0">Our tasks</h1>
+      <p class="lead">Suggest tasks to add, remove or split into parts.</p>
       ${suggestionsCard(h)}
       ${taskMap(h)}
-      <div class="section-head"><h2 class="section-title">Suggest adding</h2></div>
+      <div class="section-head"><h2 class="section-title">Suggest a new task</h2></div>
       <div class="card"><div class="field" style="margin:0;padding:14px 16px">
         <label for="sg-add">What else needs doing?</label>
         <input id="sg-add" maxlength="60" placeholder="e.g. Water the plants" autocomplete="off" enterkeyhint="done">
-        <button class="btn secondary" style="margin-top:12px" data-action="suggestAdd">Suggest adding</button>
+        <button class="btn secondary" style="margin-top:12px" data-action="suggestAdd">Suggest it</button>
       </div></div>
       ${reshuffleBlock(h)}
       <div style="height:96px"></div>
@@ -809,7 +810,7 @@ const Screens = {
       const asked = Household.pendingFor(h, u.id);
       const name = u.parentName ? `${esc(u.parentName)}: ${esc(u.name)}` : esc(u.name);
       return asked
-        ? `<div class="row static"><div class="row-text"><span class="row-title">${name}</span><span class="row-sub">${esc(Timing.label(u))}</span></div><span class="tag">Swap asked</span></div>`
+        ? `<div class="row static"><div class="row-text"><span class="row-title">${name}</span><span class="row-sub">${esc(Timing.label(u))}</span></div><span class="tag">Offered</span></div>`
         : `<button class="row" data-action="askSwap" data-id="${esc(u.id)}"><div class="row-text"><span class="row-title">${name}</span><span class="row-sub">${esc(Timing.label(u))}</span></div><span class="tag">Swap</span></button>`;
     }).join('');
     return `<main class="screen">
@@ -901,12 +902,12 @@ function taskMap(h, openAll) {
       }).length;
       const freeIds = new Set(homeless(h).map(u => u.id));
       const free = items.filter(r => (Household.isSplit(r) ? Household.parts(r).map(p => p.id) : [r.id]).some(id => freeIds.has(id))).length;
-      const sub = `${plural(items.length, 'task')}${people.includes(me) && Household.stage(h) !== 'setup' ? ` · ${mine} yours` : ''}${free ? ` · ${free} without anyone` : ''}`;
+      const sub = `${plural(items.length, 'task')}${people.includes(me) && Household.stage(h) !== 'setup' ? ` · ${mine} yours` : ''}${free ? ` · ${free} with nobody` : ''}`;
       const rows = expanded ? items.map(r => {
         const parts = Household.parts(r).length;
         return `<button class="row task-row" data-action="openTask" data-id="${esc(r.id)}">
           <div class="row-text"><span class="row-title">${esc(r.name)}</span>
-            <span class="row-sub">${esc(Timing.label(r))}${parts ? ` · ${plural(parts, 'part')}` : ''}${r.mentalLoad ? ' · Mental load' : ''}${Household.suggestionFor(h, me, 'remove', r.id) ? ' · Removal suggested' : ''}</span></div>
+            <span class="row-sub">${esc(Timing.label(r))}${parts ? ` · ${plural(parts, 'part')}` : ''}${r.mentalLoad ? ' · Planning' : ''}${Household.suggestionFor(h, me, 'remove', r.id) ? ' · Removal suggested' : ''}</span></div>
           ${ownerBadges(h, r)}</button>`;
       }).join('') : '';
       return `<button class="row cat-head" data-action="toggleCat" data-key="${esc(category.id)}" aria-expanded="${expanded}">
@@ -952,19 +953,19 @@ function newTasksCard(h) {
   const skipped = new Set((h.plan && h.plan.skipped) || []);
   const waiting = Household.units(h).filter(u => !Household.peopleIds(h).includes(Household.assignee(h, u.id)) && !skipped.has(u.id));
   if (!waiting.length) return '';
-  return `<div class="swap-card" role="status"><p class="joke">${plural(waiting.length, 'new task')} to share out</p>
-    <p class="plain">${esc(waiting.map(u => u.name).join(', '))}. You both say how you feel about ${waiting.length === 1 ? 'it' : 'them'}, then the app shares ${waiting.length === 1 ? 'it' : 'them'} out fairly.</p>
-    <button class="btn primary" data-action="shareNow">Share ${waiting.length === 1 ? 'it' : 'them'} out now</button></div>`;
+  return `<div class="swap-card" role="status"><p class="joke">${plural(waiting.length, 'new task')} to share</p>
+    <p class="plain">${esc(waiting.map(u => u.name).join(', '))}. You both say how you feel about ${waiting.length === 1 ? 'it' : 'them'}, then the app shares ${waiting.length === 1 ? 'it' : 'them'} fairly.</p>
+    <button class="btn primary" data-action="shareNow">Share ${waiting.length === 1 ? 'it' : 'them'} now</button></div>`;
 }
 /** When nothing needs me: a calm line, the same all day, a different one tomorrow. */
 const ALL_CLEAR = Object.freeze([
   'All clear. Nothing needs you right now.',
   'Nothing for now. Enjoy the quiet.',
-  'All quiet on the home front.',
+  'All quiet at home.',
   'Hey, nothing for now!',
-  'All clear. Let\'s keep going.',
-  'Nothing waiting for you. Carry on.',
-  'Nothing to sort out. Nice.',
+  'All clear. Enjoy your day.',
+  'Nothing waiting for you. Well done.',
+  'Nothing to do here. Nice.',
   'All good here. Come back later.',
 ]);
 function allClearLine(now = new Date()) {
@@ -977,9 +978,9 @@ function reshuffleBlock(h) {
   if (stage === 'setup' || !h.plan || Household.alone(h) || !Entitlements.active(S.subscription)) return '';
   const partner = Household.people(h).find(m => m.uid !== S.user.uid);
   const pName = esc(partner ? Household.memberName(partner) : 'your partner');
-  if (h.reshuffle && h.reshuffle.status === 'pending') return `<p class="fine" style="margin-top:24px">Reshuffle asked. Waiting for ${pName}.</p>`;
-  return `<div style="margin-top:24px"><button class="btn secondary" data-action="askReshuffle">Reshuffle the plan</button>
-    <p class="fine">Asks ${pName} first. A swap is usually enough.</p></div>`;
+  if (h.reshuffle && h.reshuffle.status === 'pending') return `<p class="fine" style="margin-top:24px">You asked for a new plan. Waiting for ${pName}.</p>`;
+  return `<div style="margin-top:24px"><button class="btn secondary" data-action="askReshuffle">Make a new plan</button>
+    <p class="fine">${pName} needs to agree first. Often a swap is enough.</p></div>`;
 }
 /** Suggestions: the organiser decides; the partner sees their own, waiting. */
 function suggestionsCard(h, oneEach) {
@@ -987,7 +988,7 @@ function suggestionsCard(h, oneEach) {
   const isOrg = Household.isOwner(h, me);
   const orgName = esc(Household.memberName(Household.owner(h)));
   const all = Household.suggestions(h);
-  const label = x => x.type === 'breakdown' ? `Break down: ${esc(x.name)}` : `${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}`;
+  const label = x => x.type === 'breakdown' ? `Split into parts: ${esc(x.name)}` : `${x.type === 'add' ? 'Add' : 'Remove'}: ${esc(x.name)}`;
   if (isOrg && all.length) {
     const wrap = rows => oneEach ? rows.map(r => `<div class="card">${r}</div>`).join('') : `<div class="card">${rows.join('')}</div>`;
     return wrap(all.map(x => {
@@ -997,7 +998,7 @@ function suggestionsCard(h, oneEach) {
           <span class="row-sub">${x.type === 'breakdown' ? `Into ${esc((x.parts || []).map(p => p.name).join(', '))} · ` : ''}${x.type === 'add' && x.frequency ? `${esc(Timing.label({ frequency: x.frequency, minutes: x.minutes || 15 }))} · ` : ''}Suggested by ${by}</span></div>
         <div class="btn-pair">
           <button class="btn primary" data-action="acceptSuggestion" data-id="${esc(x.id)}">${x.type === 'add' ? 'Add it' : x.type === 'breakdown' ? 'Use these parts' : 'Remove it'}</button>
-          <button class="btn secondary" data-action="declineSuggestion" data-id="${esc(x.id)}">Keep as is</button>
+          <button class="btn secondary" data-action="declineSuggestion" data-id="${esc(x.id)}">Keep it</button>
         </div></div>`;
     }));
   }
@@ -1005,7 +1006,7 @@ function suggestionsCard(h, oneEach) {
   if (!mine.length) return '';
   return `<div class="card"><div class="row static"><div class="row-text"><span class="row-title">Your suggestions</span><span class="row-sub">Waiting for ${orgName}</span></div></div>
     ${mine.map(x => `<div class="row static"><div class="row-text"><span class="row-title">${label(x)}</span></div>
-      <button class="link-btn" data-action="withdrawSuggestion" data-id="${esc(x.id)}">Withdraw</button></div>`).join('')}</div>`;
+      <button class="link-btn" data-action="withdrawSuggestion" data-id="${esc(x.id)}">Take back</button></div>`).join('')}</div>`;
 }
 /* ---------- The line under "Hello, Ian": by time of day and how my day is going. Never about the partner. ---------- */
 /** Warm one-liners for when the other person did one of your tasks. Picked by task and day, so they don't jump around. */
@@ -1013,11 +1014,11 @@ const HelpLines = (() => {
   const LINES = [
     (n, t) => `${n} did ${t} today. One less thing for you.`,
     (n, t) => `${t} is done. ${n} took care of it.`,
-    (n, t) => `${n} covered ${t} for you today.`,
+    (n, t) => `${n} did ${t} for you today.`,
     (n, t) => `Good news: ${n} already did ${t}.`,
     (n, t) => `${t}? Done, thanks to ${n}.`,
-    (n, t) => `${n} gave you a hand with ${t} today.`,
-    (n, t) => `${n} beat you to ${t}. Lucky you.`,
+    (n, t) => `${n} helped you with ${t} today.`,
+    (n, t) => `${n} was quicker and did ${t}. Lucky you!`,
     (n, t) => `${t} is off your list. ${n} did it.`,
   ];
   const hash = str => [...String(str)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -1026,40 +1027,40 @@ const HelpLines = (() => {
 const Mood = (() => {
   const LINES = {
     early: {
-      free: ['Nothing on today. Coffee first, then whatever you like.', 'A free day already? The house is in a good mood.'],
-      fresh: ['Fresh start. One small thing and you\'re off.', 'Early bird gets the clean kitchen.'],
-      going: ['Up early and already ticking. Impressive.', 'Getting things done before most people are awake.'],
-      done: ['All done before breakfast? Legend.', 'Everything ticked. The rest of the day is yours.'],
+      free: ['Nothing on today. Coffee first, then whatever you like.', 'A free day. Even the house is happy.'],
+      fresh: ['A new day. Start with one small thing.', 'Up early. A good time for a quick task.'],
+      going: ['Up early and already busy. Impressive.', 'Getting things done before most people are awake.'],
+      done: ['All done before breakfast? Amazing.', 'Everything ticked. The rest of the day is yours.'],
     },
     morning: {
       free: ['Nothing due today. Enjoy the quiet.', 'No chores on the list. Plan something nice.'],
-      fresh: ['Good morning energy. Start with the easiest one.', 'One tick and the day already feels lighter.'],
-      going: ['Nice rhythm. Keep it rolling.', 'Good momentum before lunch.'],
-      done: ['Done before noon? Show-off.', 'All ticked. Nothing left but the good stuff.'],
+      fresh: ['Good morning. Start with the easiest one.', 'One tick and the day already feels lighter.'],
+      going: ['Nice progress. Keep going.', 'Good work before lunch.'],
+      done: ['Done before noon? Well done!', 'All done. The rest of the day is for you.'],
     },
     midday: {
-      free: ['Lunch, then nothing. Perfect.', 'A chore-free day. Make the most of it.'],
-      fresh: ['Plenty of day left. A quick one after lunch?', 'Easy does it. One at a time.'],
-      going: ['Halfway there. The afternoon looks lighter already.', 'Nice progress. Snack break earned.'],
-      done: ['Everything done by lunchtime. Who are you?', 'All clear. Enjoy the rest of the day.'],
+      free: ['Lunch, then nothing. Perfect.', 'A free day. Enjoy it.'],
+      fresh: ['Lots of time left. A quick task after lunch?', 'No rush. One at a time.'],
+      going: ['Good progress. The afternoon already looks easier.', 'Nice progress. You earned a snack.'],
+      done: ['Everything done by lunchtime. Wow!', 'All clear. Enjoy the rest of the day.'],
     },
     afternoon: {
-      free: ['Nothing on the list. Feet up whenever you like.', 'A free afternoon. Rare and precious.'],
-      fresh: ['Ten minutes now, a calmer evening later.', 'Still plenty of day left. Start small.'],
-      going: ['Getting there. The finish line is in sight.', 'A little more and you\'re done.'],
-      done: ['All done. The evening is officially yours.', 'Ticked it all. Time for something fun.'],
+      free: ['Nothing on the list. Relax when you like.', 'A free afternoon. Enjoy it.'],
+      fresh: ['Ten minutes now means a calmer evening.', 'Still plenty of day left. Start small.'],
+      going: ['Almost there. Just a little more.', 'A little more and you\'re done.'],
+      done: ['All done. The evening is yours.', 'Ticked it all. Time for something fun.'],
     },
     evening: {
       free: ['Nothing to do tonight. Enjoy it.', 'Quiet evening, clear list.'],
-      fresh: ['Still time. Or tomorrow, we won\'t tell.', 'Just one before the sofa?'],
-      going: ['Almost there. The sofa is waiting.', 'Last stretch. You\'ve got this.'],
-      done: ['Home sorted. Feet up. 🛋️', 'Everything done. A well-earned evening.'],
+      fresh: ['Still time. Or leave it for tomorrow.', 'Just one before you relax?'],
+      going: ['Almost there. The sofa is waiting.', 'Almost done. You can do it.'],
+      done: ['All done. Time to relax. 🛋️', 'Everything done. A well-earned evening.'],
     },
     night: {
       free: ['Nothing due. Sleep well.', 'All quiet. See you tomorrow.'],
-      fresh: ['It\'s late. Tomorrow is a fine day for chores.', 'Rest now. The list will still be there.'],
+      fresh: ['It\'s late. Tomorrow is a good day for tasks.', 'Rest now. The list will still be there.'],
       going: ['Good effort today. The rest can wait.', 'Time to rest. You did plenty.'],
-      done: ['Everything done today. Sleep like a hero.', 'Day complete. Good night.'],
+      done: ['Everything done today. Sleep well.', 'Day complete. Good night.'],
     },
   };
   const slot = hour => hour >= 5 && hour < 9 ? 'early' : hour < 12 && hour >= 9 ? 'morning' : hour >= 12 && hour < 14 ? 'midday'
@@ -1080,8 +1081,8 @@ const Mood = (() => {
 /* ---------- Board ---------- */
 const NOTE_KINDS = {
   note:  { icon: 'note', label: 'Note',        hint: 'Stays on the board for 7 days.',                               placeholder: 'e.g. Plumber comes Thursday at 10' },
-  low:   { icon: 'low', label: 'Running low', hint: 'Goes to whoever looks after it, until someone has got it.',     placeholder: 'e.g. Dishwasher tabs' },
-  today: { icon: 'today', label: 'Today only',  hint: 'Whoever taps "I\'ll do it" first gets it on their Today list.', placeholder: 'e.g. Take the parcel to the post office' },
+  low:   { icon: 'low', label: 'Running low', hint: 'Goes to the person who buys it, until someone gets it.',     placeholder: 'e.g. Dishwasher tabs' },
+  today: { icon: 'today', label: 'Today only',  hint: 'The first person to tap "I\'ll do it" gets it on their list.', placeholder: 'e.g. Take the parcel to the post office' },
 };
 function boardSeenKey(h) { return `household-app/board-seen/${h.id}/${S.user.uid}`; }
 function boardSeenAt(h) { return Number(SafeStorage.get(boardSeenKey(h)) || 0); }
@@ -1114,7 +1115,7 @@ function boardCard(h) {
   if (S.boardOpen) SafeStorage.set(boardSeenKey(h), String(Date.now()));
   const count = waiting.size;
   const meta = !items.length ? (partnerName ? `Leave a note for ${esc(partnerName)}` : 'Leave a note')
-    : count ? `<b>${count} need${count === 1 ? 's' : ''} action</b>` : plural(items.length, 'note');
+    : count ? `<b>${count} for you</b>` : plural(items.length, 'note');
   const head = `<button class="board-head" data-action="${items.length ? 'toggleBoard' : 'addNote'}" aria-expanded="${!!S.boardOpen}">
       <span class="board-icon" aria-hidden="true">${Icon.board}</span><span class="board-title">Board</span>
       <span class="board-meta">${meta}</span>
@@ -1122,7 +1123,7 @@ function boardCard(h) {
   const cls = `board${count ? ' waiting' : ''}`;
   if (!S.boardOpen || !items.length) return `<div class="${cls}">${head}</div>`;
   const now = new Date();
-  const tags = w => !w ? '' : [w.mine ? 'For you' : '', w.grab ? 'Up for grabs' : '', w.fresh ? 'New' : '']
+  const tags = w => !w ? '' : [w.mine ? 'For you' : '', w.grab ? 'Free to take' : '', w.fresh ? 'New' : '']
     .filter(Boolean).map(t => `<span class="note-tag">${t}</span>`).join('');
   const row = n => {
     const k = NOTE_KINDS[n.kind];
@@ -1131,8 +1132,8 @@ function boardCard(h) {
     let act = '';
     if (n.kind === 'low') {
       const t = Household.noteTarget(h, n);
-      sub = `${t ? (t.uid === me ? 'For you' : 'For ' + esc(Household.memberName(Household.member(h, t.uid) || {}))) + ' · ' + esc(t.via) : 'For whoever gets there first'} · ${sub}`;
-      act = `<button class="mini" data-action="gotNote" data-id="${esc(n.id)}">Got it</button>`;
+      sub = `${t ? (t.uid === me ? 'For you' : 'For ' + esc(Household.memberName(Household.member(h, t.uid) || {}))) + ' · ' + esc(t.via) : 'For anyone'} · ${sub}`;
+      act = `<button class="mini" data-action="gotNote" data-id="${esc(n.id)}">Bought it</button>`;
     } else if (n.kind === 'today') {
       act = `<button class="mini" data-action="claimNote" data-id="${esc(n.id)}">I'll do it</button>`;
     }
@@ -1154,7 +1155,7 @@ function noteTaskRow(h, n, ownerId, everyone) {
   const sub = n.kind === 'low' ? `${who}Running low · ${by}` : `${who}Today only · ${by}`;
   return `<button class="row" data-action="doneNote" data-id="${esc(n.id)}" aria-pressed="false">
     <span class="check" aria-hidden="true">${Icon.check}</span>
-    <div class="row-text"><span class="row-title"><span class="title-icon" aria-hidden="true">${Icon[k.icon]}</span>${n.kind === 'low' ? 'Get ' : ''}${esc(n.text)}</span><span class="row-sub">${sub}</span></div></button>`;
+    <div class="row-text"><span class="row-title"><span class="title-icon" aria-hidden="true">${Icon[k.icon]}</span>${n.kind === 'low' ? 'Buy: ' : ''}${esc(n.text)}</span><span class="row-sub">${sub}</span></div></button>`;
 }
 
 /** "parts" when only task parts are being shared, otherwise "tasks". */
@@ -1215,25 +1216,25 @@ function swapCards(h) {
   const rs = Household.reshuffle(h);
   if (rs && rs.status === 'pending' && rs.by !== me) {
     html += `<div class="swap-card" role="status">
-      <p class="joke">${name(rs.by)} would like to reshuffle the whole plan. 🔀</p>
-      <p class="plain">You'd both answer again how you feel about each task, and get a fresh split. Your ticks are kept; swaps start over.</p>
+      <p class="joke">${name(rs.by)} would like a new plan. 🔀</p>
+      <p class="plain">You both answer again, and the app makes a new plan. Done tasks stay done. Swaps are reset.</p>
       <div class="btns">
-        <button class="btn primary" data-action="acceptReshuffle">Let's reshuffle</button>
+        <button class="btn primary" data-action="acceptReshuffle">Make a new plan</button>
         <button class="btn secondary" data-action="declineReshuffle">Keep our plan</button>
       </div></div>`;
   } else if (rs && rs.status === 'declined' && rs.by === me && !rs.seen) {
     html += `<div class="result-card" role="status"><p class="joke">They'd rather keep the current plan.</p>
       <p class="plain">Nothing changes. You can still swap single tasks.</p>
-      <button class="btn secondary" style="min-height:44px" data-action="dismissReshuffle">Dismiss</button></div>`;
+      <button class="btn secondary" style="min-height:44px" data-action="dismissReshuffle">OK</button></div>`;
   }
   const rsh = Household.activeReshare(h);
   const noun = rsh ? reshareNoun(h, rsh) : '';
   if (rsh && rsh.status === 'rating' && !(rsh.done || {})[me]) {
-    html += `<div class="swap-card" role="status"><p class="joke">Time to share out the new ${noun}s ✂️</p>
+    html += `<div class="swap-card" role="status"><p class="joke">New ${noun}s to share</p>
       <p class="plain">Say how you feel about ${plural((rsh.unitIds || []).length, 'new ' + noun)}. It only takes a moment.</p>
-      <button class="btn primary" data-action="nav" data-to="reshare">Rate the new ${noun}s</button></div>`;
+      <button class="btn primary" data-action="nav" data-to="reshare">Answer for the new ${noun}s</button></div>`;
   } else if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) {
-    html += `<div class="swap-card" role="status"><p class="joke">The new ${noun}s have been shared out.</p>
+    html += `<div class="swap-card" role="status"><p class="joke">Here's who gets the new ${noun}s.</p>
       <p class="plain">Have a look and say yes if it works for you.</p>
       <button class="btn primary" data-action="nav" data-to="reshare">See the changes</button></div>`;
   }
@@ -1245,7 +1246,7 @@ function swapCards(h) {
     html += `<div class="result-card" role="status">
       <p class="joke">${SwapMessages.pick(x.status === 'done' ? 'done' : 'declined', x.id, vars)}</p>
       <p class="plain">${plain}</p>
-      <button class="btn secondary" style="min-height:44px" data-action="dismissSwap" data-id="${esc(x.id)}">Dismiss</button></div>`;
+      <button class="btn secondary" style="min-height:44px" data-action="dismissSwap" data-id="${esc(x.id)}">OK</button></div>`;
   });
   return html;
 }
@@ -1318,7 +1319,7 @@ function statusBanner(h) {
     const d = new Date(sub.trialEnd).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
     const amount = money(sub.interval === 'month' ? APP_CONFIG.billing.display.monthly : APP_CONFIG.billing.display.yearly);
     return `<div class="card next-card"><h2>Your free trial ends on ${d}</h2>
-      <p>Then it continues for ${amount} per ${sub.interval || 'year'}. Nothing to do if you'd like to keep it.</p>
+      <p>Then it continues for ${amount} a ${sub.interval || 'year'}. To keep it, you don't need to do anything.</p>
       <button class="btn secondary" data-action="openPortal">Manage subscription</button></div>`;
   }
   return '';
@@ -1334,10 +1335,10 @@ const Sheets = {
   partsNeedSubscription() {
     const trial = trialOffer();
     Sheet.open(`<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
-      <h2>Break tasks into parts</h2>
-      <p>Split big jobs like Clean bathroom into smaller tasks, each with its own timing, and share them out fairly. It comes with your subscription.</p>
-      <button class="btn premium" data-action="sheetNav" data-to="subscribe">${trial ? `Start free for ${APP_CONFIG.billing.trialDays} days` : 'See plans'}</button>
-      <button class="btn ghost" data-action="closeSheet">Not now</button>`, 'Break tasks into parts');
+      <h2>Split tasks into parts</h2>
+      <p>Split big tasks, like "Clean bathroom", into smaller parts. Each part has its own time, and the app shares them fairly. It comes with your subscription.</p>
+      <button class="btn premium" data-action="sheetNav" data-to="subscribe">${trial ? `Start free for ${APP_CONFIG.billing.trialDays} days` : 'See prices'}</button>
+      <button class="btn ghost" data-action="closeSheet">Not now</button>`, 'Split tasks into parts');
   },
 
   /** A task of your own. */
@@ -1348,7 +1349,7 @@ const Sheets = {
     const org = esc(Household.memberName(Household.owner(h)).split(' ')[0]);
     const title = suggesting ? 'Suggest a task' : 'Add a task';
     Sheet.open(`<h2>${title}</h2>
-      ${suggesting ? `<p>${org} decides. If it's a yes, you both say how you feel about it, then it's shared out fairly.</p>` : ''}
+      ${suggesting ? `<p>${org} decides. If ${org} agrees, you both say how you feel about it, then the app shares it fairly.</p>` : ''}
       <div class="field"><label for="ct-name">What needs doing?</label>
         <input id="ct-name" data-input="customName" maxlength="60" placeholder="e.g. Clean the aquarium" value="${esc(d.name)}" autocomplete="off" enterkeyhint="done"></div>
       <div class="field"><label for="ct-cat">Area</label>
@@ -1377,19 +1378,19 @@ const Sheets = {
     const ownerName = uid => uid === me ? 'Yours' : Household.peopleIds(h).includes(uid) ? `${Household.memberName(Household.member(h, uid))}'s` : 'Nobody has it yet';
     const action = id => {
       const who = Household.assignee(h, id);
-      if (!suggesting && Household.canCover(h, id, me)) return `<button class="mini" data-action="coverTask" data-id="${esc(id)}">I did it</button>`;
+      if (!suggesting && Household.canCover(h, id, me)) return `<button class="mini" data-action="coverTask" data-id="${esc(id)}">I did this</button>`;
       if (!suggesting && Household.coveredByMe(h, id, me)) return `<button class="mini" data-action="coverTask" data-id="${esc(id)}">Undo</button>`;
       if (free.has(id)) return `<button class="mini" data-action="claim" data-id="${esc(id)}">I'll take it</button>`;
       if (who !== me || !canSwap) return '';
-      return Household.pendingFor(h, id) ? '<span class="tag">Swap asked</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(id)}">Swap</button>`;
+      return Household.pendingFor(h, id) ? '<span class="tag">Offered</span>' : `<button class="mini" data-action="askSwap" data-id="${esc(id)}">Swap</button>`;
     };
     const facts = [esc(Timing.label(r))];
     if (Timing.of(r).rooms > 1 && roomWord(r)) facts.push(`${formatMinutes(Timing.of(r).each)} for each ${roomWord(r)}`);
-    if (r.mentalLoad) facts.push('Mental load');
+    if (r.mentalLoad) facts.push('Planning');
 
     let owner = '', body = '';
     if (split) {
-      body = `<h3 class="section-title" style="margin:0 0 8px">Broken into</h3>
+      body = `<h3 class="section-title" style="margin:0 0 8px">Parts</h3>
         <div class="card sheet-list">${Household.parts(r).map(p => {
           const pu = Household.partUnit(r, p);
           const who = Household.assignee(h, p.id);
@@ -1412,9 +1413,9 @@ const Sheets = {
     else if (!split && planned && !suggesting && Household.coveredByMe(h, r.id, me)) actions.push(act('coverTask', 'Undo', { on: true }));
     else if (!split && planned && free.has(r.id)) actions.push(act('claim', 'I\'ll take it'));
     if (!split && planned && who === me && canSwap) {
-      actions.push(Household.pendingFor(h, r.id) ? act('askSwap', 'Asked', { on: true, disabled: true }) : act('askSwap', 'Swap'));
+      actions.push(Household.pendingFor(h, r.id) ? act('askSwap', 'Offered', { on: true, disabled: true }) : act('askSwap', 'Swap'));
     }
-    if (canBreak) actions.push(act('openBreakdown', isOrg ? (split ? 'Parts' : 'Split up') : 'Split up?'));
+    if (canBreak) actions.push(act('openBreakdown', isOrg ? (split ? 'Parts' : 'Split task') : 'Split task?'));
     if (!isOrg && stage !== 'setup') {
       const asked = Household.suggestionFor(h, me, 'remove', r.id);
       actions.push(act('suggestRemoval', asked ? 'Suggested' : 'Remove?', { on: !!asked }));
@@ -1465,7 +1466,7 @@ const Sheets = {
     const wa = `https://wa.me/?text=${encodeURIComponent(`${text}\n${link}`)}`;
     Sheet.open(`${fresh ? `<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>` : ''}
       <h2>${fresh ? "You're in. " : ''}Invite ${esc(name)}</h2>
-      <p>Send ${esc(name)} the link. They say how they feel about each task, and the app makes a fair split from both your answers.</p>
+      <p>Send ${esc(name)} the link. They say how they feel about each task, and the app makes a fair plan from both your answers.</p>
       <a class="btn primary" href="${esc(wa)}" target="_blank" rel="noopener" data-invite-sent="whatsapp">${Icon.note} Send on WhatsApp</a>
       ${canShare ? `<button class="btn secondary" data-action="shareInvite">Share another way</button>` : ''}
       <button class="btn secondary" data-action="copyInvite">${Icon.copy} Copy the link</button>
@@ -1477,18 +1478,18 @@ const Sheets = {
   /** After a time change makes the split uneven. */
   timeRebalance() {
     const others = S.household.members.filter(m => m.uid !== S.user.uid).map(m => esc(Household.memberName(m)));
-    Sheet.open(`<h2>The split is a little uneven now</h2>
-      <p>With the new time, one of you has more to do each week. A reshuffle makes a fresh, fair split from the same answers. ${others.join(' and ')} will be asked to agree first.</p>
-      <button class="btn primary" data-action="requestReshuffle">Ask ${others.join(' and ')} to reshuffle</button>
-      <button class="btn ghost" data-action="closeSheet">Not now</button>`, 'Rebalance');
+    Sheet.open(`<h2>The plan is a little uneven now</h2>
+      <p>With the new time, one of you has more to do each week. A new plan would make it fair again, using the same answers. ${others.join(' and ')} needs to agree first.</p>
+      <button class="btn primary" data-action="requestReshuffle">Ask ${others.join(' and ')} for a new plan</button>
+      <button class="btn ghost" data-action="closeSheet">Not now</button>`, 'New plan');
   },
   askReshuffle() {
     const others = S.household.members.filter(m => m.uid !== S.user.uid).map(m => esc(Household.memberName(m)));
-    Sheet.open(`<h2>Reshuffle the whole plan?</h2>
-      <p>The app makes a fresh split from the same answers. Your ticks are kept, but any swaps start over, and you both say yes again.</p>
-      <p style="margin-top:-8px">Usually a swap is enough. ${others.join(' and ')} will be asked to agree first.</p>
+    Sheet.open(`<h2>Make a new plan?</h2>
+      <p>The app makes a new plan from the same answers. Done tasks stay done, swaps are reset, and you both agree again.</p>
+      <p style="margin-top:-8px">Often a swap is enough. ${others.join(' and ')} needs to agree first.</p>
       <button class="btn secondary" data-action="requestReshuffle">Ask ${others.join(' and ')}</button>
-      <button class="btn ghost" data-action="closeSheet">Keep my plan</button>`, 'Reshuffle');
+      <button class="btn ghost" data-action="closeSheet">Keep my plan</button>`, 'New plan');
   },
 
   /** Add something to the board. */
@@ -1510,7 +1511,7 @@ const Sheets = {
   feedback() {
     const text = S.feedbackDraft || '';
     Sheet.open(`<h2>Send feedback</h2>
-      <p style="margin-bottom:12px">What works, what doesn't, or what confused you. Every note is read.</p>
+      <p style="margin-bottom:12px">What works, what doesn't, or what confused you. We read every note.</p>
       <div class="field"><textarea id="feedback-text" data-input="feedbackText" maxlength="1000" rows="5" placeholder="e.g. I couldn't find where to change who does a task">${esc(text)}</textarea></div>
       <p class="fine" style="text-align:left;margin:6px 0 14px">Your name and the screen you were on are sent with it.</p>
       <button class="btn primary" data-action="sendFeedback">Send</button>
@@ -1527,7 +1528,7 @@ const Sheets = {
     const others = h.members.filter(m => m.uid !== S.user.uid);
     const offer = m => `<button class="btn primary" data-action="sendSwap" data-id="${esc(respId)}" data-to="${esc(m.uid)}">Offer it to ${esc(Household.memberName(m))}</button>`;
     Sheet.open(`<h2>Hand over ${esc(r.name)}?</h2>
-      <p>If ${others.length === 1 ? esc(Household.memberName(others[0])) : 'they'} take${others.length === 1 ? 's' : ''} it, they choose one of their tasks to give you in return. That's the price of a swap.</p>
+      <p>If ${others.length === 1 ? esc(Household.memberName(others[0])) : 'they'} take${others.length === 1 ? 's' : ''} it, they choose one of their tasks to give you in return.</p>
       ${others.map(offer).join('')}
       <button class="btn ghost" data-action="closeSheet">Keep it</button>`, 'Swap');
   },
@@ -1542,7 +1543,7 @@ const Sheets = {
       <div class="card">${mine.map(r => `<button class="row" data-action="completeSwap" data-id="${esc(swap.id)}" data-key="${esc(r.id)}">
           <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${esc(Timing.label(r))}</span></div>
           <span class="chev">${Icon.chev}</span></button>`).join('') ||
-        `<button class="row" data-action="completeSwap" data-id="${esc(swap.id)}" data-key=""><div class="row-text"><span class="row-title">I have nothing to give, just take it</span></div></button>`}</div>
+        `<button class="row" data-action="completeSwap" data-id="${esc(swap.id)}" data-key=""><div class="row-text"><span class="row-title">Give nothing back</span></div></button>`}</div>
       <button class="btn ghost" data-action="closeSheet">Back</button>`, 'Pick what to give back');
   },
 
@@ -1550,8 +1551,8 @@ const Sheets = {
   confirmDelete(subRunning) {
     const others = S.household.members.filter(m => m.uid !== S.user.uid).map(m => esc(Household.memberName(m)));
     const sub = subRunning ? `<p style="margin-bottom:12px"><b style="color:var(--ink)">Your subscription keeps running</b> unless you cancel it. Deleting the household doesn't stop it.</p>` : '';
-    Sheet.open(`<h2>There's no way back</h2>
-      <p style="margin-bottom:12px">Deleting the household removes its tasks, your plan, everything you've ticked off${others.length ? ` and ${others.join(' and ')}'s place in it` : ''}. It's gone for good, for everyone.</p>
+    Sheet.open(`<h2>This can't be undone</h2>
+      <p style="margin-bottom:12px">Deleting the household removes its tasks, your plan, everything you've ticked off${others.length ? ` and ${others.join(' and ')}'s place in it` : ''}. It's deleted for everyone, forever.</p>
       ${sub}
       <p><b style="color:var(--ink)">Do you still want to delete the household?</b></p>
       ${subRunning
@@ -1568,14 +1569,14 @@ const Sheets = {
     if (!Household.isOwner(h, me)) {
       const ownerName = esc(Household.memberName(Household.owner(h)));
       Sheet.open(`<h2>Leave this household?</h2>
-        <p>Your answers and notes are removed. Your ticks stay as household history, without your name. You'd need a new invite from ${ownerName} to come back.</p>
+        <p>Your answers and notes are removed. Tasks you did stay in the history, without your name. You'd need a new invite from ${ownerName} to come back.</p>
         <button class="btn danger" data-action="leaveHousehold">Leave household</button>
         <button class="btn ghost" data-action="closeSheet">Stay</button>`, 'Leave household');
       return;
     }
     const partner = esc(Household.memberName(Household.member(h, Household.partnerId(h))));
     Sheet.open(`<h2>Leave the household?</h2>
-      <p>${partner} becomes the organiser and keeps the plan, tasks and history. Your answers and notes are removed.</p>
+      <p>${partner} will manage the household and keep the plan, tasks and history. Your answers and notes are removed.</p>
       ${subRunning ? `<p><b style="color:var(--ink)">Your subscription is yours</b>, so it doesn't move to ${partner}. If you leave without cancelling, you keep paying for a home you're no longer in.</p>` : ''}
       ${subRunning
         ? `<button class="btn danger" data-action="cancelThen" data-key="leave">Cancel my subscription, then leave</button>
@@ -1598,11 +1599,11 @@ const Sheets = {
     }
     let household = '';
     if (h && Household.isOwner(h, me) && Household.alone(h)) household = 'Your household is deleted with it.';
-    else if (h && Household.isOwner(h, me)) household = `You leave the household and ${esc(Household.memberName(Household.member(h, Household.partnerId(h))))} becomes the organiser.`;
+    else if (h && Household.isOwner(h, me)) household = `You leave the household and ${esc(Household.memberName(Household.member(h, Household.partnerId(h))))} will manage the household.`;
     else if (h) household = 'You leave the household; your answers and notes are removed.';
     Sheet.open(`<h2>Delete your account?</h2>
       <p style="margin-bottom:12px">This removes your name, email and sign-in. ${household} Payment records that tax law requires stay with Stripe.</p>
-      <p><b style="color:var(--ink)">There's no way back.</b></p>
+      <p><b style="color:var(--ink)">This can't be undone.</b></p>
       <button class="btn danger" data-action="deleteAccount">Delete my account</button>
       <button class="btn ghost" data-action="closeSheet">Keep my account</button>`, 'Delete my account');
   },

@@ -48,11 +48,11 @@ function applyBusy(scope = document) {
 
 /* ---------- What a subscription gives the two of you (the plans screen) ---------- */
 const BENEFITS = Object.freeze([
-  { title: 'A fair plan you both agreed to', body: 'Your partner marks what doesn\'t suit them, the app rebalances, you both say yes.' },
-  { title: 'Daily lists for each of you', body: 'Today, this week, this month. Tick things off, swap when life gets in the way.' },
-  { title: 'See that it stays fair', body: 'How much time each of you puts in every week, shared by effort, not by count.' },
-  { title: 'Stop reminding each other', body: 'A shared board for notes, things running low and last-minute jobs, sent to the right person.' },
-  { title: 'Every detail has an owner', body: 'Break big tasks into parts, add your own, and let your partner suggest changes.' },
+  { title: 'A fair plan you both agree to', body: 'Your partner says what they would rather not do. The app adjusts the plan, and you both agree.' },
+  { title: 'Daily lists for each of you', body: 'Today, this week, anytime. Tick things off, and swap when you are busy.' },
+  { title: 'See that it stays fair', body: 'How much time each of you spends every week. Shared by time, not by number of tasks.' },
+  { title: 'Stop reminding each other', body: 'A shared board for notes, things running low and last-minute tasks, sent to the right person.' },
+  { title: 'Every small task has a person', body: 'Split big tasks into parts, add your own, and let your partner suggest changes.' },
 ]);
 
 /** Prices as the app shows them (the amounts Stripe charges are set in Stripe). */

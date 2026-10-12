@@ -1,7 +1,7 @@
 {
   "name": "Our Household",
   "short_name": "Household",
-  "description": "Make the invisible household workload visible, then organise it together.",
+  "description": "See all the work your home needs, and share it fairly.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

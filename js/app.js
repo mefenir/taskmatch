@@ -51,26 +51,41 @@ const AUTH_ERRORS = {
   'auth/too-many-requests': 'Too many attempts. Wait a moment and try again.',
   'auth/network-request-failed': 'No connection. Check your internet and try again.',
   'auth/popup-blocked': 'Your browser blocked the Google window. Allow pop-ups for this site and try again.',
-  'auth/unauthorized-domain': "This web address isn't allowed to sign in yet. Add it in Firebase → Authentication → Settings → Authorised domains.",
+  'auth/unauthorized-domain': "Signing in doesn't work on this web address yet. Please contact us.",
   'auth/account-exists-with-different-credential': 'This email already has an account with a different sign-in method. Sign in with email and password instead.',
-  'auth/operation-not-allowed': "This sign-in method isn't switched on in Firebase yet.",
+  'auth/operation-not-allowed': "This way of signing in isn't available yet. Please try another way.",
 };
 const SILENT_AUTH_ERRORS = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/user-cancelled'];
-const authMessage = e => AUTH_ERRORS[e && e.code] || 'Something went wrong. Please try again.';
+/** Hints for the developer (console only) behind the plain messages above. */
+const AUTH_DEV_HINTS = {
+  'auth/unauthorized-domain': 'Add this domain in Firebase → Authentication → Settings → Authorised domains.',
+  'auth/operation-not-allowed': 'Switch this sign-in method on in Firebase → Authentication → Sign-in method.',
+};
+const authMessage = e => {
+  if (e && AUTH_DEV_HINTS[e.code]) console.warn(AUTH_DEV_HINTS[e.code]);
+  return AUTH_ERRORS[e && e.code] || 'Something went wrong. Please try again.';
+};
 
 const INVITE_ERRORS = {
-  'invite/not-found': ["This invite link doesn't work", 'Check you opened the whole link, or ask for a new one.'],
+  'invite/not-found': ["This invite link doesn't work", 'Make sure you opened the full link, or ask for a new one.'],
   'invite/used': ['This invite has already been used', 'Each link works once. Ask for a new one.'],
   'invite/expired': ['This invite has expired', 'Ask for a new link.'],
   'permission-denied': ["This invite couldn't be used", 'It may have expired or already been used. Ask for a new link.'],
 };
 
 const DATA_ERRORS = {
-  'permission-denied': "The database refused access. In Firebase, open Firestore Database → Rules, paste in the contents of firestore.rules and press Publish.",
-  'not-found': "The Firestore database doesn't exist yet. In Firebase, open Firestore Database and create it.",
-  'failed-precondition': "The Firestore database isn't ready. In Firebase, check Firestore Database has been created.",
+  'permission-denied': "We couldn't load your household. Please try again later, or contact us.",
+  'not-found': "The app isn't ready yet. Please try again later.",
+  'failed-precondition': "The app isn't ready yet. Please try again later.",
   'unavailable': "You're offline and this household isn't saved on this device yet.",
 };
+/** What the developer should check (console only). */
+const DATA_DEV_HINTS = {
+  'permission-denied': 'The database refused access. In Firebase, open Firestore Database → Rules, paste in the contents of firestore.rules and press Publish.',
+  'not-found': "The Firestore database doesn't exist yet. In Firebase, open Firestore Database and create it.",
+  'failed-precondition': "The Firestore database isn't ready. In Firebase, check Firestore Database has been created.",
+};
+const logDevHint = e => { if (e && DATA_DEV_HINTS[e.code]) console.warn(DATA_DEV_HINTS[e.code]); };
 
 const BILLING_ERRORS = {
   'billing/not-configured': "Payments aren't set up yet. Please try again later.",
@@ -80,6 +95,7 @@ const BILLING_ERRORS = {
 
 function fail(e) {
   console.error(e);
+  logDevHint(e);
   S.phase = 'error';
   S.fatal = DATA_ERRORS[e && e.code] || null;
   S.fatalCode = (e && (e.code || e.message)) || 'unknown';
@@ -116,8 +132,9 @@ function save(...fields) {
   return Backend.Repo.saveHousehold(h.id, data).catch(e => {
     console.error(e);
     ErrorLog.report(e, `save:${[...new Set(fields)].join(',')}`);
+    if (e && e.code === 'permission-denied') console.warn("Couldn't save: the database refused access. Check firestore.rules is published.");
     toast(e && e.code === 'permission-denied'
-      ? "Couldn't save: the database refused access. Check firestore.rules is published."
+      ? "Couldn't save that change. Please try again later."
       : "Couldn't save that change. Check your connection and try again.");
   });
 }
@@ -274,7 +291,7 @@ function afterSnapshot(h) {
   const was = watchers.lastOwner;
   if (was && was !== h.ownerId && h.ownerId === me) {
     const name = (watchers.lastNames || {})[was] || 'Your partner';
-    setTimeout(() => Sheets.notice(`${name} left the household`, "You're the organiser now. Your plan, tasks and history are all here."), 300);
+    setTimeout(() => Sheets.notice(`${name} left the household`, "You now manage the household. Your plan, tasks and history are all here."), 300);
   }
   watchers.lastOwner = h.ownerId;
   watchers.lastNames = Object.fromEntries((h.members || []).map(m => [m.uid, Household.memberName(m)]));
@@ -400,7 +417,7 @@ const INVITE_LINK_KEY = 'household-app/invite-link/';
 function inviteText() {
   const h = S.household;
   const me = Household.memberName(Household.member(h, S.user.uid));
-  return `${me} listed everything our home needs. Say how you feel about each task, and the app makes a fair split from both our answers.`;
+  return `${me} listed everything our home needs. Say how you feel about each task, and the app makes a fair plan from both our answers.`;
 }
 /** The invite went out (WhatsApp, share or copy): remember it, so the plan says "hasn't joined yet". */
 function markInvited() {
@@ -517,8 +534,8 @@ const Actions = {
       console.error(e);
       history.replaceState(null, '', '#/start');
       render(true);
-      const why = DATA_ERRORS[e && e.code] || 'Check your connection and try again.';
-      Sheets.notice("Couldn't create your household", `${why} (Error code: ${(e && (e.code || e.message)) || 'unknown'})`);
+      logDevHint(e);
+      Sheets.notice("Couldn't create your household", 'Check your internet connection and try again. If it keeps happening, please contact us.');
     }
   },
   async deleteHousehold() {
@@ -663,7 +680,7 @@ const Actions = {
       const input = document.getElementById('ct-name');
       if (!res) { toast('Write what needs doing first.'); if (input) input.focus(); return; }
       if (res === 'duplicate') { toast("You've suggested that already."); return; }
-      if (res === 'limit') { toast('That is plenty for now. Let the others decide first.'); return; }
+      if (res === 'limit') { toast(`That's enough for now. Wait for ${Household.memberName(Household.owner(h)).split(' ')[0]} to decide first.`); return; }
       S.customDraft = null;
       Sheet.close();
       save('suggestions');
@@ -727,7 +744,7 @@ const Actions = {
     const h = S.household;
     Household.submitPrefs(h, S.user.uid);
     commit('preferences');
-    toast('Saved. The plan follows your answers.');
+    toast('Saved. The plan now uses your answers.');
     go(S.fromSettings === 'rate' ? 'settings' : 'household');
   },
   /** The partner, after saying how they feel: the split is made from both answers, then both say yes. */
@@ -740,7 +757,7 @@ const Actions = {
     Household.buildPlan(h, null);
     save('preferences', 'plan', 'swaps', 'planSeed');
     mark('reviewed');
-    toast("Here's your split. Say yes when it works for you.");
+    toast("Here's your plan. Tap Start this plan when it works for you.");
     go('household');
   },
 
@@ -764,13 +781,13 @@ const Actions = {
     Sheet.close();
     Household.requestReshuffle(S.household, S.user.uid);
     save('reshuffle'); rerender();
-    toast('Asked. If they agree, you both get a fresh split.');
+    toast('Sent. If they agree, you get a new plan.');
   },
   acceptReshuffle() {
     const h = S.household;
     Household.acceptReshuffle(h, S.user.uid);
     save('planSeed', 'previousAssignments', 'plan', 'swaps', 'reshare', 'reshuffle');
-    toast("Here's a fresh split. Say yes when it works for you.");
+    toast("Here's your new plan. Tap Start this plan when it works for you.");
     go('household');
   },
   declineReshuffle() { Household.declineReshuffle(S.household); save('reshuffle'); rerender(); },
@@ -781,7 +798,7 @@ const Actions = {
   sendSwap(d) {
     Sheet.close();
     const swap = Household.requestSwap(S.household, S.user.uid, d.to, d.id);
-    if (swap) { save('swaps'); toast('Swap offered. Fingers crossed! 🤞'); }
+    if (swap) { save('swaps'); toast('Swap offered. Let\'s hope they say yes!'); }
     rerender();
   },
   takeSwap(d) {
@@ -853,7 +870,7 @@ const Actions = {
     if (!isOrganiser()) return;
     Household.clearFeel(S.household, d.id);
     save('completions');
-    toast('Kept as it is.');
+    toast('No change.');
     rerender();
   },
 
@@ -871,7 +888,7 @@ const Actions = {
     const next = (document.getElementById('pw-new') || {}).value || '';
     if (!cur) { toast('Type your current password.'); return; }
     if (next.length < 8) { toast('The new password needs at least 8 characters.'); return; }
-    if (next === cur) { toast('That is your current password.'); return; }
+    if (next === cur) { toast('The new password is the same as your current one.'); return; }
     if (next !== ((document.getElementById('pw-new2') || {}).value || '')) { toast("The new passwords don't match."); return; }
     try {
       await Backend.Auth.changePassword(cur, next);
@@ -879,7 +896,7 @@ const Actions = {
       toast('Password changed.');
     } catch (e) {
       const c = e && e.code;
-      toast(['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(c) ? 'Your current password is not right.'
+      toast(['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(c) ? 'Your current password is wrong.'
         : c === 'auth/weak-password' ? 'Pick a stronger password.'
         : c === 'auth/too-many-requests' ? 'Too many tries. Wait a moment and try again.'
         : "Couldn't change it. Check your connection and try again.");
@@ -925,7 +942,7 @@ const Actions = {
    */
   async startCheckout() {
     if (checkoutInFlight || !isOrganiser()) return;
-    if (!watchers.subLoaded || !Array.isArray(S.stripeSubs)) { toast("We're still checking your plan. Try again in a moment."); return; }
+    if (!watchers.subLoaded || !Array.isArray(S.stripeSubs)) { toast("We're still checking your subscription. Try again in a moment."); return; }
     if (hasAccess()) { toast('You already have a subscription.'); return; }
     if (Entitlements.paymentProblem(S.stripeSubs)) { toast('Please fix the payment for your subscription first.'); return; }
     const plan = S.planChoice === 'monthly' ? 'monthly' : 'yearly';
@@ -1015,7 +1032,7 @@ const Actions = {
     Household.setBreakdown(h, r.id, parts);
     commit('responsibilities', 'plan');
     S.breakdown = null;
-    if (shareNewTasks(true)) { toast(`${r.name} is now ${parts.length} parts. Say how you feel about them, then they're shared out fairly.`); return; }
+    if (shareNewTasks(true)) { toast(`${r.name} is now ${parts.length} parts. Say how you feel about them, then the app shares them fairly.`); return; }
     go('household');
     toast(`${r.name} is now ${parts.length} parts.`);
   },
@@ -1049,12 +1066,12 @@ const Actions = {
     const h = S.household;
     const done = Household.acceptReshare(h, S.user.uid);
     save('plan', 'reshare');
-    if (done) { toast('Done! Shared out fairly.'); go('household'); } else rerender();
+    if (done) { toast('Done! The new tasks are shared fairly.'); go('household'); } else rerender();
   },
   declineReshare() {
     Household.declineReshare(S.household);
     save('plan', 'reshare');
-    toast('No changes. Anything new that nobody has stays under Needs a home.');
+    toast('No changes. New tasks stay under "Nobody has these yet".');
     go('household');
   },
 
@@ -1074,8 +1091,9 @@ const Actions = {
       });
     } catch (e) {
       console.error(e);
+      if (e && e.code === 'permission-denied') console.warn("Couldn't send feedback: the database refused it. Check firestore.rules is published.");
       toast(e && e.code === 'permission-denied'
-        ? "Couldn't send: the database refused it. Check firestore.rules is published."
+        ? "Couldn't send. Please try again later."
         : "Couldn't send. Check your connection and try again.");
       return;
     }
@@ -1100,18 +1118,18 @@ const Actions = {
     rerender();
     if (n.kind === 'low') {
       const t = Household.noteTarget(h, n);
-      toast(!t ? 'On the board for whoever gets there first.'
-        : t.uid === S.user.uid ? `Added to your Today list (${t.via}).`
-        : `${Household.memberName(Household.member(h, t.uid))} will see it with ${t.via}.`);
-    } else toast(n.kind === 'today' ? 'On the board. Whoever takes it first gets it.' : 'On the board for 7 days.');
+      toast(!t ? 'On the board for anyone.'
+        : t.uid === S.user.uid ? `Added to your list on Me (${t.via}).`
+        : `${Household.memberName(Household.member(h, t.uid))} will see it on their list (${t.via}).`);
+    } else toast(n.kind === 'today' ? 'On the board. The first person to tap "I\'ll do it" gets it.' : 'On the board for 7 days.');
   },
   deleteNote(d) { if (Household.deleteNote(S.household, S.user.uid, d.id)) { save('notes'); rerender(); } },
   claimNote(d) {
-    if (Household.claimNote(S.household, S.user.uid, d.id)) { save('notes'); rerender(); toast("It's on your Today list."); }
+    if (Household.claimNote(S.household, S.user.uid, d.id)) { save('notes'); rerender(); toast("It's on your list on Me."); }
     else { toast('Someone already took it.'); rerender(); }
   },
   gotNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Thanks! Off the board.'); } },
-  doneNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Done. Nice one.'); } },
+  doneNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Done. Thank you!'); } },
 
   /* the partner suggests list changes, the organiser decides */
   suggestChanges() {
@@ -1136,7 +1154,7 @@ const Actions = {
     Household.toggleSuggestion(h, S.user.uid, 'remove', d.id);
     save('suggestions');
     Sheet.close();
-    toast(had ? 'Suggestion withdrawn.' : `Suggested. ${Household.memberName(Household.owner(h))} decides.`);
+    toast(had ? 'Suggestion taken back.' : `Suggested. ${Household.memberName(Household.owner(h))} decides.`);
     rerender();
   },
   /** An open suggestion for a new task, in your own words. */
@@ -1147,7 +1165,7 @@ const Actions = {
     const res = Household.suggestAdd(h, S.user.uid, input ? input.value : '');
     if (!res) { toast('Write what needs doing first.'); if (input) input.focus(); return; }
     if (res === 'duplicate') { toast("You've suggested that already."); return; }
-    if (res === 'limit') { toast('That is plenty for now. Let the others decide first.'); return; }
+    if (res === 'limit') { toast(`That's enough for now. Wait for ${Household.memberName(Household.owner(h)).split(' ')[0]} to decide first.`); return; }
     save('suggestions');
     toast(`Suggested. ${Household.memberName(Household.owner(h))} decides.`);
     rerender();
@@ -1166,10 +1184,10 @@ const Actions = {
     commit('responsibilities', 'suggestions', 'plan');
     rerender();
     if (sug.type !== 'remove' && shareNewTasks(true)) {
-      toast(sug.type === 'add' ? `Added ${sug.name}. Say how you feel about it, then it's shared out fairly.` : `${sug.name} is now broken into parts. Say how you feel about them, then they're shared out fairly.`);
+      toast(sug.type === 'add' ? `Added ${sug.name}. Say how you feel about it, then the app shares it fairly.` : `${sug.name} is now split into parts. Say how you feel about them, then the app shares them fairly.`);
       return;
     }
-    toast(sug.type === 'add' ? `Added ${sug.name}` : sug.type === 'breakdown' ? `${sug.name} is now broken into parts.` : `Removed ${sug.name}`);
+    toast(sug.type === 'add' ? `Added ${sug.name}.` : sug.type === 'breakdown' ? `${sug.name} is now split into parts.` : `Removed ${sug.name}.`);
   },
   declineSuggestion(d) {
     if (!isOrganiser()) return;
@@ -1348,7 +1366,8 @@ function watchLoading(name) {
     if (currentRoute === 'loading' || currentRoute === 'joining') {
       S.phase = 'error';
       S.joining = false;
-      S.fatal = "This is taking too long. Check your connection. A content blocker, VPN or DNS filter blocking Google's Firebase (gstatic.com, googleapis.com, firebaseapp.com) can also cause this.";
+      console.warn("Loading took over 15 s. A content blocker, VPN or DNS filter blocking Google's Firebase (gstatic.com, googleapis.com, firebaseapp.com) can cause this.");
+      S.fatal = 'This is taking too long. Check your internet connection. An ad blocker or VPN can also cause this.';
       render(true);
     }
   }, 15000);
@@ -1571,7 +1590,8 @@ document.addEventListener('keydown', e => {
     captureParams();
     if (!Backend.sdkLoaded()) {
       S.phase = 'error';
-      S.fatal = "Couldn't reach the sign-in service. A content blocker, VPN or DNS filter may be blocking Google's Firebase (gstatic.com, googleapis.com). Allow those sites, or try another network, then reload.";
+      console.warn("Firebase SDK didn't load. A content blocker, VPN or DNS filter may be blocking gstatic.com / googleapis.com.");
+      S.fatal = "Couldn't connect. Check your internet connection. An ad blocker or VPN can also cause this. Then reload the page.";
       render(true);
       return;
     }
@@ -1587,7 +1607,8 @@ document.addEventListener('keydown', e => {
     // Never leave a blank page: show what went wrong instead.
     console.error(e);
     S.phase = 'error';
-    S.fatal = "The app couldn't start. Check js/config.js matches the Firebase setup in the README.";
+    console.warn('Check js/config.js matches the Firebase setup in the README.');
+    S.fatal = "The app couldn't start. Please reload the page, or try again later.";
     try { render(true); } catch (e2) {
       document.getElementById('app').innerHTML = '<main class="screen"><h1>Something went wrong</h1><p class="lead">' + esc(S.fatal) + '</p></main>';
     }

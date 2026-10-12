@@ -115,7 +115,7 @@ const Household = {
     const n = ((m && m.name) || '').trim();
     if (n) return n;
     if (m && m.placeholder) return 'Your partner';
-    return m && m.role === 'owner' ? 'Organiser' : 'Partner';
+    return 'Partner';
   },
   renameMember(h, userId, name) { const m = this.member(h, userId); if (m && !m.placeholder) m.name = name.slice(0, 40); },
 

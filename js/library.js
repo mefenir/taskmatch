@@ -33,7 +33,7 @@ const LIBRARY = Object.freeze({
     { id: 'waste',        name: 'Waste & recycling' },
     { id: 'supplies',     name: 'Household supplies' },
     { id: 'maintenance',  name: 'Maintenance' },
-    { id: 'organisation', name: 'Organisation & mental load' },
+    { id: 'organisation', name: 'Planning & paperwork' },
     { id: 'children',     name: 'Children' },
     { id: 'pets',         name: 'Pets' },
     { id: 'garden',       name: 'Garden & outdoors' },
@@ -43,53 +43,53 @@ const LIBRARY = Object.freeze({
     // Each task bundles its usual parts; breaking it down turns them into
     // separate tasks with their own timing and owner. `tasks` lists those parts.
     // Cleaning
-    R('cleaning', 'clean_bathroom', 'Clean bathroom', When.room('bathroom'), { perRoom: 'bathroom', tasks: ['Clean toilet', 'Clean sink', 'Clean shower & bath', 'Clean mirror', 'Clean floor', 'Fresh towels', 'Refill toilet paper & soap'] }),
+    R('cleaning', 'clean_bathroom', 'Clean bathroom', When.room('bathroom'), { perRoom: 'bathroom', tasks: ['Clean toilet', 'Clean sink', 'Clean shower & bath', 'Clean mirror', 'Clean floor', 'Put out fresh towels', 'Refill toilet paper & soap'] }),
     R('cleaning', 'clean_floors', 'Clean floors', When.always, { tasks: ['Vacuum', 'Mop'] }),
     R('cleaning', 'tidying', 'General tidying', When.always, { tasks: ['Tidy up', 'Dusting', 'Change bed linen'] }),
     R('cleaning', 'clean_windows', 'Clean windows', When.always, { tasks: ['Clean windows', 'Wipe frames & sills'] }),
     R('cleaning', 'tidy_office', 'Tidy home office', When.room('office'), { perRoom: 'office', tasks: ['Clear the desk', 'Sort papers'] }),
     // Kitchen & dishes
-    R('kitchen', 'dishes', 'Dishes', When.room('kitchen'), { tasks: ['Load dishwasher', 'Unload dishwasher', 'Wash up by hand'] }),
+    R('kitchen', 'dishes', 'Dishes', When.room('kitchen'), { tasks: ['Load dishwasher', 'Unload dishwasher', 'Wash dishes by hand'] }),
     R('kitchen', 'clean_kitchen', 'Clean kitchen', When.room('kitchen'), { perRoom: 'kitchen', tasks: ['Wipe surfaces', 'Clean sink', 'Clean appliances'] }),
     // Laundry
     R('laundry', 'laundry', 'Laundry', When.always, { tasks: ['Wash clothes', 'Dry & hang up', 'Fold', 'Put away', 'Wash towels'] }),
     // Food
-    R('food', 'groceries', 'Grocery', When.always, { mentalLoad: true, tasks: [
+    R('food', 'groceries', 'Groceries', When.always, { mentalLoad: true, tasks: [
       { name: 'Meal planning', mentalLoad: true }, { name: "Check what's missing", mentalLoad: true },
       { name: 'Make the shopping list', mentalLoad: true }, { name: 'Shopping' }, { name: 'Put groceries away' } ] }),
     R('food', 'cooking', 'Cooking', When.always, { tasks: ['Prepare ingredients', 'Cook', 'Pack lunches', 'Store leftovers'] }),
     // Waste
-    R('waste', 'rubbish', 'Take rubbish out', When.always, { tasks: ['Take the bins out', 'Bring bins back in', 'Replace bin bags'] }),
-    R('waste', 'recycling', 'Recycling', When.always, { tasks: ['Paper', 'Glass', 'Bottles & deposit', 'Packaging'] }),
+    R('waste', 'rubbish', 'Take out the rubbish', When.always, { tasks: ['Take the bins out', 'Bring bins back in', 'Replace bin bags'] }),
+    R('waste', 'recycling', 'Recycling', When.always, { tasks: ['Paper', 'Glass', 'Return deposit bottles', 'Packaging'] }),
     // Supplies
     R('supplies', 'supplies', 'Household supplies', When.always, { mentalLoad: true, tasks: ['Cleaning products', 'Toilet paper', 'Laundry detergent', 'Other household supplies'] }),
     // Maintenance
-    R('maintenance', 'small_repairs', 'Small repairs & DIY', When.always, { tasks: ['Light bulbs', 'Furniture assembly', 'Small fixes'] }),
-    R('maintenance', 'tradespeople', 'Repairs & tradespeople', When.always, { mentalLoad: true, tasks: ['Appliances', 'Heating', 'Plumbing', 'Book repairs', 'Contact tradespeople'] }),
+    R('maintenance', 'small_repairs', 'Small repairs', When.always, { tasks: ['Light bulbs', 'Furniture assembly', 'Small fixes'] }),
+    R('maintenance', 'tradespeople', 'Repairs by professionals', When.always, { mentalLoad: true, tasks: ['Appliances', 'Heating', 'Plumbing', 'Book a repair', 'Call a repair service'] }),
     // Organisation / mental load
-    R('organisation', 'appointments', 'Appointments', When.always, { mentalLoad: true, tasks: ['Book appointments', 'Keep the shared calendar'] }),
-    R('organisation', 'documents', 'Household paperwork', When.always, { mentalLoad: true, tasks: ['Bills & contracts', 'Insurance', 'Filing'] }),
+    R('organisation', 'appointments', 'Appointments', When.always, { mentalLoad: true, tasks: ['Book appointments', 'Update the shared calendar'] }),
+    R('organisation', 'documents', 'Household paperwork', When.always, { mentalLoad: true, tasks: ['Bills & contracts', 'Insurance', 'File papers'] }),
     R('organisation', 'track_todos', 'Keep track of to-dos & dates', When.always, { mentalLoad: true, tasks: ['Track what needs doing', 'Remember birthdays & dates', 'Gifts & cards'] }),
     // Children
-    R('children', 'kids_ready', 'Getting the kids ready', When.kids, { tasks: ["Prepare children's clothes", 'Pack school/Kita bags'] }),
-    R('children', 'school_runs', 'School/Kita runs', When.kids, { tasks: ['Drop-off', 'Pickup'] }),
+    R('children', 'kids_ready', 'Getting the children ready', When.kids, { tasks: ["Prepare children's clothes", 'Pack school & daycare bags'] }),
+    R('children', 'school_runs', 'Take children to school & daycare', When.kids, { tasks: ['Drop-off', 'Pickup'] }),
     R('children', 'kids_meals', "Children's meals", When.kids, { tasks: ['Breakfast', 'Snacks', 'Dinner'] }),
     R('children', 'bath_bedtime', 'Bath & bedtime', When.kids, { tasks: ['Bathing', 'Bedtime'] }),
-    R('children', 'toys', "Toys & kids' tidying", When.kids, { tasks: ['Tidy toys', "Sort kids' clothes"] }),
-    R('children', 'kids_admin', 'School/Kita admin & appointments', When.kids, { mentalLoad: true, tasks: ['Forms & admin', 'Doctor appointments', 'Parent evenings'] }),
+    R('children', 'toys', "Children's toys & clothes", When.kids, { tasks: ['Tidy toys', "Sort children's clothes"] }),
+    R('children', 'kids_admin', 'School, daycare & appointments', When.kids, { mentalLoad: true, tasks: ['Forms', 'Doctor appointments', 'Parent-teacher meetings'] }),
     R('children', 'activities', 'Activities', When.kids, { tasks: ['Drive to activities', 'Organise playdates'] }),
     // Pets
-    R('pets', 'feed_pet', 'Feed pet', When.pets, { tasks: ['Food', 'Fresh water'] }),
-    R('pets', 'walk_pet', 'Walk pet', When.pet('dog'), { tasks: ['Morning walk', 'Evening walk'] }),
-    R('pets', 'litter', 'Clean litter', When.pet('cat'), { tasks: ['Scoop litter', 'Change litter'] }),
+    R('pets', 'feed_pet', 'Feed the pets', When.pets, { tasks: ['Food', 'Fresh water'] }),
+    R('pets', 'walk_pet', 'Walk the dog', When.pet('dog'), { tasks: ['Morning walk', 'Evening walk'] }),
+    R('pets', 'litter', 'Clean the litter box', When.pet('cat'), { tasks: ['Scoop litter', 'Change litter'] }),
     R('pets', 'pet_care', 'Vet & pet supplies', When.pets, { mentalLoad: true, tasks: ['Vet appointments', 'Buy food & supplies'] }),
     // Garden
-    R('garden', 'mow', 'Mow the lawn', When.room('garden'), { tasks: ['Mow', 'Edges & clippings'] }),
-    R('garden', 'water_garden', 'Water the garden', When.room('garden'), { tasks: ['Water beds', 'Water pots'] }),
+    R('garden', 'mow', 'Mow the lawn', When.room('garden'), { tasks: ['Mow', 'Trim edges & clear grass'] }),
+    R('garden', 'water_garden', 'Water the garden', When.room('garden'), { tasks: ['Water flower beds', 'Water pots'] }),
     R('garden', 'garden_tidy', 'Weeding & garden tidying', When.room('garden'), { tasks: ['Weeding', 'Rake leaves', 'Tidy outdoor space'] }),
     // Car
     R('car', 'car_care', 'Vehicle care', When.room('vehicle'), { perRoom: 'vehicle', tasks: ['Refuel / charge', 'Clean the vehicle'] }),
-    R('car', 'car_service', 'Service & tyres', When.room('vehicle'), { perRoom: 'vehicle', mentalLoad: true, tasks: ['Service & inspection', 'Seasonal tyre change'] }),
+    R('car', 'car_service', 'Car service & tyres', When.room('vehicle'), { perRoom: 'vehicle', mentalLoad: true, tasks: ['Service & inspection', 'Change summer/winter tyres'] }),
   ]),
 });
 
@@ -111,22 +111,22 @@ const Library = (() => {
 
 /* Examples shown in the "Add your own part" field, by task, then by area. Never one of the task's own parts. */
 const PART_EXAMPLES = Object.freeze({
-  clean_bathroom: 'Clean the grout', clean_floors: 'Clean the skirting boards', tidying: 'Water the plants',
+  clean_bathroom: 'Clean the grout', clean_floors: 'Clean along the floor edges', tidying: 'Water the plants',
   clean_windows: 'Clean the blinds', tidy_office: 'Dust the screen', dishes: 'Scrub the pans',
-  clean_kitchen: 'Descale the kettle', laundry: 'Iron shirts', groceries: 'Check the fridge',
-  cooking: 'Plan the week\'s meals', rubbish: 'Clean the bins', recycling: 'Return deposit bottles',
-  supplies: 'Dishwasher tabs', small_repairs: 'Oil squeaky hinges', tradespeople: 'Chimney sweep',
-  appointments: 'Dentist check-ups', documents: 'Tax return', track_todos: 'Plan holidays',
+  clean_kitchen: 'Remove limescale from the kettle', laundry: 'Iron shirts', groceries: 'Check the fridge',
+  cooking: 'Plan the week\'s meals', rubbish: 'Clean the bins', recycling: 'Rinse the jars',
+  supplies: 'Dishwasher tabs', small_repairs: 'Oil the door hinges', tradespeople: 'Book the chimney sweep',
+  appointments: 'Dentist check-ups', documents: 'Tax return', track_todos: 'Plan trips',
   kids_ready: 'Check the weather', school_runs: 'Bring the gym bag', kids_meals: 'Pack fruit',
   bath_bedtime: 'Read a story', toys: 'Give away old toys', kids_admin: 'Sign permission slips',
   activities: 'Swimming lessons', feed_pet: 'Wash the bowls', walk_pet: 'Midday walk',
   litter: 'Clean the tray', pet_care: 'Flea treatment', mow: 'Sharpen the blades',
-  water_garden: 'Water the hanging baskets', garden_tidy: 'Trim the hedge', car_care: 'Top up washer fluid',
+  water_garden: 'Water the hanging baskets', garden_tidy: 'Trim the hedge', car_care: 'Refill windscreen washer fluid',
   car_service: 'Renew the parking permit',
   // by area, for your own tasks
   cleaning: 'Dust the shelves', kitchen: 'Clean the oven', food: 'Check the fridge',
-  waste: 'Clean the bins', maintenance: 'Bleed the radiators', organisation: 'Pay the bills',
-  children: 'Pack the bags', pets: 'Brush the coat', garden: 'Sweep the patio', car: 'Check tyre pressure',
+  waste: 'Clean the bins', maintenance: 'Check the heating', organisation: 'Pay the bills',
+  children: 'Pack the bags', pets: "Brush the pet's fur", garden: 'Sweep the patio', car: 'Check tyre pressure',
 });
 
 /* =========================================================
@@ -141,7 +141,7 @@ const FREQUENCIES = Object.freeze([
   { id: 'weekly',      label: 'Weekly',               perWeek: 1,    everyDays: 7 },
   { id: 'fortnightly', label: 'Every two weeks',      perWeek: 0.5,  everyDays: 14 },
   { id: 'monthly',     label: 'Monthly',              perWeek: 0.25, everyMonths: 1 },
-  { id: 'occasionally', label: 'Occasionally',        perWeek: 0.08 },
+  { id: 'occasionally', label: 'A few times a year',  perWeek: 0.08 },
   { id: 'asneeded',    label: 'As needed',            perWeek: 0.15 },
 ]);
 const MINUTE_OPTIONS = Object.freeze([5, 10, 15, 20, 25, 30, 45, 60, 90, 120, 180, 240]);

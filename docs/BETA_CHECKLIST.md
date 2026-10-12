@@ -11,6 +11,7 @@ Invites go out Friday 16 October 2026. Last changes and the full security check 
 - [ ] Include the partner's task suggestions (v55) in the security check
 - [ ] Turn automatic approval on or off, as decided
 - [ ] Open the live app on a phone as organiser and as partner: sign up, invite, join, rate, split, tick
+- [ ] Have legal.html checked by a lawyer before charging anyone (the page no longer says it's a template)
 
 ## Future updates (decide with the beta feedback)
 Go through what testers send (Settings → Send feedback, the day-7 survey, the day-21 conversations) and add it here before choosing what's next.
