@@ -458,3 +458,25 @@ a[x-apple-data-detectors], .plain-text a{color:inherit!important;text-decoration
 .cal-due.overdue .cal-due-when{color:var(--danger)}
 .field-hint{display:block;font-size:12.5px;color:var(--muted);margin-top:6px}
 input.select[type=date],input.select[type=time]{background-image:none;padding-right:12px;min-height:44px;font:inherit;font-size:15px;color:var(--ink)}
+
+/* Month view: one dot on each day with something planned. */
+.cal-month-link{border:0;background:transparent;color:var(--accent);font:inherit;font-size:14px;font-weight:650;padding:10px 6px;min-height:44px;cursor:pointer}
+.cal-month-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px}
+.cal-month-title{margin:0;font-size:24px;line-height:30px;text-align:center;flex:1}
+.cal-month-head .icon-btn[disabled]{opacity:.25;cursor:default}
+.icon-btn.flip svg{transform:scaleX(-1)}
+.cal-grid-card{padding:10px 8px 8px}
+.cal-weekdays,.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.cal-weekdays span{text-align:center;font-size:12px;font-weight:650;color:var(--muted);padding:0 0 6px}
+.cal-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:46px;border:0;background:transparent;border-radius:12px;font:inherit;color:var(--ink);cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;padding:0}
+.cal-cell.blank{cursor:default}
+.cal-num{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;font-size:15px;font-weight:550}
+.cal-cell.past .cal-num{color:var(--muted)}
+.cal-cell.today .cal-num{background:var(--accent-soft);color:var(--accent);font-weight:700}
+.cal-cell.picked .cal-num{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.cal-dot{width:5px;height:5px;border-radius:50%;background:transparent}
+.cal-dot.on{background:var(--accent)}
+.cal-cell:active .cal-num{transform:scale(.94)}
+.cal-day-list{padding:0}
+.cal-day-list .cal-row:first-child{border-top:0}
+.cal-row.done .cal-text{color:var(--muted);text-decoration:line-through;font-weight:500}

@@ -22,7 +22,6 @@ const Icon = {
   calendar: svg('<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>', 20, 1.8),
   board:   svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/>', 20, 1.8),
   note:    svg('<path d="M20 12a7 7 0 0 1-10.3 6.2L5 19.5l1.3-4.2A7 7 0 1 1 20 12z"/>', 18, 1.9),
-  low:     svg('<path d="M5 9h14l-1.4 9.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8z"/><path d="M9 9l3-5 3 5"/>', 18, 1.9),
   today:   svg('<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>', 18, 1.9),
   // How you feel about a task (rating screens): heart, smile, frown.
   love:    svg('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>', 22, 1.9),

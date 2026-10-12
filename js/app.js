@@ -6,7 +6,7 @@
 const INVITE_KEY = 'household-app/pending-invite';
 const INVITE_FROM_KEY = 'household-app/pending-invite-from';
 const HOUSEHOLD_SCREENS = ['members', 'home', 'responsibilities', 'frequency', 'rate', 'review', 'today', 'household', 'settings',
-  'subscribe', 'breakdown', 'reshare', 'swap'];
+  'subscribe', 'breakdown', 'reshare', 'swap', 'calendar'];
 const SETUP_SCREENS = ONBOARDING;
 
 const S = {
@@ -31,7 +31,9 @@ const S = {
   inviteLink: null,          // ready-made invite (so sharing can open straight from the tap)
   openCats: {},              // categories opened in the task list on Us
   openParts: {},
-  needsIndex: 0,             // which request the "Needs you" carousel shows             // people's parts opened on Us (all start closed)
+  needsIndex: 0,
+  calMonth: null,            // month view: 'YYYY-MM' shown (null = this month)
+  calDay: null,              // month view: the day picked (null = today)             // which request the "Needs you" carousel shows             // people's parts opened on Us (all start closed)
   pendingInvite: null,
   inviteFrom: null,
   auth: { mode: 'signup', busy: false, error: '', note: '', values: {} },
@@ -1117,12 +1119,7 @@ const Actions = {
     openBoard(true);
     Sheet.close();
     rerender();
-    if (n.kind === 'low') {
-      const t = Household.noteTarget(h, n);
-      toast(!t ? 'On the board for anyone.'
-        : t.uid === S.user.uid ? `Added to your list on Me (${t.via}).`
-        : `${Household.memberName(Household.member(h, t.uid))} will see it on their list (${t.via}).`);
-    } else toast(n.kind === 'today' ? 'On the board. The first person to tap "I\'ll do it" gets it.' : 'On the board for 7 days.');
+    toast(n.kind === 'today' ? 'On the board. The first person to tap "I\'ll do it" gets it.' : 'On the board for 7 days.');
   },
   deleteNote(d) { if (Household.deleteNote(S.household, S.user.uid, d.id)) { save('notes'); rerender(); } },
   claimNote(d) {
@@ -1130,8 +1127,8 @@ const Actions = {
     else { toast('Someone already took it.'); rerender(); }
   },
   /* calendar */
-  addCal() { S.calDraft = null; Sheets.addCal(); const i = document.getElementById('cal-text'); if (i) i.focus({ preventScroll: true }); },
-  calKind(d) { S.calDraft = { ...(S.calDraft || {}), task: d.key === 'task' }; Sheets.addCal(); },
+  addCal(d = {}) { S.calDraft = d.key ? { task: false, text: '', day: d.key, until: '', time: '', for: 'any' } : null; Sheets.addCal(); const i = document.getElementById('cal-text'); if (i) i.focus({ preventScroll: true }); },
+  calKind(d) { S.calDraft = { ...(S.calDraft || {}), task: d.key === 'task', until: '' }; Sheets.addCal(); },
   calFor(d) { S.calDraft = { ...(S.calDraft || {}), for: d.key }; Sheets.addCal(); },
   postCal() {
     const h = S.household;
@@ -1139,6 +1136,7 @@ const Actions = {
     const res = Household.addCal(h, S.user.uid, d);
     if (res === 'text') { toast('Write what it is first.'); const i = document.getElementById('cal-text'); if (i) i.focus(); return; }
     if (res === 'day') { toast('Pick today or a day after.'); return; }
+    if (res === 'until') { toast('"Until" needs to be on or after the first day.'); return; }
     if (res === 'limit') { toast('The calendar is full. Remove something first.'); return; }
     save('notes');
     S.calDraft = null;
@@ -1150,8 +1148,20 @@ const Actions = {
     toast(!res.task ? `Added for ${when}.` : !o ? `Added for ${when}. The first to tap "I'll do it" gets it.`
       : o === S.user.uid ? `Added to your list for ${when}.` : `Added to ${Household.memberName(Household.member(h, o))}'s list for ${when}.`);
   },
-  openCal(d) { const n = Household.calItems(S.household).find(x => x.id === d.id); if (n) Sheets.calItem(n); },
-  calAll() { Sheets.calAll(); },
+  /* month view */
+  calMonthGo(d) {
+    const [y, m] = Household.calMonthOf(S.calMonth).split('-').map(Number);
+    const next = new Date(y, m - 1 + Number(d.delta || 0), 1);
+    const key = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
+    const [lo, hi] = calMonthRange();
+    if (key < lo || key > hi) return;
+    S.calMonth = key;
+    const today = Household.dayKey();
+    S.calDay = today.slice(0, 7) === key ? today : `${key}-01`;
+    rerender();
+  },
+  calPickDay(d) { S.calDay = d.key; rerender(); },
+  openCal(d) { const n = Household.calAll(S.household).find(x => x.id === d.id); if (n) Sheets.calItem(n); },
   calSeen(d) { Household.calSeen(S.household, S.user.uid, d.id); save('notes'); rerender(); },
   claimCal(d) {
     if (Household.claimCal(S.household, S.user.uid, d.id)) { Sheet.close(); save('notes'); rerender(); toast("It's on your list on Me."); }
@@ -1167,8 +1177,7 @@ const Actions = {
     }
     if (Household.deleteCal(S.household, S.user.uid, d.id)) { Sheet.close(); save('notes'); rerender(); toast('Removed.'); }
   },
-  gotNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Thanks! Off the board.'); } },
-  doneNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Done. Thank you!'); } },
+  doneNote(d) { if (Household.finishNote(S.household, d.id, S.user.uid)) { save('notes'); rerender(); toast('Done. Thank you!'); } },
 
   /* the partner suggests list changes, the organiser decides */
   suggestChanges() {
@@ -1264,7 +1273,13 @@ const Changes = {
   frequency(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { frequency: value }); commit('responsibilities'); rerender(); },
   minutes(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { minutes: Number(value) }); commit('responsibilities'); rerender(); },
   customCategory(value) { S.customDraft = { ...(S.customDraft || {}), category: value }; },
-  calDay(value) { S.calDraft = { ...(S.calDraft || {}), day: value }; },
+  calDay(value) {
+    const d = { ...(S.calDraft || {}), day: value };
+    if (d.until && d.until < value) d.until = '';
+    S.calDraft = d;
+    const u = document.getElementById('cal-until'); if (u) { u.min = value; if (!d.until) u.value = ''; }
+  },
+  calUntil(value) { S.calDraft = { ...(S.calDraft || {}), until: value }; },
   calTime(value) { S.calDraft = { ...(S.calDraft || {}), time: value }; },
   customFrequency(value) { S.customDraft = { ...(S.customDraft || {}), frequency: value }; },
   customMinutes(value) { S.customDraft = { ...(S.customDraft || {}), minutes: Number(value) }; },
@@ -1272,7 +1287,7 @@ const Changes = {
 
 const Inputs = {
   feedbackText(value) { S.feedbackDraft = String(value).slice(0, 1000); },
-  calText(value) { S.calDraft = { ...(S.calDraft || { task: false, day: Household.dayKey(), time: '', for: 'any' }), text: value }; },
+  calText(value) { S.calDraft = { ...(S.calDraft || { task: false, day: Household.dayKey(), until: '', time: '', for: 'any' }), text: value }; },
   noteText(value) { S.noteDraft = { ...(S.noteDraft || { kind: 'note' }), text: value }; },
   breakNew(value) {
     if (!S.breakdown) return;
@@ -1353,7 +1368,7 @@ function resolveRoute() {
   const myTurn = !organiser && stage === 'review' && !Household.prefsComplete(h, me);
   // Once the plan runs: Today (mine) and Home (ours). Before that, Home is the only screen.
   const home = myTurn ? 'review' : stage === 'active' ? 'today' : 'household';
-  let allowed = stage === 'active' ? ['today', 'household'] : ['household', 'rate'];
+  let allowed = stage === 'active' ? ['today', 'household', 'calendar'] : ['household', 'rate'];
   if (myTurn) allowed = ['review', 'household'];
   else if (h.plan && !Household.alone(h) && Entitlements.active(S.subscription)) allowed = allowed.concat(['swap']);
   if (organiser) allowed = allowed.concat(['members', 'home', 'responsibilities', 'frequency']);
@@ -1657,6 +1672,22 @@ document.addEventListener('keydown', e => {
   }
 })();
 
+
+/* Month view: swipe the grid sideways to change month. */
+(function monthSwipe() {
+  let x0 = null, y0 = 0;
+  document.addEventListener('touchstart', e => {
+    const g = e.target.closest('.cal-grid-card');
+    if (!g || e.touches.length !== 1) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) Actions.calMonthGo({ delta: dx < 0 ? 1 : -1 });
+  }, { passive: true });
+})();
 
 /* Keep a focused field above the phone's keyboard, everywhere: sheets are lifted by the keyboard
    height and scroll inside; pages get room at the bottom and scroll so the field sits in the visible
