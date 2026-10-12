@@ -25,6 +25,7 @@ const S = {
   breakdown: null,           // { respId, parts: [{ name, minutes, frequency, custom, on }], newName } while editing
   prefDraft: null,           // answers being changed on the review / rate screens, saved in one go
   customDraft: null,         // the "add your own task" form
+  calDraft: null,            // the "add to the calendar" form
   planChoice: 'yearly',      // plan picked on the plans screen
   checkoutReturn: null,      // 'success' | 'cancel' after coming back from Stripe
   inviteLink: null,          // ready-made invite (so sharing can open straight from the tap)
@@ -1128,6 +1129,44 @@ const Actions = {
     if (Household.claimNote(S.household, S.user.uid, d.id)) { save('notes'); rerender(); toast("It's on your list on Me."); }
     else { toast('Someone already took it.'); rerender(); }
   },
+  /* calendar */
+  addCal() { S.calDraft = null; Sheets.addCal(); const i = document.getElementById('cal-text'); if (i) i.focus({ preventScroll: true }); },
+  calKind(d) { S.calDraft = { ...(S.calDraft || {}), task: d.key === 'task' }; Sheets.addCal(); },
+  calFor(d) { S.calDraft = { ...(S.calDraft || {}), for: d.key }; Sheets.addCal(); },
+  postCal() {
+    const h = S.household;
+    const d = S.calDraft || {};
+    const res = Household.addCal(h, S.user.uid, d);
+    if (res === 'text') { toast('Write what it is first.'); const i = document.getElementById('cal-text'); if (i) i.focus(); return; }
+    if (res === 'day') { toast('Pick today or a day after.'); return; }
+    if (res === 'limit') { toast('The calendar is full. Remove something first.'); return; }
+    save('notes');
+    S.calDraft = null;
+    Sheet.close();
+    rerender();
+    const day = calDayLabel(res.day);
+    const when = (/^(Today|Tomorrow)$/.test(day) ? day.toLowerCase() : day) + (res.time ? ` at ${res.time}` : '');
+    const o = Household.calOwner(res);
+    toast(!res.task ? `Added for ${when}.` : !o ? `Added for ${when}. The first to tap "I'll do it" gets it.`
+      : o === S.user.uid ? `Added to your list for ${when}.` : `Added to ${Household.memberName(Household.member(h, o))}'s list for ${when}.`);
+  },
+  openCal(d) { const n = Household.calItems(S.household).find(x => x.id === d.id); if (n) Sheets.calItem(n); },
+  calAll() { Sheets.calAll(); },
+  calSeen(d) { Household.calSeen(S.household, S.user.uid, d.id); save('notes'); rerender(); },
+  claimCal(d) {
+    if (Household.claimCal(S.household, S.user.uid, d.id)) { Sheet.close(); save('notes'); rerender(); toast("It's on your list on Me."); }
+    else { Sheet.close(); toast('Someone already took it.'); rerender(); }
+  },
+  /** Removing is for both of you, so it takes a second tap. */
+  deleteCal(d, el) {
+    if (el && el.dataset.armed !== '1') {
+      el.dataset.armed = '1';
+      el.textContent = 'Tap again to remove it for both of you';
+      setTimeout(() => { if (el.isConnected) { el.dataset.armed = ''; el.textContent = 'Remove'; } }, 3000);
+      return;
+    }
+    if (Household.deleteCal(S.household, S.user.uid, d.id)) { Sheet.close(); save('notes'); rerender(); toast('Removed.'); }
+  },
   gotNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Thanks! Off the board.'); } },
   doneNote(d) { if (Household.finishNote(S.household, d.id)) { save('notes'); rerender(); toast('Done. Thank you!'); } },
 
@@ -1225,12 +1264,15 @@ const Changes = {
   frequency(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { frequency: value }); commit('responsibilities'); rerender(); },
   minutes(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { minutes: Number(value) }); commit('responsibilities'); rerender(); },
   customCategory(value) { S.customDraft = { ...(S.customDraft || {}), category: value }; },
+  calDay(value) { S.calDraft = { ...(S.calDraft || {}), day: value }; },
+  calTime(value) { S.calDraft = { ...(S.calDraft || {}), time: value }; },
   customFrequency(value) { S.customDraft = { ...(S.customDraft || {}), frequency: value }; },
   customMinutes(value) { S.customDraft = { ...(S.customDraft || {}), minutes: Number(value) }; },
 };
 
 const Inputs = {
   feedbackText(value) { S.feedbackDraft = String(value).slice(0, 1000); },
+  calText(value) { S.calDraft = { ...(S.calDraft || { task: false, day: Household.dayKey(), time: '', for: 'any' }), text: value }; },
   noteText(value) { S.noteDraft = { ...(S.noteDraft || { kind: 'note' }), text: value }; },
   breakNew(value) {
     if (!S.breakdown) return;

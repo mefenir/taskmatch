@@ -47,7 +47,9 @@ const INVITEE = 'invitee';
 const SAFE_ID = /^[\w-]{1,64}$/;
 const okId = x => typeof x === 'string' && SAFE_ID.test(x);
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
-const NOTE_KIND_IDS = ['note', 'low', 'today'];
+const NOTE_KIND_IDS = ['note', 'low', 'today', 'cal'];
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const Household = {
   /**
@@ -63,7 +65,17 @@ const Household = {
       .map(r => (r.parts == null || Array.isArray(r.parts) ? r : { ...r, parts: [] }))
       .map(r => (r.parts ? { ...r, parts: r.parts.filter(p => isObj(p) && okId(p.id)) } : r));
     h.swaps = list(h.swaps, x => okId(x.id));
-    h.notes = list(h.notes, n => okId(n.id) && NOTE_KIND_IDS.includes(n.kind) && typeof n.text === 'string');
+    h.notes = list(h.notes, n => okId(n.id) && NOTE_KIND_IDS.includes(n.kind) && typeof n.text === 'string'
+      && (n.kind !== 'cal' || (typeof n.day === 'string' && DAY_RE.test(n.day))))
+      .map(n => n.kind !== 'cal' ? n : {
+        ...n,
+        task: n.task === true,
+        time: typeof n.time === 'string' && TIME_RE.test(n.time) ? n.time : null,
+        // Someone who left the household no longer holds anything: it's free to take again.
+        for: okId(n.for) && h.memberIds.includes(n.for) ? n.for : 'any',
+        claimedBy: okId(n.claimedBy) && h.memberIds.includes(n.claimedBy) ? n.claimedBy : null,
+        seenBy: (Array.isArray(n.seenBy) ? n.seenBy : []).filter(okId),
+      });
     h.suggestions = list(h.suggestions, x => okId(x.id) && ['add', 'remove', 'breakdown'].includes(x.type))
       .map(x => (x.parts == null ? x : { ...x, parts: (Array.isArray(x.parts) ? x.parts : []).filter(p => isObj(p) && typeof p.name === 'string') }));
     const ids = v => (Array.isArray(v) ? v.filter(okId) : []);
@@ -187,6 +199,8 @@ const Household = {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   },
   noteAlive(n, now = Date.now()) {
+    // Calendar: a note lives until its day is over; a task until someone does it (or removes it).
+    if (n.kind === 'cal') return n.task ? true : n.day >= this.dayKey(now);
     const fresh = now - n.createdAt < this.NOTE_DAYS * 864e5;
     if (n.kind === 'note') return fresh;
     if (n.kind === 'today') return n.claimedBy ? fresh : n.day === this.dayKey(now);
@@ -195,7 +209,59 @@ const Household = {
   liveNotes(h, now = Date.now()) { return this.notes(h).filter(n => this.noteAlive(n, now)); },
   /** What's on the board: everything alive except "today" tasks someone has taken. */
   boardNotes(h, now = Date.now()) {
-    return this.liveNotes(h, now).filter(n => !(n.kind === 'today' && n.claimedBy)).sort((a, b) => b.createdAt - a.createdAt);
+    return this.liveNotes(h, now).filter(n => n.kind !== 'cal' && !(n.kind === 'today' && n.claimedBy)).sort((a, b) => b.createdAt - a.createdAt);
+  },
+
+  /* ---------- Calendar: notes and tasks for a date (kept with the board items, kind 'cal') ----------
+   * { id, by, kind: 'cal', task: bool, text, day 'YYYY-MM-DD', time 'HH:MM'|null,
+   *   for: 'any'|uid (tasks), claimedBy: uid|null, seenBy: [uid] (who has seen it on its day), createdAt }
+   *  - note: shows on its day for both ("Got it"), then it's gone
+   *  - task for anyone: from its day, the first to tap "I'll do it" gets it on their list
+   *  - task for a person: on that person's list from its day
+   *  Tasks stay until done; after their day they're "Overdue". */
+  CAL_MAX: 60,
+  calItems(h, now = Date.now()) {
+    return this.liveNotes(h, now).filter(n => n.kind === 'cal')
+      .sort((a, b) => (a.day + (a.time || '99:99')).localeCompare(b.day + (b.time || '99:99')) || a.createdAt - b.createdAt);
+  },
+  calOwner: n => (n.task ? (n.claimedBy || (n.for !== 'any' ? n.for : null)) : null),
+  addCal(h, userId, { task, text, day, time, for: who }) {
+    const clean = String(text || '').trim().replace(/\s+/g, ' ').slice(0, this.NOTE_MAX_LENGTH);
+    if (!clean) return 'text';
+    const today = this.dayKey();
+    if (typeof day !== 'string' || !DAY_RE.test(day) || day < today) return 'day';
+    if (this.calItems(h).length >= this.CAL_MAX) return 'limit';
+    const forWho = !task ? 'any' : who && who !== 'any' && h.memberIds.includes(who) ? who : 'any';
+    const n = { id: uid(), by: userId, kind: 'cal', task: !!task, text: clean, day, time: TIME_RE.test(time || '') ? time : null,
+      for: forWho, claimedBy: null, seenBy: day === today ? [userId] : [], createdAt: Date.now() };
+    h.notes = [...this.liveNotes(h), n];
+    return n;
+  },
+  /** Either of you can remove a calendar item. */
+  deleteCal(h, userId, id) {
+    const n = this.notes(h).find(x => x.id === id && x.kind === 'cal');
+    if (!n || !h.memberIds.includes(userId)) return false;
+    h.notes = this.liveNotes(h).filter(x => x.id !== id);
+    return true;
+  },
+  calSeen(h, userId, id) {
+    h.notes = this.liveNotes(h).map(x => x.id === id && x.kind === 'cal' && !x.seenBy.includes(userId) ? { ...x, seenBy: [...x.seenBy, userId] } : x);
+  },
+  /** First tap wins, from its day on. */
+  claimCal(h, userId, id, now = Date.now()) {
+    const n = this.notes(h).find(x => x.id === id && x.kind === 'cal');
+    if (!n || !n.task || this.calOwner(n) || n.day > this.dayKey(now)) return false;
+    h.notes = this.liveNotes(h).map(x => x.id === id ? { ...x, claimedBy: userId, seenBy: [...new Set([...x.seenBy, userId])] } : x);
+    return true;
+  },
+  /** What the calendar puts in front of this person today (Needs you). */
+  calDue(h, userId, now = Date.now()) {
+    const today = this.dayKey(now);
+    return this.calItems(h, now).filter(n => {
+      if (n.day > today) return false;
+      if (n.task && !this.calOwner(n)) return true;                 // free to take: until someone takes it
+      return n.day === today && !n.seenBy.includes(userId);         // everything else: once, on its day
+    });
   },
   addNote(h, userId, kind, text) {
     const clean = String(text || '').trim().slice(0, this.NOTE_MAX_LENGTH);
@@ -247,8 +313,10 @@ const Household = {
     return null;
   },
   /** Board items that sit on this person's Today list. */
-  myNoteTasks(h, userId) {
-    return this.liveNotes(h).filter(n =>
+  myNoteTasks(h, userId, now = Date.now()) {
+    const today = this.dayKey(now);
+    return this.liveNotes(h, now).filter(n =>
+      (n.kind === 'cal' && n.task && this.calOwner(n) === userId && n.day <= today) ||
       (n.kind === 'today' && n.claimedBy === userId) ||
       (n.kind === 'low' && (this.noteTarget(h, n) || {}).uid === userId));
   },

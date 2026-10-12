@@ -608,7 +608,7 @@ const Screens = {
     const isOrg = Household.isOwner(h, me);
     if (!isOrg && S.suggestMode) return Screens.suggest();
     if (Household.stage(h) !== 'active') return Screens.plan();
-    const needs = needsCarousel(statusBanner(h) + swapCards(h) + suggestionsCard(h, true) + newTasksCard(h) + (isOrg ? timeHintsCard(h) : ''));
+    const needs = needsCarousel(calendarCards(h) + statusBanner(h) + swapCards(h) + suggestionsCard(h, true) + newTasksCard(h) + (isOrg ? timeHintsCard(h) : ''));
     const names = Household.people(h).map(m => esc(Household.memberName(m).split(' ')[0])).join(' & ');
     return `<main class="screen has-nav">
       <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
@@ -617,6 +617,7 @@ const Screens = {
       </div>
       ${balanceCard(h)}
       ${boardCard(h)}
+      ${weekCard(h)}
       <div class="section-head"><h2 class="section-title">Needs you</h2></div>
       ${needs || `<p class="all-clear">${esc(allClearLine())}</p>`}
       ${personLists(h)}
@@ -666,8 +667,10 @@ const Screens = {
       const done = doneToday(r);
       return { r, done, sub: done ? 'Done today' : c && c.last ? `Last done ${esc((rel => /^(Today|Tomorrow|Yesterday)$/.test(rel) ? rel.toLowerCase() : rel)(Schedule.relative(c.last, now)))}` : 'Whenever it\'s needed' };
     }).sort(byOpen).map(x => tick(x.r, x.sub, x.done));
-    const board = Household.myNoteTasks(h, me);
-    const nothing = !today.length && !week.length && !anytime.length && !board.length && !covered.length;
+    const mine = Household.myNoteTasks(h, me);
+    const board = mine.filter(n => n.kind !== 'cal');
+    const planned = mine.filter(n => n.kind === 'cal').sort((a, b) => (a.day + (a.time || '99')).localeCompare(b.day + (b.time || '99')));
+    const nothing = !today.length && !week.length && !anytime.length && !board.length && !planned.length && !covered.length;
     const helped = covered.length ? `<div class="card helped">${covered.map(x =>
       `<div class="row static"><span class="helped-mark" aria-hidden="true">💛</span><div class="row-text"><span class="row-title">${esc(HelpLines.line(Household.memberName(Household.member(h, x.by)).split(' ')[0], x.unit.name, x.unit.id + Schedule.key(now)))}</span></div></div>`).join('')}</div>` : '';
 
@@ -678,6 +681,8 @@ const Screens = {
       </div>
       ${progress.count ? progressBar(progress.pct, 'Your day', progress.left ? `${progress.doneCount} of ${progress.count} done` : 'All done') : ''}
       ${helped}
+      ${planned.length ? `<div class="section-head"><h2 class="section-title">From the calendar</h2></div>
+        <div class="card">${planned.map(n => noteTaskRow(h, n, me, false)).join('')}</div>` : ''}
       ${board.length ? `<div class="section-head"><h2 class="section-title">From the board</h2></div>
         <div class="card">${board.map(n => noteTaskRow(h, n, me, false)).join('')}</div>` : ''}
       ${section('Today', today)}
@@ -1146,16 +1151,82 @@ function boardCard(h) {
     <button class="btn secondary board-add" data-action="addNote">Add to the board</button></div>`;
 }
 
+/* ---------- Calendar ---------- */
+/** "Today", "Tomorrow" or "Thu 22 Oct" for a day key. */
+function calDayLabel(day, now = new Date()) {
+  const today = Household.dayKey(now.getTime());
+  const tomorrow = Household.dayKey(now.getTime() + 864e5);
+  if (day === today) return 'Today';
+  if (day === tomorrow) return 'Tomorrow';
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '');
+}
+/** "Overdue", or the day and the time: "Tomorrow · 10:00". */
+function calWhen(n, now = new Date()) {
+  if (n.task && n.day < Household.dayKey(now.getTime())) return 'Overdue';
+  return calDayLabel(n.day, now) + (n.time ? ` · ${n.time}` : '');
+}
+/** Who a calendar task is for, as a short word. */
+function calWhoWord(h, n) {
+  const me = S.user.uid;
+  const o = Household.calOwner(n);
+  if (!n.task) return '';
+  if (!o) return 'Anyone';
+  return o === me ? 'You' : esc(Household.memberName(Household.member(h, o) || {}).split(' ')[0]);
+}
+
+/** Us: the week ahead, one line per item. Overdue tasks first, then the next 7 days; the rest behind "later". */
+function weekCard(h) {
+  const now = new Date();
+  const today = Household.dayKey(now.getTime());
+  const end = Household.dayKey(now.getTime() + 6 * 864e5);
+  const all = Household.calItems(h);
+  const overdue = all.filter(n => n.task && n.day < today);
+  const week = all.filter(n => n.day >= today && n.day <= end);
+  const later = all.filter(n => n.day > end);
+  const rows = [...overdue, ...week];
+  const row = n => `<button class="cal-row${n.task && n.day < today ? ' overdue' : ''}" data-action="openCal" data-id="${esc(n.id)}">
+      <span class="cal-text">${esc(n.text)}</span>
+      ${n.task ? `<span class="cal-who">${calWhoWord(h, n)}</span>` : ''}
+      <span class="cal-when">${esc(calWhen(n, now))}</span></button>`;
+  return `<section class="cal-card" aria-label="This week">
+    <div class="cal-head"><span class="board-icon" aria-hidden="true">${Icon.calendar}</span><h2 class="cal-title">This week</h2>
+      <button class="cal-add" data-action="addCal" aria-label="Add to the calendar">${Icon.plus}</button></div>
+    ${rows.length ? `<div class="cal-list">${rows.map(row).join('')}</div>` : '<p class="cal-empty">Nothing planned this week.</p>'}
+    ${later.length ? `<button class="cal-later" data-action="calAll">${plural(later.length, 'more thing')} later</button>` : ''}
+  </section>`;
+}
+
+/** Needs you: what the calendar brings today. */
+function calendarCards(h) {
+  const me = S.user.uid;
+  const now = new Date();
+  return Household.calDue(h, me).map(n => {
+    const when = calWhen(n, now);
+    const free = n.task && !Household.calOwner(n);
+    const o = Household.calOwner(n);
+    const whoLine = !n.task ? '' : free ? 'Free to take. The first to tap gets it on their list.'
+      : o === me ? "It's on your list on Me." : `${esc(Household.memberName(Household.member(h, o) || {}))} is doing it.`;
+    return `<div class="card cal-due${n.task && n.day < Household.dayKey() ? ' overdue' : ''}"><div class="row static col">
+        <div class="row-text"><span class="cal-due-when">${esc(when)}</span><span class="row-title">${esc(n.text)}</span>${whoLine ? `<span class="row-sub">${whoLine}</span>` : ''}</div>
+        <div class="btns" style="margin-top:10px">${free
+          ? `<button class="btn primary" data-action="claimCal" data-id="${esc(n.id)}">I'll do it</button>`
+          : `<button class="btn secondary" data-action="calSeen" data-id="${esc(n.id)}">Got it</button>`}</div>
+      </div></div>`;
+  }).join('');
+}
+
 /** A board item on someone's Today list: tick it and it's gone. */
 function noteTaskRow(h, n, ownerId, everyone) {
   const me = S.user.uid;
   const k = NOTE_KINDS[n.kind];
   const by = n.by === me ? 'your note' : `${esc(Household.memberName(Household.member(h, n.by) || {}))}'s note`;
   const who = everyone ? (ownerId === me ? 'You · ' : esc(Household.memberName(Household.member(h, ownerId) || {})) + ' · ') : '';
-  const sub = n.kind === 'low' ? `${who}Running low · ${by}` : `${who}Today only · ${by}`;
+  const sub = n.kind === 'cal' ? `${who}${calWhen(n)}${n.day < Household.dayKey() ? '' : ''} · ${n.by === me ? 'you added it' : esc(Household.memberName(Household.member(h, n.by) || {})) + ' added it'}`
+    : n.kind === 'low' ? `${who}Running low · ${by}` : `${who}Today only · ${by}`;
   return `<button class="row" data-action="doneNote" data-id="${esc(n.id)}" aria-pressed="false">
     <span class="check" aria-hidden="true">${Icon.check}</span>
-    <div class="row-text"><span class="row-title"><span class="title-icon" aria-hidden="true">${Icon[k.icon]}</span>${n.kind === 'low' ? 'Buy: ' : ''}${esc(n.text)}</span><span class="row-sub">${sub}</span></div></button>`;
+    <div class="row-text"><span class="row-title"><span class="title-icon" aria-hidden="true">${Icon[k ? k.icon : 'calendar']}</span>${n.kind === 'low' ? 'Buy: ' : ''}${esc(n.text)}</span><span class="row-sub">${sub}</span></div></button>`;
 }
 
 /** "parts" when only task parts are being shared, otherwise "tasks". */
@@ -1173,6 +1244,7 @@ function homeNeedsMe(h) {
   if (rsh && rsh.status === 'proposed' && !(rsh.accepted || {})[me]) return true;
   if (Household.isOwner(h, me) && Household.suggestions(h).length) return true;
   if (boardWaiting(h).size) return true;
+  if (Household.calDue(h, me).length) return true;
   if (newTasksCard(h)) return true;
   if (Household.isOwner(h, me) && Household.timeHints(h).length) return true;
   return !!statusBanner(h);
@@ -1490,6 +1562,60 @@ const Sheets = {
       <p style="margin-top:-8px">Often a swap is enough. ${others.join(' and ')} needs to agree first.</p>
       <button class="btn secondary" data-action="requestReshuffle">Ask ${others.join(' and ')}</button>
       <button class="btn ghost" data-action="closeSheet">Keep my plan</button>`, 'New plan');
+  },
+
+  /** Add a note or a task for a date (and an optional time). */
+  addCal() {
+    const h = S.household;
+    const me = S.user.uid;
+    const today = Household.dayKey();
+    const d = S.calDraft || (S.calDraft = { task: false, text: '', day: today, time: '', for: 'any' });
+    const partner = Household.people(h).find(m => m.uid !== me);
+    const forOpts = [['any', 'Anyone'], [me, 'Me'], ...(partner ? [[partner.uid, esc(Household.memberName(partner).split(' ')[0])]] : [])];
+    Sheet.open(`<h2>Add to the calendar</h2>
+      <div class="chips" role="group" aria-label="Kind" style="margin-bottom:12px">
+        <button class="chip" data-action="calKind" data-key="note" aria-pressed="${!d.task}">Note</button>
+        <button class="chip" data-action="calKind" data-key="task" aria-pressed="${!!d.task}">Task</button></div>
+      <div class="field"><label for="cal-text">${d.task ? 'What needs doing?' : 'What is happening?'}</label>
+        <input id="cal-text" data-input="calText" maxlength="${Household.NOTE_MAX_LENGTH}" placeholder="${d.task ? 'e.g. Take the car to the garage' : 'e.g. Plumber comes'}" value="${esc(d.text)}" autocomplete="off" enterkeyhint="done"></div>
+      <div class="field"><label for="cal-day">When?</label>
+        <div class="timing-controls">
+          <input id="cal-day" class="select" type="date" min="${today}" value="${esc(d.day)}" data-change="calDay" aria-label="Date">
+          <input id="cal-time" class="select minutes" type="time" value="${esc(d.time)}" data-change="calTime" aria-label="Time (optional)">
+        </div><span class="field-hint">The time is optional.</span></div>
+      ${d.task ? `<div class="field"><label>Who does it?</label>
+        <div class="chips" role="group" aria-label="Who does it">${forOpts.map(([k, l]) =>
+          `<button class="chip" data-action="calFor" data-key="${esc(k)}" aria-pressed="${d.for === k}">${l}</button>`).join('')}</div></div>` : ''}
+      <button class="btn primary" data-action="postCal">Add</button>
+      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Add to the calendar');
+  },
+
+  /** One calendar item: what, when, who, and what you can do with it. */
+  calItem(n) {
+    const h = S.household;
+    const me = S.user.uid;
+    const o = Household.calOwner(n);
+    const by = n.by === me ? 'you' : esc(Household.memberName(Household.member(h, n.by) || {}));
+    const today = Household.dayKey();
+    const facts = [esc(calWhen(n)), n.task ? (o ? (o === me ? 'For you' : `For ${esc(Household.memberName(Household.member(h, o) || {}))}`) : 'For anyone') : 'Note', `Added by ${by}`];
+    const actions = [];
+    if (n.task && !o && n.day <= today) actions.push(`<button class="btn primary" data-action="claimCal" data-id="${esc(n.id)}">I'll do it</button>`);
+    if (n.task && o === me && n.day <= today) actions.push(`<button class="btn primary" data-action="doneNote" data-id="${esc(n.id)}">Done</button>`);
+    Sheet.open(`<h2>${esc(n.text)}</h2>
+      <p class="sheet-facts">${facts.join(' · ')}</p>
+      ${actions.join('')}
+      <button class="btn secondary" data-action="deleteCal" data-id="${esc(n.id)}">Remove</button>
+      <button class="btn ghost" data-action="closeSheet">Close</button>`, n.text);
+  },
+
+  /** Everything planned, including after this week. */
+  calAll() {
+    const h = S.household;
+    const items = Household.calItems(h);
+    Sheet.open(`<h2>Planned</h2>
+      <div class="card cal-list">${items.map(n => `<button class="cal-row" data-action="openCal" data-id="${esc(n.id)}">
+        <span class="cal-text">${esc(n.text)}</span>${n.task ? `<span class="cal-who">${calWhoWord(h, n)}</span>` : ''}<span class="cal-when">${esc(calWhen(n))}</span></button>`).join('')}</div>
+      <button class="btn ghost" data-action="closeSheet">Close</button>`, 'Planned');
   },
 
   /** Add something to the board. */
