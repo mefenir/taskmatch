@@ -1638,10 +1638,13 @@ document.addEventListener('focusout', e => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && Sheet.isOpen()) Sheet.close();
   if (e.key !== 'Enter' || !e.target.matches) return;
-  if (e.target.matches('[data-input="myName"], [data-input="partnerName"]')) e.target.blur();
-  if (e.target.matches('[data-input="noteText"]')) { e.preventDefault(); Actions.postNote(); }
-  if (e.target.matches('[data-input="customName"]')) { e.preventDefault(); Actions.saveCustomTask(); }
-  if (e.target.matches('[data-input="breakNew"]')) { e.preventDefault(); Actions.addBreakPart(); }
+  if (e.target.matches('[data-input="noteText"]')) { e.preventDefault(); Actions.postNote(); return; }
+  if (e.target.matches('[data-input="customName"]')) { e.preventDefault(); Actions.saveCustomTask(); return; }
+  if (e.target.matches('[data-input="breakNew"]')) { e.preventDefault(); Actions.addBreakPart(); return; }
+  // Any other one-line field: Enter closes the keyboard so the next step is visible.
+  // Forms (sign-in, password) keep their own Enter-to-submit; text areas keep new lines.
+  if (e.target.matches('input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="number"], input[type="tel"], input[type="url"]')
+      && !e.target.closest('form')) { e.preventDefault(); e.target.blur(); }
 });
 
 /* ---------- boot ---------- */
