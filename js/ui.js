@@ -19,6 +19,7 @@ const Icon = {
   copy:    svg('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 18),
   lock:    svg('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', 16),
   gear:    svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>', 22, 1.8),
+  month:   svg('<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 17.5h.01M12 17.5h.01"/>', 22, 2),
   calendar: svg('<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>', 20, 1.8),
   board:   svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/>', 20, 1.8),
   note:    svg('<path d="M20 12a7 7 0 0 1-10.3 6.2L5 19.5l1.3-4.2A7 7 0 1 1 20 12z"/>', 18, 1.9),
@@ -141,8 +142,18 @@ const Sheet = (() => {
     open(html, label) {
       clearTimeout(timer);
       const r = root();
+      const panel = r.querySelector('.sheet');
+      // Already open (e.g. a chip was tapped): swap the content in place, so nothing slides or jumps.
+      if (panel && r.classList.contains('show')) {
+        const top = panel.scrollTop;
+        panel.setAttribute('aria-label', label || 'Dialog');
+        panel.innerHTML = `<div class="sheet-handle" aria-hidden="true"><span></span></div>${html}`;
+        panel.scrollTop = top;
+        tidyText(r); fitButtons(r); applyBusy(r);
+        return;
+      }
       r.innerHTML = `<div class="sheet-backdrop" data-action="closeSheet"></div>
-        <div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(label || 'Dialog')}">
+        <div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label="${esc(label || 'Dialog')}">
           <div class="sheet-handle" aria-hidden="true"><span></span></div>${html}</div>`;
       r.classList.add('open');
       enableDrag(r.querySelector('.sheet'));
@@ -150,8 +161,8 @@ const Sheet = (() => {
       tidyText(r);
       fitButtons(r);
       applyBusy(r);
-      const first = r.querySelector('.sheet input, .sheet button');
-      if (first) first.focus({ preventScroll: true });
+      // Focus the sheet itself (for screen readers), never a field: the keyboard opens only when you tap one.
+      r.querySelector('.sheet').focus({ preventScroll: true });
     },
     close() {
       const r = root();

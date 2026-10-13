@@ -615,11 +615,9 @@ const Screens = {
       <div class="greeting"><p class="hello">${names}</p>
         <h1 class="mood">Our home</h1>
       </div>
-      ${balanceCard(h)}
-      ${boardCard(h)}
+      ${needs ? `<div class="section-head"><h2 class="section-title">Needs you</h2></div>${needs}` : ''}
       ${weekCard(h)}
-      <div class="section-head"><h2 class="section-title">Needs you</h2></div>
-      ${needs || `<p class="all-clear">${esc(allClearLine())}</p>`}
+      ${boardCard(h)}
       ${personLists(h)}
       <button class="plain-row add" data-action="addCustomTask"><span class="plus" aria-hidden="true">${Icon.plus}</span><span class="pr-title">Add a task</span></button>
       <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
@@ -978,18 +976,19 @@ function personLists(h) {
   // Daily first, then weekly, anytime and the rarer ones.
   const rank = u => Household.slot(u) === 'today' ? 0 : Household.dueThisWeek(h, u, now) ? 1 : Household.slot(u) === 'anytime' ? 2 : 3;
   const ordered = list => list.map((u, i) => ({ u, i, k: rank(u) })).sort((x, y) => x.k - y.k || x.i - y.i).map(x => x.u);
-  const part = (key, cls, title, units) => {
+  const loads = Household.loads(h);
+  const part = (key, cls, title, units, minutes) => {
     const expanded = !!open[key];
     return `<section class="person-part ${cls}">
       <h2 class="part-head"><button class="part-toggle" data-action="togglePart" data-key="${esc(key)}" aria-expanded="${expanded}" aria-controls="part-${esc(key)}">
-        <span class="part-title">${title}</span><span class="part-meta">${units.length}</span><span class="chev" aria-hidden="true">${Icon.chev}</span></button></h2>
+        <span class="part-name"><span class="part-title">${title}</span>${minutes != null ? `<span class="part-time">about ${formatMinutes(minutes)} a week</span>` : ''}</span><span class="part-meta">${units.length}</span><span class="chev" aria-hidden="true">${Icon.chev}</span></button></h2>
       <div class="plain-list" id="part-${esc(key)}"${expanded ? '' : ' hidden'}>${units.length ? units.map(row).join('') : '<p class="part-empty">Nothing here yet.</p>'}</div>
     </section>`;
   };
   return ids.map(uid => {
     const units = ordered(Household.units(h).filter(u => Household.assignee(h, u.id) === uid));
     const name = uid === me ? 'Your part' : `${esc(Household.memberName(Household.member(h, uid)).split(' ')[0])}'s part`;
-    return part(uid, uid === me ? 'is-me' : 'is-partner', name, units);
+    return part(uid, uid === me ? 'is-me' : 'is-partner', name, units, loads[uid] || 0);
   }).join('') + (homeless(h).length ? part('free', 'is-free', 'Nobody has these yet', homeless(h)) : '');
 }
 /** Tasks nobody has yet (after "not now" in a share-out). */
@@ -1249,8 +1248,8 @@ function weekCard(h) {
   const rows = [...overdue, ...week];
   return `<section class="cal-card" aria-label="This week">
     <div class="cal-head"><span class="board-icon" aria-hidden="true">${Icon.calendar}</span><h2 class="cal-title">This week</h2>
-      <button class="cal-month-link" data-action="nav" data-to="calendar">Month</button>
-      <button class="cal-add" data-action="addCal" aria-label="Add to the calendar">${Icon.plus}</button></div>
+      <button class="cal-icon-btn" data-action="nav" data-to="calendar" aria-label="Month view">${Icon.month}</button>
+      <button class="cal-icon-btn" data-action="addCal" aria-label="Add to the calendar"><span class="board-chev" aria-hidden="true">+</span></button></div>
     ${rows.length ? `<div class="cal-list">${rows.map(n => calRow(h, n, now)).join('')}</div>` : '<p class="cal-empty">Nothing planned this week.</p>'}
     ${later.length ? `<button class="cal-later" data-action="nav" data-to="calendar">${plural(later.length, 'more thing')} later</button>` : ''}
   </section>`;
@@ -1573,7 +1572,7 @@ const Sheets = {
       <button class="btn primary" data-action="saveName">Save</button>
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Your name');
     const input = document.getElementById('edit-name');
-    if (input) { input.focus(); input.select(); input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); Actions.saveName(); } }); }
+    if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); Actions.saveName(); } });
   },
 
   /** Change the password (accounts that sign in with an email and password). */
@@ -1643,11 +1642,8 @@ const Sheets = {
       <div class="field"><label for="cal-day">When?</label>
         <div class="timing-controls">
           <input id="cal-day" class="select" type="date" min="${today}" value="${esc(d.day)}" data-change="calDay" aria-label="Date">
-          <input id="cal-time" class="select minutes" type="time" value="${esc(d.time)}" data-change="calTime" aria-label="Time (optional)">
+          <span class="time-wrap minutes"><input id="cal-time" class="select${d.time ? '' : ' empty'}" type="time" value="${esc(d.time)}" data-change="calTime" aria-label="Time (optional)"><span class="time-ph" aria-hidden="true">--:--</span></span>
         </div><span class="field-hint">The time is optional.</span></div>
-      ${d.task ? '' : `<div class="field"><label for="cal-until">Until (optional)</label>
-        <input id="cal-until" class="select" type="date" min="${esc(d.day || today)}" value="${esc(d.until || '')}" data-change="calUntil" aria-label="Until (optional)">
-        <span class="field-hint">For things that last several days, like a trip.</span></div>`}
       <div class="field"><label>${d.task ? 'Who does it?' : 'Who is it for?'}</label>
         <div class="chips" role="group" aria-label="${d.task ? 'Who does it' : 'Who is it for'}">${forOpts.map(([k, l]) =>
           `<button class="chip" data-action="calFor" data-key="${esc(k)}" aria-pressed="${d.for === k}">${l}</button>`).join('')}</div></div>
@@ -1689,8 +1685,6 @@ const Sheets = {
       <div class="field"><input id="note-text" data-input="noteText" maxlength="${Household.NOTE_MAX_LENGTH}" placeholder="${esc(k.placeholder)}" value="${esc(d.text)}" autocomplete="off" enterkeyhint="done"></div>
       <button class="btn primary" data-action="postNote">Add</button>
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Add to the board');
-    const input = document.getElementById('note-text');
-    if (input) { input.focus({ preventScroll: true }); input.setSelectionRange(input.value.length, input.value.length); }
   },
 
   /** Settings → Send feedback: a short note that lands in the admin panel. */
@@ -1702,8 +1696,6 @@ const Sheets = {
       <p class="fine" style="text-align:left;margin:6px 0 14px">Your name and the screen you were on are sent with it.</p>
       <button class="btn primary" data-action="sendFeedback">Send</button>
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Send feedback');
-    const input = document.getElementById('feedback-text');
-    if (input) { input.focus({ preventScroll: true }); input.setSelectionRange(input.value.length, input.value.length); }
   },
 
   /** Offering one of my tasks to someone else. */

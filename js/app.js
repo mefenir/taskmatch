@@ -1127,7 +1127,7 @@ const Actions = {
     else { toast('Someone already took it.'); rerender(); }
   },
   /* calendar */
-  addCal(d = {}) { S.calDraft = d.key ? { task: false, text: '', day: d.key, until: '', time: '', for: 'any' } : null; Sheets.addCal(); const i = document.getElementById('cal-text'); if (i) i.focus({ preventScroll: true }); },
+  addCal(d = {}) { S.calDraft = d.key ? { task: false, text: '', day: d.key, until: '', time: '', for: 'any' } : null; Sheets.addCal(); },
   calKind(d) { S.calDraft = { ...(S.calDraft || {}), task: d.key === 'task', until: '' }; Sheets.addCal(); },
   calFor(d) { S.calDraft = { ...(S.calDraft || {}), for: d.key }; Sheets.addCal(); },
   postCal() {
@@ -1280,7 +1280,10 @@ const Changes = {
     const u = document.getElementById('cal-until'); if (u) { u.min = value; if (!d.until) u.value = ''; }
   },
   calUntil(value) { S.calDraft = { ...(S.calDraft || {}), until: value }; },
-  calTime(value) { S.calDraft = { ...(S.calDraft || {}), time: value }; },
+  calTime(value, data, el) {
+    S.calDraft = { ...(S.calDraft || {}), time: value };
+    if (el) el.classList.toggle('empty', !value);
+  },
   customFrequency(value) { S.customDraft = { ...(S.customDraft || {}), frequency: value }; },
   customMinutes(value) { S.customDraft = { ...(S.customDraft || {}), minutes: Number(value) }; },
 };
