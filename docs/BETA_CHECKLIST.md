@@ -15,10 +15,12 @@ Invites go out Friday 16 October 2026. Last changes and the full security check 
 
 ## First after beta: Away (agreed 13 Oct)
 - [ ] **Where:** third choice in "Add to this day": Note · Task · **Away**. Away is purple, in the same tone as the green (button when selected and on the calendar).
-- [ ] **Fields:** Who (Me · partner · Both of us), When, time, and a word about it, which is **required** (e.g. "Work travel"), because it's what the calendar shows.
+- [ ] **Fields:** Who (**Me · Both of us** only; you can't add an absence for your partner), When, time, and a word about it, which is **required** (e.g. "Work travel"), because it's what the calendar shows.
 - [ ] **Period:** picked inside the calendar with taps. The first tap is the start (the day you came from), the second is the end, the days between are tinted, tapping the start again = one day, a third tap starts over. Shown in the When field as "DD Month YYYY – DD Month YYYY".
 - [ ] **Month view:** away days are a soft purple band; the dots for notes and tasks stay on top.
-- [ ] **Either partner can add it**, for themselves, the other or both. The other partner gets a "needs you" card.
+- [ ] **Either partner can add it**, for themselves or both. The other partner gets a "needs you" card.
+- [ ] **Removing:** Me → only me; Both → either. Before it starts: Remove (two taps). While it runs: **I'm back** (ends it today). After it ends: no button, it's history.
+- [ ] **Today while away:** card "You're away until 24 Oct · Work travel · Marta has the daily tasks" + **I'm back**. Partner's Today: one line "Ian is away until 24 Oct." Both away and one taps I'm back → it becomes the other person's absence from then on.
 - [ ] **One away:** daily tasks move to the partner at home **automatically**. They show in the partner's own task list (never on the board) like Today only, with a small "for Ian" label: tick → gone, back the next day until the period ends. Weekly and anytime tasks stay with the traveller and wait (the partner can still take one). Pets and children always move.
 - [ ] **Both away:** everything pauses; repeating tasks start again from the day you're back, so nothing is overdue.
 - [ ] **Back home:** one calm line, e.g. "Marta covered the dishes and the cat while you were away." No numbers. The shown split leaves out away days.
