@@ -854,7 +854,10 @@ const Household = {
     this.units(h).forEach(u => {
       if (!userIds.includes(this.dayOwner(h, u, now, away))) return;
       const minutes = Timing.of(u).minutes;
-      if (Schedule.doneOn(this.completion(h, u.id), now)) { done += minutes; doneCount += 1; }
+      const c = this.completion(h, u.id);
+      // Done for me by someone else: off my list, so not in my count either.
+      if (Schedule.doneOn(c, now) && c.by && !userIds.includes(c.by)) return;
+      if (Schedule.doneOn(c, now)) { done += minutes; doneCount += 1; }
       else if (this.slot(u) === 'today') { open += minutes; left += 1; }
     });
     const total = done + open;

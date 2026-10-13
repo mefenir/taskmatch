@@ -684,7 +684,7 @@ const Screens = {
     const helped = !back && covered.length ? `<div class="card helped">${covered.map(x =>
       `<div class="row static"><span class="helped-mark" aria-hidden="true">💛</span><div class="row-text"><span class="row-title">${esc(HelpLines.line(Household.memberName(Household.member(h, x.by)).split(' ')[0], x.unit.name, x.unit.id + Schedule.key(now)))}</span></div></div>`).join('')}</div>` : '';
 
-    return `<main class="screen has-nav">
+    return `<main class="screen has-nav me">
       <div class="topbar">${Feedback.link('today')}<span class="spacer"></span>${settingsButton()}</div>
       <div class="greeting"><p class="hello">Hello, ${first}</p>
         <h1 class="mood">${esc(title)}</h1>
@@ -1105,26 +1105,28 @@ const AwayLines = (() => {
   const HOLIDAY = /\b(holidays?|vacation|trip|travel|beach|festival|wedding|weekend|friends|ski|skiing|camping|concert|getaway|honeymoon)\b/i;
   const tone = reason => (GENTLE.test(reason) ? 'gentle' : WORK.test(reason) ? 'work' : HOLIDAY.test(reason) ? 'holiday' : 'neutral');
   const ONE = {   // you're away; {name} is at home
-    gentle: ['Take the time you need. {name} has home covered.', 'Look after yourself. Home is in good hands.', "Nothing to think about here. {name}'s got it.", "Be where you're needed. {name} is holding the fort."],
-    work: ['Go get it. {name} is holding the fort.', 'You at work, {name} at home. Good team.', "Busy days ahead. Home is in {name}'s hands.", "Do your thing. {name}'s got the home front."],
-    holiday: ['Have fun! {name} is keeping the home happy.', "Enjoy every bit. {name}'s on home duty.", 'Postcards optional. {name} has it covered.', 'Make it count. {name} is holding the fort.'],
-    neutral: ['Home is in good hands. Thanks, {name}.', '{name} is holding the fort.', "Nothing needs you here today. {name}'s got it.", 'Your list can wait. {name} has the rest.'],
+    gentle: ["Take your time. {name} has it.", "Look after yourself. All is well.", "No worries here. {name}'s got it.", "Be where you're needed."],
+    work: ["Go get it. {name} is holding the fort.", "You at work, {name} at home.", "Busy days? Home is in {name}'s hands.", "Do your thing. {name}'s got home."],
+    holiday: ["Have fun! {name}'s got the home.", "Enjoy it. {name}'s on home duty.", "Postcards optional. {name}'s on it.", "Make it count. {name}'s at home."],
+    neutral: ["Home is in good hands. Thanks, {name}.", "{name} is holding the fort.", "Nothing needs you today.", "Your list can wait. {name}'s on it."],
   };
   const BOTH = {
-    gentle: ['Take the time you need. The house will keep.', 'Be with each other. Home can wait.', 'Nothing to think about here.', 'Look after each other. All is fine at home.'],
-    work: ['Out of office: both of you.', 'Busy days ahead. The house is resting.', "Both on the road. Home's on pause.", 'Do your thing. The chores will wait.'],
-    holiday: ['The house is on holiday too.', 'The dishes can wait. Enjoy.', 'Two away, zero chores.', 'Somewhere nicer than the kitchen?', 'Gone together. Enjoy every bit.'],
-    neutral: ['Off duty, both of you.', "Home's on pause. You're not.", 'The house will keep.', 'No chores today. Just you two.'],
+    gentle: ["Take your time. Home can wait.", "Be with each other. Home can wait.", "Nothing to think about here.", "Look after each other."],
+    work: ["Out of office: both of you.", "Busy days. The house is resting.", "Both on the road. Home's on pause.", "The chores will wait."],
+    holiday: ["The house is on holiday too.", "The dishes can wait. Enjoy.", "Two away, zero chores.", "Somewhere nicer than the kitchen?", "Gone together. Enjoy every bit."],
+    neutral: ["Off duty, both of you.", "Home's on pause. You're not.", "The house will keep.", "No chores today. Just you two."],
   };
   const HOME = ['Holding the fort today.', 'Running the home solo. Nice work.', "Home team of one. You've got this.", '{name} is lucky to have you.', 'Keeping it all going. Thank you.'];
-  const BACK = ['Welcome back! {name} kept things running while you were away.', 'Good to have you home. {name} looked after everything.',
-    '{name} had it covered. Welcome home.', 'Welcome home. Everything kept going, thanks to {name}.', "You're back! {name} took care of your tasks while you were away."];
+  const BACK = ['Welcome back! {name} kept things going.', 'Good to have you home. {name} had it.', '{name} had it covered. Welcome home.',
+    'Welcome home. All went well, thanks to {name}.', "You're back! {name} looked after things."];
   const pick = (list, now, name) => {
     const dayNo = Math.floor((Schedule.day(now) - new Date(now.getFullYear(), 0, 0)) / 864e5);
     return list[dayNo % list.length].replace(/\{name\}/g, name);
   };
   return {
     tone,
+    ALL: [...Object.values(ONE).flat(), ...Object.values(BOTH).flat(), ...HOME],
+    BACK,
     away: (reason, both, name, now = new Date()) => pick((both ? BOTH : ONE)[tone(reason)], now, name),
     home: (name, now = new Date()) => pick(HOME, now, name),
     back: (name, now = new Date()) => pick(BACK, now, name),

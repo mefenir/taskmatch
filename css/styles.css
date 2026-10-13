@@ -526,3 +526,10 @@ input.select[type=date],input.select[type=time]{background-image:none;padding-ri
 .away-line{margin:4px 2px 12px;font-size:14px;color:var(--muted)}
 .one-line{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .link-btn.quiet{color:var(--muted);font-weight:500;margin:0;border:1.5px solid var(--line);border-radius:999px;min-height:32px;padding:4px 12px;font-size:13px;line-height:20px}
+/* Fields in a sheet sit on the sheet's own edge (the inner space is for fields inside a card) */
+.sheet .field{padding:12px 0}
+.sheet .field + .field{border-top:0}
+.sheet .card .field{padding:12px 16px}
+.sheet .card .field + .field{border-top:1px solid var(--line)}
+/* Me: 28px between sections (16 under a card + 12 above a title) */
+.me .section-head{margin-top:12px}
