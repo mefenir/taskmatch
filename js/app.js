@@ -1144,11 +1144,12 @@ const Actions = {
     if (away === !!was.away && (d.key === 'task') === !!was.task) return;
     // Away is only for me or both of us, and opens its month straight away.
     S.calDraft = { ...was, task: d.key === 'task', away, until: '', pickOpen: away, pickMonth: '',
+      text: away ? String(was.text || '').slice(0, Household.AWAY_MAX_LENGTH) : was.text,
       for: away ? S.user.uid : was.away ? 'any' : was.for };
     Sheets.addCal();
   },
-  awayOpen() { const d = S.calDraft; if (!d) return; d.pickOpen = !d.pickOpen; Sheets.addCal(); },
-  awayMonth(dd) {
+  pickOpen() { const d = S.calDraft; if (!d) return; d.pickOpen = !d.pickOpen; Sheets.addCal(); },
+  pickMonth(dd) {
     const d = S.calDraft; if (!d) return;
     const [y, m] = (d.pickMonth || d.day.slice(0, 7)).split('-').map(Number);
     const next = new Date(y, m - 1 + Number(dd.delta || 0), 1);
@@ -1156,11 +1157,13 @@ const Actions = {
     if (key < Household.dayKey().slice(0, 7)) return;
     d.pickMonth = key; Sheets.addCal();
   },
-  /** Start is set; the next tap is the last day (an earlier day moves the start). Once both are set, a tap starts over. */
-  awayPick(dd) {
+  /** Note and task: the tap picks the day. Away: start is set, the next tap is the last day
+   *  (an earlier day moves the start); once both are set, a tap starts over. */
+  pickDay(dd) {
     const d = S.calDraft; const k = dd.key;
     if (!d || !k || k < Household.dayKey()) return;
-    if (d.until) { d.day = k; d.until = ''; }
+    if (!d.away) { d.day = k; d.pickOpen = false; }
+    else if (d.until) { d.day = k; d.until = ''; }
     else if (k < d.day) d.day = k;
     else { d.until = k; d.pickOpen = false; }
     Sheets.addCal();
@@ -1200,7 +1203,7 @@ const Actions = {
   },
   /** "I'm back": ends my absence today. */
   endAway(d) {
-    if (Household.endAway(S.household, S.user.uid, d.id)) { Sheet.close(); save('notes'); rerender(); toast('Welcome back!'); }
+    if (Household.endAway(S.household, S.user.uid, d.id)) { Sheet.close(); save('notes'); rerender(); }
   },
   calPickDay(d) { S.calDay = d.key; rerender(); },
   openCal(d) { const n = Household.calAll(S.household).find(x => x.id === d.id); if (n) Sheets.calItem(n); },
@@ -1315,13 +1318,6 @@ const Changes = {
   frequency(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { frequency: value }); commit('responsibilities'); rerender(); },
   minutes(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { minutes: Number(value) }); commit('responsibilities'); rerender(); },
   customCategory(value) { S.customDraft = { ...(S.customDraft || {}), category: value }; },
-  calDay(value) {
-    const d = { ...(S.calDraft || {}), day: value };
-    if (d.until && d.until < value) d.until = '';
-    S.calDraft = d;
-    const u = document.getElementById('cal-until'); if (u) { u.min = value; if (!d.until) u.value = ''; }
-  },
-  calUntil(value) { S.calDraft = { ...(S.calDraft || {}), until: value }; },
   calTime(value, data, el) {
     S.calDraft = { ...(S.calDraft || {}), time: value };
     if (el) el.classList.toggle('empty', !value);

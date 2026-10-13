@@ -634,7 +634,7 @@ const Screens = {
     const progress = Household.dayProgress(h, [me], now);
     const first = esc(Household.memberName(Household.member(h, me)).split(' ')[0]);
     // Someone away: their tasks I look after carry a small "for Ian".
-    const forWho = r => (lists.forOther.has(r.id) ? `<span class="tag away-tag">for ${esc(Household.memberName(Household.member(h, Household.assignee(h, r.id)) || {}).split(' ')[0])}</span> ` : '');
+    const forWho = r => (lists.forOther.has(r.id) ? `<span class="tag away-tag">${esc(Household.memberName(Household.member(h, Household.assignee(h, r.id)) || {}).split(' ')[0])}'s task</span> ` : '');
     const tick = (r, sub, done) => `<button class="row ${done ? 'done' : ''}" data-action="toggleDone" data-id="${esc(r.id)}" aria-pressed="${done}">
         <span class="check" aria-hidden="true">${Icon.check}</span>
         <div class="row-text"><span class="row-title">${esc(r.name)}</span><span class="row-sub">${forWho(r)}${r.parentName ? esc(r.parentName) + ' · ' : ''}${sub}</span></div>
@@ -643,7 +643,6 @@ const Screens = {
     // Done for me by the other person today: off my list, with a line saying so.
     const awayNow = Household.awayNow(h, me, now.getTime());
     const back = awayNow ? null : Household.coveredWhileAway(h, me, now);
-    const backIds = new Set(back ? back.units.map(u => u.id) : []);
     const covered = awayNow ? [] : Household.coveredForMe(h, me, now);
     const coveredIds = new Set(covered.map(x => x.unit.id));
     ['today', 'week', 'anytime'].forEach(k => { lists[k] = lists[k].filter(r => !coveredIds.has(r.id)); });
@@ -678,14 +677,17 @@ const Screens = {
     const partnerId = Household.peopleIds(h).find(x => x !== me);
     const partnerAway = !awayNow && partnerId ? Household.awayNow(h, partnerId, now.getTime()) : null;
     const awayLine = partnerAway ? `<p class="away-line">${esc(partnerFirst(h))} is away until ${esc(calDayLabel(partnerAway.until || partnerAway.day, now))}.</p>` : '';
-    const backLine = back ? `<div class="card helped"><div class="row static"><span class="helped-mark" aria-hidden="true">💛</span><div class="row-text"><span class="row-title">${esc(partnerFirst(h))} looked after your tasks while you were away: ${esc(listWords(back.units.map(u => u.name)))}.</span></div></div></div>` : '';
-    const helped = covered.some(x => !backIds.has(x.unit.id)) ? `<div class="card helped">${covered.filter(x => !backIds.has(x.unit.id)).map(x =>
+    const backLine = back ? `<div class="card helped"><div class="row static"><span class="helped-mark" aria-hidden="true">💛</span><div class="row-text"><span class="row-title">${esc(AwayLines.back(partnerFirst(h), now))}</span></div></div></div>` : '';
+    const bothAway = awayNow && (awayNow.for === 'any' || Household.awayOn(h, Household.dayKey(now.getTime())).size > 1);
+    const title = awayNow ? AwayLines.away(awayNow.text, bothAway, partnerFirst(h), now)
+      : partnerAway ? AwayLines.home(partnerFirst(h), now) : Mood.line(now, progress);
+    const helped = !back && covered.length ? `<div class="card helped">${covered.map(x =>
       `<div class="row static"><span class="helped-mark" aria-hidden="true">💛</span><div class="row-text"><span class="row-title">${esc(HelpLines.line(Household.memberName(Household.member(h, x.by)).split(' ')[0], x.unit.name, x.unit.id + Schedule.key(now)))}</span></div></div>`).join('')}</div>` : '';
 
     return `<main class="screen has-nav">
       <div class="topbar">${Feedback.link('today')}<span class="spacer"></span>${settingsButton()}</div>
       <div class="greeting"><p class="hello">Hello, ${first}</p>
-        <h1 class="mood">${esc(Mood.line(now, progress))}</h1>
+        <h1 class="mood">${esc(title)}</h1>
       </div>
       ${awayCard}
       ${progress.count ? progressBar(progress.pct, 'Your day', progress.left ? `${progress.doneCount} of ${progress.count} done` : 'All done') : ''}
@@ -1095,6 +1097,40 @@ const HelpLines = (() => {
   const hash = str => [...String(str)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
   return { line: (name, task, key) => LINES[hash(key) % LINES.length](name, task), LINES };
 })();
+/** Titles on Me while someone is away. The reason picks the tone; sad and health words always win,
+ *  and anything unknown gets neutral lines (never "enjoy"). One line per day, the same all day. */
+const AwayLines = (() => {
+  const GENTLE = /\b(funeral|hospital|surgery|operation|doctor|clinic|sick|ill|illness|health|treatment|recovery|family|mum|mom|mother|dad|father|parents?|grandma|grandpa|grandmother|grandfather|granny)\b/i;
+  const WORK = /\b(work|business|conference|meeting|client|office|training|course|fair|seminar|workshop|job|project)\b/i;
+  const HOLIDAY = /\b(holidays?|vacation|trip|travel|beach|festival|wedding|weekend|friends|ski|skiing|camping|concert|getaway|honeymoon)\b/i;
+  const tone = reason => (GENTLE.test(reason) ? 'gentle' : WORK.test(reason) ? 'work' : HOLIDAY.test(reason) ? 'holiday' : 'neutral');
+  const ONE = {   // you're away; {name} is at home
+    gentle: ['Take the time you need. {name} has home covered.', 'Look after yourself. Home is in good hands.', "Nothing to think about here. {name}'s got it.", "Be where you're needed. {name} is holding the fort."],
+    work: ['Go get it. {name} is holding the fort.', 'You at work, {name} at home. Good team.', "Busy days ahead. Home is in {name}'s hands.", "Do your thing. {name}'s got the home front."],
+    holiday: ['Have fun! {name} is keeping the home happy.', "Enjoy every bit. {name}'s on home duty.", 'Postcards optional. {name} has it covered.', 'Make it count. {name} is holding the fort.'],
+    neutral: ['Home is in good hands. Thanks, {name}.', '{name} is holding the fort.', "Nothing needs you here today. {name}'s got it.", 'Your list can wait. {name} has the rest.'],
+  };
+  const BOTH = {
+    gentle: ['Take the time you need. The house will keep.', 'Be with each other. Home can wait.', 'Nothing to think about here.', 'Look after each other. All is fine at home.'],
+    work: ['Out of office: both of you.', 'Busy days ahead. The house is resting.', "Both on the road. Home's on pause.", 'Do your thing. The chores will wait.'],
+    holiday: ['The house is on holiday too.', 'The dishes can wait. Enjoy.', 'Two away, zero chores.', 'Somewhere nicer than the kitchen?', 'Gone together. Enjoy every bit.'],
+    neutral: ['Off duty, both of you.', "Home's on pause. You're not.", 'The house will keep.', 'No chores today. Just you two.'],
+  };
+  const HOME = ['Holding the fort today.', 'Running the home solo. Nice work.', "Home team of one. You've got this.", '{name} is lucky to have you.', 'Keeping it all going. Thank you.'];
+  const BACK = ['Welcome back! {name} kept things running while you were away.', 'Good to have you home. {name} looked after everything.',
+    '{name} had it covered. Welcome home.', 'Welcome home. Everything kept going, thanks to {name}.', "You're back! {name} took care of your tasks while you were away."];
+  const pick = (list, now, name) => {
+    const dayNo = Math.floor((Schedule.day(now) - new Date(now.getFullYear(), 0, 0)) / 864e5);
+    return list[dayNo % list.length].replace(/\{name\}/g, name);
+  };
+  return {
+    tone,
+    away: (reason, both, name, now = new Date()) => pick((both ? BOTH : ONE)[tone(reason)], now, name),
+    home: (name, now = new Date()) => pick(HOME, now, name),
+    back: (name, now = new Date()) => pick(BACK, now, name),
+  };
+})();
+
 const Mood = (() => {
   const LINES = {
     early: {
@@ -1238,42 +1274,37 @@ function awayTodayCard(h, n, now) {
   return `<div class="card away-card"><div class="row static col">
     <div class="row-text"><span class="row-title">You're away ${esc(until)}</span>
     <span class="row-sub">${esc(n.text)} · ${both ? 'The home takes a break.' : `${esc(partnerFirst(h))} has the daily tasks.`}</span></div>
-    <div class="btns" style="margin-top:10px"><button class="btn primary" data-action="endAway" data-id="${esc(n.id)}">I'm back</button></div>
+    <div class="btns" style="margin-top:2px"><button class="btn primary" data-action="endAway" data-id="${esc(n.id)}">I'm back</button></div>
   </div></div>`;
-}
-/** "a, b and c" */
-function listWords(words) {
-  const w = words.length > 4 ? [...words.slice(0, 3), 'more'] : words;
-  return w.length < 2 ? w.join('') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`;
 }
 /** "20 October 2026 – 24 October 2026", or one day. */
 function awayRange(day, until) {
   const f = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); };
   return until && until > day ? `${f(day)} – ${f(until)}` : f(day);
 }
-/** The month inside the Away sheet: first tap the start, second the end. */
-function awayPicker(d, today) {
+/** The month inside the calendar sheet. Note and task: one tap picks the day. Away: first tap the start, second the end. */
+function datePicker(d, today) {
   const month = d.pickMonth || d.day.slice(0, 7);
   const [y, m] = month.split('-').map(Number);
   const first = new Date(y, m - 1, 1);
   const days = new Date(y, m, 0).getDate();
-  const end = d.until || d.day;
+  const end = (d.away && d.until) || d.day;
   const cells = [];
   for (let i = 0; i < (first.getDay() + 6) % 7; i++) cells.push('<span class="cal-cell blank" aria-hidden="true"></span>');
   for (let n = 1; n <= days; n++) {
     const k = `${month}-${String(n).padStart(2, '0')}`;
     const cls = (k === d.day ? ' start' : '') + (k === end ? ' end' : '') + (k > d.day && k < end ? ' in' : '');
-    cells.push(`<button class="cal-cell${cls}" data-action="awayPick" data-key="${k}" ${k < today ? 'disabled' : ''} aria-pressed="${k >= d.day && k <= end}"><span class="cal-num">${n}</span></button>`);
+    cells.push(`<button class="cal-cell${cls}" data-action="pickDay" data-key="${k}" ${k < today ? 'disabled' : ''} aria-pressed="${k >= d.day && k <= end}"><span class="cal-num">${n}</span></button>`);
   }
   const title = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-  return `<div class="range-picker">
+  return `<div class="range-picker${d.away ? ' away' : ''}">
     <div class="cal-month-head">
-      <button class="icon-btn" data-action="awayMonth" data-delta="-1" aria-label="Previous month" ${month <= today.slice(0, 7) ? 'disabled' : ''}>${Icon.back}</button>
+      <button class="icon-btn" data-action="pickMonth" data-delta="-1" aria-label="Previous month" ${month <= today.slice(0, 7) ? 'disabled' : ''}>${Icon.back}</button>
       <span class="cal-month-title">${esc(title)}</span>
-      <button class="icon-btn flip" data-action="awayMonth" data-delta="1" aria-label="Next month">${Icon.back}</button></div>
+      <button class="icon-btn flip" data-action="pickMonth" data-delta="1" aria-label="Next month">${Icon.back}</button></div>
     <div class="cal-weekdays" aria-hidden="true">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(x => `<span>${x}</span>`).join('')}</div>
     <div class="cal-grid" role="group" aria-label="${esc(title)}">${cells.join('')}</div>
-    <p class="fine" style="margin:6px 0 0">${d.until ? 'Tap a day to start again.' : 'Tap the last day.'}</p></div>`;
+    <p class="fine" style="margin:6px 0 0">${d.away && !d.until ? 'Tap the last day.' : 'Tap a day to change it.'}</p></div>`;
 }
 /** "Overdue", the day and time ("Tomorrow · 10:00"), or a span ("Mon 19 – Fri 23 Oct", "Until Fri 23 Oct"). */
 function calWhen(n, now = new Date()) {
@@ -1333,9 +1364,9 @@ function calendarCards(h) {
       const both = n.for === 'any';
       const by = esc(partnerFirst(h));
       return `<div class="card cal-due away-card"><div class="row static col">
-        <div class="row-text"><span class="cal-due-when">${esc(awayRange(n.day, n.until))}</span><span class="row-title">${both ? "You're both away" : `${by} is away`} · ${esc(n.text)}</span>
-        <span class="row-sub">${both ? 'The home takes a break on these days.' : `${by}'s daily tasks come to you on these days.`}</span></div>
-        <div class="btns" style="margin-top:10px"><button class="btn secondary" data-action="calSeen" data-id="${esc(n.id)}">Got it</button></div>
+        <div class="row-text"><span class="cal-due-when">${esc(awayRange(n.day, n.until))}</span><span class="row-title one-line">${esc(n.text)}</span>
+        <span class="row-sub">${both ? "You're both away. The home takes a break." : `${by} is away. The daily tasks come to you.`}</span></div>
+        <div class="btns" style="margin-top:2px"><button class="btn secondary" data-action="calSeen" data-id="${esc(n.id)}">Got it</button></div>
       </div></div>`;
     }
     const whoLine = !n.task ? (about ? (about === me ? 'For you' : `For ${esc(Household.memberName(Household.member(h, about) || {}))}`) : '')
@@ -1716,17 +1747,13 @@ const Sheets = {
       <div class="chips" role="group" aria-label="Kind" style="margin-bottom:12px">${[['note', 'Note'], ['task', 'Task'], ...(Household.AWAY_ON ? [['away', 'Away']] : [])].map(([k, l]) =>
         `<button class="chip${k === 'away' ? ' away' : ''}" data-action="calKind" data-key="${k}" aria-pressed="${kind === k}">${l}</button>`).join('')}</div>
       <div class="field"><label for="cal-text">${label}</label>
-        <input id="cal-text" data-input="calText" maxlength="${Household.NOTE_MAX_LENGTH}" placeholder="${esc(example)}" value="${esc(d.text)}" autocomplete="off" enterkeyhint="done"></div>
-      ${d.away ? `<div class="field"><label for="away-when">When?</label>
-        <button id="away-when" class="range-field" data-action="awayOpen" aria-expanded="${!!d.pickOpen}">${esc(awayRange(d.day, d.until))}</button>
-        ${d.pickOpen ? awayPicker(d, today) : ''}</div>
+        <input id="cal-text" data-input="calText" maxlength="${d.away ? Household.AWAY_MAX_LENGTH : Household.NOTE_MAX_LENGTH}" placeholder="${esc(example)}" value="${esc(d.text)}" autocomplete="off" enterkeyhint="done"></div>
+      <div class="field"><label for="cal-when">When?</label>
+        <button id="cal-when" class="range-field${d.away ? ' away' : ''}" data-action="pickOpen" aria-expanded="${!!d.pickOpen}">${esc(awayRange(d.day, d.away ? d.until : ''))}</button>
+        ${d.pickOpen ? datePicker(d, today) : ''}</div>
       <div class="field"><label for="cal-time">Time</label>
         <div class="timing-controls"><span class="time-wrap minutes"><input id="cal-time" class="select${d.time ? '' : ' empty'}" type="time" value="${esc(d.time)}" data-change="calTime" aria-label="Time (optional)"><span class="time-ph" aria-hidden="true">--:--</span></span></div>
-        <span class="field-hint">The time is optional.</span></div>` : `<div class="field"><label for="cal-day">When?</label>
-        <div class="timing-controls">
-          <input id="cal-day" class="select" type="date" min="${today}" value="${esc(d.day)}" data-change="calDay" aria-label="Date">
-          <span class="time-wrap minutes"><input id="cal-time" class="select${d.time ? '' : ' empty'}" type="time" value="${esc(d.time)}" data-change="calTime" aria-label="Time (optional)"><span class="time-ph" aria-hidden="true">--:--</span></span>
-        </div><span class="field-hint">The time is optional.</span></div>`}
+        <span class="field-hint">The time is optional.</span></div>
       <div class="field"><label>${d.away ? 'Who is away?' : d.task ? 'Who does it?' : 'Who is it for?'}</label>
         <div class="chips" role="group" aria-label="${d.task ? 'Who does it' : 'Who is it for'}">${forOpts.map(([k, l]) =>
           `<button class="chip" data-action="calFor" data-key="${esc(k)}" aria-pressed="${d.for === k}">${l}</button>`).join('')}</div></div>

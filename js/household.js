@@ -190,6 +190,7 @@ const Household = {
    * Done items are simply removed. */
   NOTE_DAYS: 7,
   NOTE_MAX_LENGTH: 140,
+  AWAY_MAX_LENGTH: 24,      // an absence's reason is its title: one line
   notes: h => h.notes || [],
   dayKey(ms = Date.now()) {
     const d = new Date(ms);
@@ -243,7 +244,7 @@ const Household = {
   /** Is this item on that day (a note can run over several days)? */
   calOn: (n, day) => n.day === day || (!!n.until && n.day <= day && day <= n.until),
   addCal(h, userId, { task, away, text, day, until, time, for: who }) {
-    const clean = String(text || '').trim().replace(/\s+/g, ' ').slice(0, this.NOTE_MAX_LENGTH);
+    const clean = String(text || '').trim().replace(/\s+/g, ' ').slice(0, away && !task ? this.AWAY_MAX_LENGTH : this.NOTE_MAX_LENGTH);
     if (!clean) return 'text';
     const today = this.dayKey();
     if (typeof day !== 'string' || !DAY_RE.test(day) || day < today) return 'day';
