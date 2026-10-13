@@ -1130,8 +1130,8 @@ const Mood = (() => {
 
 /* ---------- Board ---------- */
 const NOTE_KINDS = {
-  note:  { icon: 'note', label: 'Note',        hint: 'Stays on the board for 7 days.',                               placeholder: 'e.g. Plumber comes Thursday at 10' },
-  today: { icon: 'today', label: 'Today only',  hint: 'The first person to tap "I\'ll do it" gets it on their list.', placeholder: 'e.g. Take the parcel to the post office' },
+  note:  { icon: 'note', label: 'Note',        hint: 'Stays up for 7 days.',   placeholder: 'e.g. Plumber comes Thursday at 10' },
+  today: { icon: 'today', label: 'Today only',  hint: 'A quick job for today.', placeholder: 'e.g. Take the parcel to the post office' },
 };
 function boardSeenKey(h) { return `household-app/board-seen/${h.id}/${S.user.uid}`; }
 function boardSeenAt(h) { return Number(SafeStorage.get(boardSeenKey(h)) || 0); }
