@@ -241,7 +241,7 @@ const Screens = {
       ${sections}
       ${ownSection}
       <div class="section-head"><h2 class="section-title">Something missing?</h2></div>
-      ${addOwnRow('Add your own task')}
+      ${addOwnRow('Add a task')}
       ${setup ? '' : reshuffleBlock(h)}
       <div class="bottom-bar">
         <p class="count" aria-live="polite">${count ? `${plural(count, 'task')} · about ${formatMinutes(Household.weeklyTotal(h))} a week` : 'Nothing selected yet'}</p>
@@ -1168,7 +1168,7 @@ function boardCard(h) {
   const head = `<button class="board-head" data-action="${items.length ? 'toggleBoard' : 'addNote'}" aria-expanded="${!!S.boardOpen}">
       <span class="board-icon" aria-hidden="true">${Icon.board}</span><span class="board-title">Board</span>
       <span class="board-meta">${meta}</span>
-      <span class="board-chev" aria-hidden="true">${items.length ? (S.boardOpen ? '–' : '+') : '+'}</span></button>`;
+      <span class="add-icon" aria-hidden="true">${items.length && S.boardOpen ? Icon.minus : Icon.plus}</span></button>`;
   const cls = `board${count ? ' waiting' : ''}`;
   if (!S.boardOpen || !items.length) return `<div class="${cls}">${head}</div>`;
   const now = new Date();
@@ -1249,7 +1249,7 @@ function weekCard(h) {
   return `<section class="cal-card" aria-label="This week">
     <div class="cal-head"><span class="board-icon" aria-hidden="true">${Icon.calendar}</span><h2 class="cal-title">This week</h2>
       <button class="cal-icon-btn" data-action="nav" data-to="calendar" aria-label="Month view">${Icon.month}</button>
-      <button class="cal-icon-btn" data-action="addCal" aria-label="Add to the calendar"><span class="board-chev" aria-hidden="true">+</span></button></div>
+      <button class="cal-icon-btn" data-action="addCal" aria-label="Add to the calendar"><span class="add-icon" aria-hidden="true">${Icon.plus}</span></button></div>
     ${rows.length ? `<div class="cal-list">${rows.map(n => calRow(h, n, now)).join('')}</div>` : '<p class="cal-empty">Nothing planned this week.</p>'}
     ${later.length ? `<button class="cal-later" data-action="nav" data-to="calendar">${plural(later.length, 'more thing')} later</button>` : ''}
   </section>`;

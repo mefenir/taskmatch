@@ -128,8 +128,8 @@ a.btn{text-decoration:none}
 
 /* Gold accent: subscription and plans */
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:650;letter-spacing:.02em;padding:3px 8px;border-radius:999px;background:var(--premium-soft);color:var(--premium);flex:none}
-.row.add{color:var(--muted)}
-.row.add .plus{width:24px;height:24px;border-radius:50%;border:2px dashed var(--line);display:grid;place-items:center;flex:none}
+.row.add{color:var(--accent)}
+.row.add .row-title{font-weight:600}
 .premium-mark{width:56px;height:56px;border-radius:16px;background:var(--premium-soft);color:var(--premium);display:grid;place-items:center;margin-bottom:16px}
 
 /* Welcome */
@@ -254,7 +254,9 @@ a.btn{text-decoration:none}
 .board-title{font-weight:650;flex:none}
 .board-meta{flex:1;min-width:0;font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
 .board-meta b{color:var(--accent);font-weight:650}
-.board-chev{flex:none;width:22px;height:22px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--muted);line-height:1}
+/* One plus everywhere: the green line icon, no circle (Add a task, This week, Board, Add to this day). */
+.add-icon,.plain-row.add .plus,.row.add .plus{flex:none;display:grid;place-items:center;width:24px;height:24px;color:var(--accent)}
+.add-icon svg,.plain-row.add .plus svg,.row.add .plus svg{width:20px;height:20px;stroke-width:2}
 .board.waiting{box-shadow:inset 4px 0 0 var(--premium),var(--shadow)}
 .board.waiting .board-meta b{color:var(--premium)}
 .board-items{border-top:1px solid var(--line)}
@@ -410,7 +412,6 @@ a[x-apple-data-detectors], .plain-text a{color:inherit!important;text-decoration
 .plain-row .pr-sub{font-size:13px;line-height:18px;color:var(--muted)}
 .plain-row.add{margin-top:0;border-top:0;border-bottom:0;flex-direction:row;align-items:center;gap:10px;color:var(--accent)}
 .plain-row.add .pr-title{font-weight:600}
-.plain-row.add .plus{display:grid;place-items:center;flex:none}
 .part-empty{font-size:14px;color:var(--muted);margin:4px 4px 8px}
 .task-row.is-done .row-title{color:var(--muted)}
 
