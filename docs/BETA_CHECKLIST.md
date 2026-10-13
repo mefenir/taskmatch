@@ -11,9 +11,11 @@ Invites go out Friday 16 October 2026. Last changes and the full security check 
 - [ ] Include the partner's task suggestions (v55) in the security check
 - [ ] Turn automatic approval on or off, as decided
 - [ ] Open the live app on a phone as organiser and as partner: sign up, invite, join, rate, split, tick
+- [ ] Test Away on two phones: add (Me / Both), the partner's card, "for Ian" tasks, I'm back, the back-home line. If anything is wrong: set Household.AWAY_ON = false
+- [ ] Test Feedback: the link, the three choices (needs the published rules), the day-4 card
 - [ ] Have legal.html checked by a lawyer before charging anyone (the page no longer says it's a template)
 
-## First after beta: Away (agreed 13 Oct)
+## Away (agreed and built 13 Oct, v70; switch: Household.AWAY_ON)
 - [ ] **Where:** third choice in "Add to this day": Note · Task · **Away**. Away is purple, in the same tone as the green (button when selected and on the calendar).
 - [ ] **Fields:** Who (**Me · Both of us** only; you can't add an absence for your partner), When, time, and a word about it, which is **required** (e.g. "Work travel"), because it's what the calendar shows.
 - [ ] **Period:** picked inside the calendar with taps. The first tap is the start (the day you came from), the second is the end, the days between are tinted, tapping the start again = one day, a third tap starts over. Shown in the When field as "DD Month YYYY – DD Month YYYY".

@@ -114,6 +114,12 @@ const Feedback = {
   link: from => (Feedback.BETA ? `<button class="link-btn quiet" data-action="openFeedback" data-from="${from}">Feedback</button>` : ''),
 };
 
+/** The other person's first name (or "your partner"). */
+function partnerFirst(h) {
+  const p = Household.people(h).find(m => m.uid !== S.user.uid);
+  return p ? Household.memberName(p).split(' ')[0] : 'your partner';
+}
+
 /** The gear at the top right of every main screen: one way into Settings. */
 const settingsButton = () => `<button class="icon-btn right" data-action="nav" data-to="settings" aria-label="Settings">${Icon.gear}</button>`;
 

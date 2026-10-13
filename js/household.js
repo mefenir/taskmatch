@@ -58,10 +58,13 @@ const Household = {
     // "Running low" is gone: what was left of it becomes a plain note.
     h.notes = (Array.isArray(h.notes) ? h.notes : []).map(n => (isObj(n) && n.kind === 'low' ? { ...n, kind: 'note' } : n));
     h.notes = list(h.notes, n => okId(n.id) && NOTE_KIND_IDS.includes(n.kind) && typeof n.text === 'string'
-      && (n.kind !== 'cal' || (typeof n.day === 'string' && DAY_RE.test(n.day))))
+      && (n.kind !== 'cal' || (typeof n.day === 'string' && DAY_RE.test(n.day)))
+      // An absence of someone who left goes with them.
+      && !(n.away === true && n.for !== 'any' && !h.memberIds.includes(n.for)))
       .map(n => n.kind !== 'cal' ? n : {
         ...n,
-        task: n.task === true,
+        task: n.task === true && n.away !== true,
+        away: n.away === true && n.task !== true,
         time: typeof n.time === 'string' && TIME_RE.test(n.time) ? n.time : null,
         until: n.task !== true && typeof n.until === 'string' && DAY_RE.test(n.until) && n.until > n.day ? n.until : null,
         // Someone who left the household no longer holds anything: it's free to take again.
@@ -217,13 +220,17 @@ const Household = {
    *  - note: shows on its (first) day for both ("Got it"); gone after its last day
    *  - task for anyone: from its day, the first to tap "I'll do it" gets it on their list
    *  - task for a person: on that person's list from its day
-   *  Tasks stay until done; after their day they're "Overdue". */
+   *  Tasks stay until done; after their day they're "Overdue".
+   *  - away (away: true, a note): someone is away from day to until; for = that person, 'any' = both of you.
+   *    Only for yourself or both; removed by that person (both: either), ended early with "I'm back". */
   CAL_MAX: 60,          // upcoming and open items
   CAL_KEEP_DAYS: 92,    // past items stay this long, so the month view can look back
   CAL_HISTORY_MAX: 80,
+  /** Safety switch: false hides Away everywhere and moves no tasks (absences already added are kept, unseen). */
+  AWAY_ON: true,
   /** Everything the calendar holds, past included (for the month view). */
   calAll(h, now = Date.now()) {
-    return this.liveNotes(h, now).filter(n => n.kind === 'cal')
+    return this.liveNotes(h, now).filter(n => n.kind === 'cal' && (!n.away || this.AWAY_ON))
       .sort((a, b) => (a.day + (a.time || '99:99')).localeCompare(b.day + (b.time || '99:99')) || a.createdAt - b.createdAt);
   },
   calMonthOf: key => key || Household.dayKey().slice(0, 7),
@@ -235,15 +242,18 @@ const Household = {
   calAbout: n => (!n.task && n.for !== 'any' ? n.for : null),
   /** Is this item on that day (a note can run over several days)? */
   calOn: (n, day) => n.day === day || (!!n.until && n.day <= day && day <= n.until),
-  addCal(h, userId, { task, text, day, until, time, for: who }) {
+  addCal(h, userId, { task, away, text, day, until, time, for: who }) {
     const clean = String(text || '').trim().replace(/\s+/g, ' ').slice(0, this.NOTE_MAX_LENGTH);
     if (!clean) return 'text';
     const today = this.dayKey();
     if (typeof day !== 'string' || !DAY_RE.test(day) || day < today) return 'day';
     if (this.calItems(h).length >= this.CAL_MAX) return 'limit';
     if (!task && until && (!DAY_RE.test(until) || until < day)) return 'until';
-    const forWho = who && who !== 'any' && h.memberIds.includes(who) ? who : 'any';
-    const n = { id: uid(), by: userId, kind: 'cal', task: !!task, text: clean, day, until: !task && until && until > day ? until : null,
+    away = !!away && !task;
+    // An absence is only ever for yourself or for both of you.
+    const forWho = away ? (who === userId ? userId : 'any') : who && who !== 'any' && h.memberIds.includes(who) ? who : 'any';
+    if (away && this.awayOverlaps(h, forWho, day, until || day)) return 'overlap';
+    const n = { id: uid(), by: userId, kind: 'cal', task: !!task, ...(away ? { away: true } : {}), text: clean, day, until: !task && until && until > day ? until : null,
       time: TIME_RE.test(time || '') ? time : null,
       for: forWho, claimedBy: null, seenBy: day === today ? [userId] : [], createdAt: Date.now() };
     // Keep the past short: only the most recent CAL_HISTORY_MAX past items stay.
@@ -252,17 +262,45 @@ const Household = {
     h.notes = [...this.liveNotes(h).filter(x => !drop.has(x.id)), n];
     return n;
   },
-  /** Either of you can remove a calendar item. */
   /** Who may remove an entry: done ones and ones for both/anyone, either of you;
-   *  ones for one person, that person or whoever added it (anyone, once that person has left). */
-  calCanRemove(h, userId, n) {
+   *  ones for one person, that person or whoever added it (anyone, once that person has left).
+   *  An absence: only before it starts, by the person who is away (both: either of you). */
+  calCanRemove(h, userId, n, now = Date.now()) {
     if (!n || !h.memberIds.includes(userId)) return false;
+    if (n.away && n.day <= this.dayKey(now)) return false;
     if (n.doneAt || n.for === 'any' || !h.memberIds.includes(n.for)) return true;
-    return userId === n.for || userId === n.by;
+    return userId === n.for || (!n.away && userId === n.by);
   },
-  deleteCal(h, userId, id) {
+
+  /* ---------- Away ---------- */
+  awayList: (h, now = Date.now()) => Household.calAll(h, now).filter(n => n.away),
+  /** The absence covering this person today, if any. */
+  awayNow(h, userId, now = Date.now()) {
+    const today = this.dayKey(now);
+    return this.awayList(h, now).find(n => (n.for === 'any' || n.for === userId) && this.calOn(n, today)) || null;
+  },
+  /** Would a new absence for this person (or both: 'any') share a day with one already there? */
+  awayOverlaps(h, forWho, day, until, now = Date.now()) {
+    return this.awayList(h, now).some(n => (forWho === 'any' || n.for === 'any' || n.for === forWho)
+      && n.day <= until && day <= (n.until || n.day));
+  },
+  /** "I'm back": ends this person's running absence today. For both of you, it stays the other person's from today. */
+  endAway(h, userId, id, now = Date.now()) {
+    const n = this.notes(h).find(x => x.id === id && x.away);
+    const today = this.dayKey(now);
+    if (!n || !h.memberIds.includes(userId) || !(n.for === 'any' || n.for === userId) || !this.calOn(n, today)) return false;
+    const yesterday = this.dayKey(now - 864e5);
+    const end = n.until || n.day;
+    const other = n.for === 'any' ? h.memberIds.find(x => x !== userId) : null;
+    // The part left for the other person: they know already, so no card.
+    const rest = other ? [{ ...n, id: uid(), for: other, day: today, until: end > today ? end : null, seenBy: [...h.memberIds], createdAt: Date.now() }] : [];
+    const kept = n.day < today ? [{ ...n, until: yesterday > n.day ? yesterday : null }] : [];
+    h.notes = [...this.liveNotes(h, now).filter(x => x.id !== id), ...kept, ...rest];
+    return true;
+  },
+  deleteCal(h, userId, id, now = Date.now()) {
     const n = this.notes(h).find(x => x.id === id && x.kind === 'cal');
-    if (!this.calCanRemove(h, userId, n)) return false;
+    if (!this.calCanRemove(h, userId, n, now)) return false;
     h.notes = this.liveNotes(h).filter(x => x.id !== id);
     return true;
   },
@@ -280,6 +318,8 @@ const Household = {
   calDue(h, userId, now = Date.now()) {
     const today = this.dayKey(now);
     return this.calItems(h, now).filter(n => {
+      // An absence: the other person hears about it once, as soon as it's added.
+      if (n.away) return n.by !== userId && !n.seenBy.includes(userId);
       if (n.day > today) return false;
       if (!n.task && n.day < today) return false;                   // a note's card is for its first day
       if (n.task && !this.calOwner(n)) return true;                 // free to take: until someone takes it
@@ -750,14 +790,47 @@ const Household = {
     if (this.slot(u) === 'week') return this.weekTicks(h, u, now) >= this.weekTarget(u);
     return Schedule.doneOn(this.completion(h, u.id), now);
   },
-  /** My lists on Me. */
+  /* ---------- Away: who looks after a task on a given day ----------
+   *  At home, the person it's assigned to. When they're away and the other is home: daily tasks and anything
+   *  for the children or pets go to the one at home; the rest waits for them. Both away: the home takes a break. */
+  MOVES_WHEN_AWAY: ['children', 'pets'],
+  movesWhenAway(u) { return this.slot(u) === 'today' || this.MOVES_WHEN_AWAY.includes(u.category); },
+  /** The people away on a day. */
+  awayOn(h, day, now = Date.now()) {
+    const ids = this.peopleIds(h);
+    return new Set(this.awayList(h, now).filter(n => this.calOn(n, day)).flatMap(n => (n.for === 'any' ? ids : [n.for])));
+  },
+  /** Who does this task today: the assignee, the one at home (for "for Ian" tasks), or nobody (it waits). */
+  dayOwner(h, u, now = new Date(), away = this.awayOn(h, this.dayKey(now.getTime()))) {
+    const who = this.assignee(h, u.id);
+    if (!who || !away.has(who)) return who;
+    const other = this.peopleIds(h).find(x => x !== who);
+    return other && !away.has(other) && this.movesWhenAway(u) ? other : null;
+  },
+  /** My lists on Me, with the tasks I look after for someone who's away (forOther: their ids). */
   myLists(h, userId, now = new Date()) {
-    const mine = this.units(h).filter(u => this.assignee(h, u.id) === userId);
+    const away = this.awayOn(h, this.dayKey(now.getTime()));
+    const mine = this.units(h).filter(u => this.dayOwner(h, u, now, away) === userId);
     return {
       today: mine.filter(u => this.slot(u) === 'today'),
       week: mine.filter(u => this.dueThisWeek(h, u, now)),
       anytime: mine.filter(u => this.slot(u) === 'anytime'),
+      forOther: new Set(mine.filter(u => this.assignee(h, u.id) !== userId).map(u => u.id)),
     };
+  },
+  /** Back home today (away yesterday): my tasks the other person ticked while I was away. */
+  coveredWhileAway(h, userId, now = new Date()) {
+    const today = this.dayKey(now.getTime());
+    const back = this.awayList(h, now.getTime()).filter(n => (n.for === 'any' || n.for === userId) && n.day < today
+      && (n.until || n.day) === this.dayKey(now.getTime() - 864e5)).sort((a, b) => a.day.localeCompare(b.day))[0];
+    if (!back || this.awayOn(h, today, now.getTime()).has(userId)) return null;
+    const from = Schedule.fromKey(back.day);
+    const other = this.peopleIds(h).find(x => x !== userId);
+    const units = this.units(h).filter(u => this.assignee(h, u.id) === userId && this.movesWhenAway(u)).filter(u => {
+      const c = (h.completions || {})[u.id];
+      return c && c.by === other && c.last && Schedule.day(c.last) >= from;
+    });
+    return units.length ? { by: other, units } : null;
   },
   /** Chosen room counts change how long a task takes (the bathroom is timed per bathroom).
    *  Kept on the task in memory only (never saved with it). */
@@ -776,8 +849,9 @@ const Household = {
    */
   dayProgress(h, userIds, now = new Date()) {
     let done = 0, open = 0, left = 0, doneCount = 0;
+    const away = this.awayOn(h, this.dayKey(now.getTime()));
     this.units(h).forEach(u => {
-      if (!userIds.includes(this.assignee(h, u.id))) return;
+      if (!userIds.includes(this.dayOwner(h, u, now, away))) return;
       const minutes = Timing.of(u).minutes;
       if (Schedule.doneOn(this.completion(h, u.id), now)) { done += minutes; doneCount += 1; }
       else if (this.slot(u) === 'today') { open += minutes; left += 1; }

@@ -829,7 +829,8 @@ const Actions = {
     save('completions');
     // Just ticked off: ask, once and briefly, how long it took.
     const done = Schedule.doneOn((h.completions || {})[d.id], new Date());
-    S.feel = done && Household.stage(h) === 'active' ? { id: d.id, until: Date.now() + 10000 } : null;
+    // Only for my own tasks (not one I did for someone who's away).
+    S.feel = done && Household.stage(h) === 'active' && Household.assignee(h, d.id) === S.user.uid ? { id: d.id, until: Date.now() + 10000 } : null;
     clearTimeout(Actions._feelT);
     if (S.feel) Actions._feelT = setTimeout(() => { S.feel = null; if (currentRoute === 'today') rerender(); }, 10200);
     rerender();
@@ -1137,7 +1138,33 @@ const Actions = {
   },
   /* calendar */
   addCal(d = {}) { S.calDraft = d.key ? { task: false, text: '', day: d.key, until: '', time: '', for: 'any' } : null; Sheets.addCal(); },
-  calKind(d) { S.calDraft = { ...(S.calDraft || {}), task: d.key === 'task', until: '' }; Sheets.addCal(); },
+  calKind(d) {
+    const was = S.calDraft || {};
+    const away = d.key === 'away';
+    if (away === !!was.away && (d.key === 'task') === !!was.task) return;
+    // Away is only for me or both of us, and opens its month straight away.
+    S.calDraft = { ...was, task: d.key === 'task', away, until: '', pickOpen: away, pickMonth: '',
+      for: away ? S.user.uid : was.away ? 'any' : was.for };
+    Sheets.addCal();
+  },
+  awayOpen() { const d = S.calDraft; if (!d) return; d.pickOpen = !d.pickOpen; Sheets.addCal(); },
+  awayMonth(dd) {
+    const d = S.calDraft; if (!d) return;
+    const [y, m] = (d.pickMonth || d.day.slice(0, 7)).split('-').map(Number);
+    const next = new Date(y, m - 1 + Number(dd.delta || 0), 1);
+    const key = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
+    if (key < Household.dayKey().slice(0, 7)) return;
+    d.pickMonth = key; Sheets.addCal();
+  },
+  /** Start is set; the next tap is the last day (an earlier day moves the start). Once both are set, a tap starts over. */
+  awayPick(dd) {
+    const d = S.calDraft; const k = dd.key;
+    if (!d || !k || k < Household.dayKey()) return;
+    if (d.until) { d.day = k; d.until = ''; }
+    else if (k < d.day) d.day = k;
+    else { d.until = k; d.pickOpen = false; }
+    Sheets.addCal();
+  },
   calFor(d) { S.calDraft = { ...(S.calDraft || {}), for: d.key }; Sheets.addCal(); },
   postCal() {
     const h = S.household;
@@ -1147,6 +1174,7 @@ const Actions = {
     if (res === 'day') { toast('Pick today or a day after.'); return; }
     if (res === 'until') { toast('"Until" needs to be on or after the first day.'); return; }
     if (res === 'limit') { toast('The calendar is full. Remove something first.'); return; }
+    if (res === 'overlap') { toast('Someone is already away on some of these days.'); return; }
     save('notes');
     S.calDraft = null;
     Sheet.close();
@@ -1154,6 +1182,7 @@ const Actions = {
     const day = calDayLabel(res.day);
     const when = (/^(Today|Tomorrow)$/.test(day) ? day.toLowerCase() : day) + (res.time ? ` at ${res.time}` : '');
     const o = Household.calOwner(res);
+    if (res.away) { toast(res.for === 'any' ? 'Added. The home takes a break while you\'re both away.' : 'Added. Your daily tasks go to ' + partnerFirst(h) + ' while you\'re away.'); return; }
     toast(!res.task ? `Added for ${when}.` : !o ? `Added for ${when}. The first to tap "I'll do it" gets it.`
       : o === S.user.uid ? `Added to your list for ${when}.` : `Added to ${Household.memberName(Household.member(h, o))}'s list for ${when}.`);
   },
@@ -1168,6 +1197,10 @@ const Actions = {
     const today = Household.dayKey();
     S.calDay = today.slice(0, 7) === key ? today : `${key}-01`;
     rerender();
+  },
+  /** "I'm back": ends my absence today. */
+  endAway(d) {
+    if (Household.endAway(S.household, S.user.uid, d.id)) { Sheet.close(); save('notes'); rerender(); toast('Welcome back!'); }
   },
   calPickDay(d) { S.calDay = d.key; rerender(); },
   openCal(d) { const n = Household.calAll(S.household).find(x => x.id === d.id); if (n) Sheets.calItem(n); },
