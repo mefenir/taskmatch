@@ -282,7 +282,8 @@ function journey() {
     <h2 class="jh">First ${DAYS} days</h2>${grid || '<p class="fine" style="text-align:left">Nothing to show yet.</p>'}`;
 }
 
-/** Notes from Settings → Send feedback, newest first. */
+const FEEDBACK_TYPES = { broken: 'Broken', confusing: 'Confusing', idea: 'Idea' };
+/** Notes from Send feedback, newest first. */
 function feedbackList() {
   const filters = [['new', 'New'], ['done', 'Done'], ['all', 'All']];
   const list = A.feedback.filter(f => A.feedbackFilter === 'all' || (A.feedbackFilter === 'done' ? f.status === 'done' : f.status !== 'done'));
@@ -291,7 +292,8 @@ function feedbackList() {
       `<button data-action="feedbackFilter" data-key="${k}" aria-pressed="${A.feedbackFilter === k}">${l} (${count(k)})</button>`).join('')}</div>
     <div class="card">${list.length ? list.map(f => `<div class="req">
         <div class="top"><span class="who">${esc(f.name || 'No name')}</span><span class="status ${f.status === 'done' ? 'approved' : 'pending'}">${f.status === 'done' ? 'Done' : 'New'}</span></div>
-        <p class="feedback-text">${esc(f.text || '')}</p>
+        ${FEEDBACK_TYPES[f.type] ? `<span class="tag">${FEEDBACK_TYPES[f.type]}</span>` : ''}
+        ${f.text ? `<p class="feedback-text">${esc(f.text)}</p>` : ''}
         <div class="meta">${when(f.at)}${f.screen ? ` · on ${esc(f.screen)}` : ''}${f.version ? ` · v${esc(f.version)}` : ''}</div>
         <div class="btns"><button class="btn secondary" data-action="markFeedback" data-id="${esc(f.id)}" data-key="${f.status === 'done' ? 'new' : 'done'}" ${A.busy === f.id ? 'disabled' : ''}>${f.status === 'done' ? 'Mark as new' : 'Mark as done'}</button></div>
       </div>`).join('') : `<div class="note" style="border:0">Nothing here.</div>`}</div>`;

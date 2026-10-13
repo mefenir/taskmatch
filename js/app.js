@@ -1079,17 +1079,25 @@ const Actions = {
   },
 
   /* feedback (Settings → Help & legal) */
-  openFeedback() { Sheets.feedback(); },
+  openFeedback(d) { S.feedbackFrom = (d && d.from) || ''; Sheets.feedback(); },
+  /** The day-4 card goes either way; "Tell us" opens the sheet. */
+  feedbackCard(d) {
+    Feedback.dismiss(); rerender();
+    if (d.key === 'tell') Actions.openFeedback({ from: 'day-4 card' });
+  },
+  feedbackType(d) { S.feedbackType = S.feedbackType === d.key ? '' : d.key; Sheets.feedback(); },
   async sendFeedback() {
     const text = (S.feedbackDraft || '').trim();
-    if (!text) { const i = document.getElementById('feedback-text'); if (i) i.focus(); toast('Write something first.'); return; }
+    const type = S.feedbackType || '';
+    if (!text && !type) { toast('Pick one or write something.'); return; }
     const h = S.household;
     try {
       await Backend.Repo.sendFeedback(S.user, {
         name: (h && Household.memberName(Household.member(h, S.user.uid))) || S.user.displayName || '',
         householdId: h ? h.id : null,
+        type,
         text,
-        screen: S.settingsFrom || currentRoute || '',
+        screen: S.feedbackFrom || S.settingsFrom || currentRoute || '',
         version: ErrorLog.version(),
       });
     } catch (e) {
@@ -1100,7 +1108,8 @@ const Actions = {
         : "Couldn't send. Check your connection and try again.");
       return;
     }
-    S.feedbackDraft = '';
+    S.feedbackDraft = ''; S.feedbackType = '';
+    Feedback.sent();
     Sheet.close();
     toast('Thanks! Your feedback was sent.');
   },

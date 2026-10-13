@@ -63,7 +63,7 @@ function money(amount) {
   catch (e) { return `€${amount.toFixed(2)}`; }
 }
 
-function topbar({ back, step }) {
+function topbar({ back, step, lead = '' }) {
   const backBtn = back
     ? `<button class="icon-btn right" data-action="nav" data-to="${esc(back)}" aria-label="Back">${Icon.back}</button>`
     : '';
@@ -71,7 +71,7 @@ function topbar({ back, step }) {
   const progress = i >= 0
     ? `<div class="progress" aria-hidden="true">${ONBOARDING.map((_, k) => `<span class="${k <= i ? 'done' : ''}"></span>`).join('')}</div>
        <span class="step-label">Step ${i + 1} of ${ONBOARDING.length}</span><span class="spacer"></span>`
-    : '<span class="spacer"></span>';
+    : `${lead}<span class="spacer"></span>`;
   return `<div class="topbar">${progress}${backBtn}</div>`;
 }
 
@@ -93,6 +93,26 @@ function switchRow(action, key, label, sub, on) {
     <span class="switch" aria-hidden="true"></span>
   </button>`;
 }
+
+/** Beta feedback: a quiet link on the main screens and one card on each person's day 4.
+ *  BETA = false removes both; Settings → Send feedback stays. What each person did is kept on this phone. */
+const Feedback = {
+  BETA: true,
+  DAY: 4,
+  key: () => `household-app/feedback/${S.user ? S.user.uid : ''}`,
+  sent() { SafeStorage.set(this.key(), 'sent'); },
+  dismiss() { SafeStorage.set(this.key(), 'dismissed'); },
+  /** Day 4 counts from the day this person joined; nothing once they sent feedback or said Not now. */
+  cardDue(h, now = Date.now()) {
+    if (!this.BETA || SafeStorage.get(this.key())) return false;
+    const me = Household.member(h, S.user.uid);
+    const joined = Date.parse((me && me.joinedAt) || '');
+    if (!joined) return false;
+    const day1 = new Date(joined); day1.setHours(0, 0, 0, 0);
+    return now >= day1.getTime() + (this.DAY - 1) * 864e5;
+  },
+  link: from => (Feedback.BETA ? `<button class="link-btn quiet" data-action="openFeedback" data-from="${from}">Feedback</button>` : ''),
+};
 
 /** The gear at the top right of every main screen: one way into Settings. */
 const settingsButton = () => `<button class="icon-btn right" data-action="nav" data-to="settings" aria-label="Settings">${Icon.gear}</button>`;

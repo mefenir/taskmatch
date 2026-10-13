@@ -253,9 +253,16 @@ const Household = {
     return n;
   },
   /** Either of you can remove a calendar item. */
+  /** Who may remove an entry: done ones and ones for both/anyone, either of you;
+   *  ones for one person, that person or whoever added it (anyone, once that person has left). */
+  calCanRemove(h, userId, n) {
+    if (!n || !h.memberIds.includes(userId)) return false;
+    if (n.doneAt || n.for === 'any' || !h.memberIds.includes(n.for)) return true;
+    return userId === n.for || userId === n.by;
+  },
   deleteCal(h, userId, id) {
     const n = this.notes(h).find(x => x.id === id && x.kind === 'cal');
-    if (!n || !h.memberIds.includes(userId)) return false;
+    if (!this.calCanRemove(h, userId, n)) return false;
     h.notes = this.liveNotes(h).filter(x => x.id !== id);
     return true;
   },

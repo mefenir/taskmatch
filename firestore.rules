@@ -337,10 +337,11 @@ service cloud.firestore {
     // ---------------------------------------------------------------
     match /feedback/{id} {
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['uid', 'name', 'householdId', 'text', 'screen', 'version', 'at', 'status'])
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'householdId', 'type', 'text', 'screen', 'version', 'at', 'status'])
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.text is string
-        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
+        && request.resource.data.get('type', '') in ['', 'broken', 'confusing', 'idea']
+        && request.resource.data.text is string && request.resource.data.text.size() <= 1000
+        && (request.resource.data.text.size() > 0 || request.resource.data.get('type', '') != '')
         && request.resource.data.name is string && request.resource.data.name.size() <= 60
         && (request.resource.data.householdId == null || (request.resource.data.householdId is string && request.resource.data.householdId.size() <= 64))
         && request.resource.data.screen is string && request.resource.data.screen.size() <= 40

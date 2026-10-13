@@ -214,6 +214,9 @@ a.btn{text-decoration:none}
 .seg button{flex:1;border:0;background:transparent;border-radius:9px;padding:9px 6px;font-weight:600;font-size:14px;color:var(--muted);cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 .filter-line{display:flex;justify-content:space-between;align-items:center;margin:0 4px 4px;gap:8px}
+.link-btn.quiet{color:var(--muted);font-weight:500;margin:0;padding:10px 4px}
+.chips.even{display:grid;grid-template-columns:repeat(3,1fr)}
+.chips.even .chip{padding:8px 4px}
 .chip.small{min-height:34px;padding:6px 12px;font-size:14px}
 .swap-card{background:var(--premium-soft);border-radius:var(--radius);padding:16px;margin-bottom:16px}
 .swap-card .joke{font-size:17px;line-height:1.35;margin:0 0 6px}

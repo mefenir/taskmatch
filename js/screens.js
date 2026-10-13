@@ -608,10 +608,10 @@ const Screens = {
     const isOrg = Household.isOwner(h, me);
     if (!isOrg && S.suggestMode) return Screens.suggest();
     if (Household.stage(h) !== 'active') return Screens.plan();
-    const needs = needsCarousel(calendarCards(h) + statusBanner(h) + swapCards(h) + suggestionsCard(h, true) + newTasksCard(h) + (isOrg ? timeHintsCard(h) : ''));
+    const needs = needsCarousel(calendarCards(h) + statusBanner(h) + swapCards(h) + suggestionsCard(h, true) + newTasksCard(h) + (isOrg ? timeHintsCard(h) : '') + feedbackCard(h));
     const names = Household.people(h).map(m => esc(Household.memberName(m).split(' ')[0])).join(' & ');
     return `<main class="screen has-nav">
-      <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
+      <div class="topbar">${Feedback.link('household')}<span class="spacer"></span>${settingsButton()}</div>
       <div class="greeting"><p class="hello">${names}</p>
         <h1 class="mood">Our home</h1>
       </div>
@@ -673,7 +673,7 @@ const Screens = {
       `<div class="row static"><span class="helped-mark" aria-hidden="true">💛</span><div class="row-text"><span class="row-title">${esc(HelpLines.line(Household.memberName(Household.member(h, x.by)).split(' ')[0], x.unit.name, x.unit.id + Schedule.key(now)))}</span></div></div>`).join('')}</div>` : '';
 
     return `<main class="screen has-nav">
-      <div class="topbar"><span class="spacer"></span>${settingsButton()}</div>
+      <div class="topbar">${Feedback.link('today')}<span class="spacer"></span>${settingsButton()}</div>
       <div class="greeting"><p class="hello">Hello, ${first}</p>
         <h1 class="mood">${esc(Mood.line(now, progress))}</h1>
       </div>
@@ -830,7 +830,7 @@ const Screens = {
     const title = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
     const selLabel = calDayLabel(sel, now);
     return `<main class="screen has-nav">
-      ${topbar({ back: 'household' })}
+      ${topbar({ back: 'household', lead: Feedback.link('calendar') })}
       <div class="cal-month-head">
         <button class="icon-btn" data-action="calMonthGo" data-delta="-1" aria-label="Previous month" ${month <= lo ? 'disabled' : ''}>${Icon.back}</button>
         <h1 class="cal-month-title" aria-live="polite">${esc(title)}</h1>
@@ -1006,6 +1006,14 @@ function newTasksCard(h) {
   return `<div class="swap-card" role="status"><p class="joke">${plural(waiting.length, 'new task')} to share</p>
     <p class="plain">${esc(waiting.map(u => u.name).join(', '))}. You both say how you feel about ${waiting.length === 1 ? 'it' : 'them'}, then the app shares ${waiting.length === 1 ? 'it' : 'them'} fairly.</p>
     <button class="btn primary" data-action="shareNow">Share ${waiting.length === 1 ? 'it' : 'them'} now</button></div>`;
+}
+/** Beta: once, on this person's day 4. */
+function feedbackCard(h) {
+  if (!Feedback.cardDue(h)) return '';
+  return `<div class="swap-card" role="status"><p class="joke">How's it going so far?</p>
+    <p class="plain">Tell us what works and what doesn't.</p>
+    <div class="btns"><button class="btn primary" data-action="feedbackCard" data-key="tell">Tell us</button>
+    <button class="btn secondary" data-action="feedbackCard" data-key="later">Not now</button></div></div>`;
 }
 /** When nothing needs me: a calm line, the same all day, a different one tomorrow. */
 const ALL_CLEAR = Object.freeze([
@@ -1670,7 +1678,7 @@ const Sheets = {
     Sheet.open(`<h2>${esc(n.text)}</h2>
       <p class="sheet-facts">${facts.join(' · ')}</p>
       ${actions.join('')}
-      <button class="btn secondary" data-action="deleteCal" data-id="${esc(n.id)}">Remove</button>
+      ${Household.calCanRemove(h, me, n) ? `<button class="btn secondary" data-action="deleteCal" data-id="${esc(n.id)}">Remove</button>` : ''}
       <button class="btn ghost" data-action="closeSheet">Close</button>`, n.text);
   },
 
@@ -1690,8 +1698,11 @@ const Sheets = {
   /** Settings → Send feedback: a short note that lands in the admin panel. */
   feedback() {
     const text = S.feedbackDraft || '';
+    const types = [['broken', 'Broken'], ['confusing', 'Confusing'], ['idea', 'Idea']];
     Sheet.open(`<h2>Send feedback</h2>
       <p style="margin-bottom:12px">What works, what doesn't, or what confused you. We read every note.</p>
+      <div class="chips even" role="group" aria-label="What kind?" style="margin-bottom:12px">${types.map(([k, l]) =>
+        `<button class="chip" data-action="feedbackType" data-key="${k}" aria-pressed="${S.feedbackType === k}">${l}</button>`).join('')}</div>
       <div class="field"><textarea id="feedback-text" data-input="feedbackText" maxlength="1000" rows="5" placeholder="e.g. I couldn't find where to change who does a task">${esc(text)}</textarea></div>
       <p class="fine" style="text-align:left;margin:6px 0 14px">Your name and the screen you were on are sent with it.</p>
       <button class="btn primary" data-action="sendFeedback">Send</button>

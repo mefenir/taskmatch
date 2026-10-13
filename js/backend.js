@@ -17,7 +17,7 @@
      metrics/{hid}          { <step>: time, activeDays[] } — see METRIC_STEPS
      premiumRequests/{uid}  { uid, email, name, householdId, members, status, requestedAt, decidedAt? }
                             status: pending → approved | denied; approved → revoked; denied/revoked → pending
-     feedback/{id}          { uid, name, householdId, text, screen, version, at, status: 'new'|'done' }
+     feedback/{id}          { uid, name, householdId, type?: 'broken'|'confusing'|'idea', text, screen, version, at, status: 'new'|'done' }
      errors/{id}            { uid, name, message, stack, where, screen, version, ua, at }
      admins/{uid}           { role: 'admin' }   ← created by hand in the Firebase console
    ========================================================= */
@@ -239,6 +239,7 @@ const Backend = (() => {
 
   /* ---------- Feedback and crash reports (read in the admin panel) ---------- */
   Repo.sendFeedback = (user, info) => feedback().add({
+    ...(['broken', 'confusing', 'idea'].includes(info.type) ? { type: info.type } : {}),
     uid: user.uid,
     name: String(info.name || '').slice(0, 60),
     householdId: info.householdId || null,
