@@ -1708,7 +1708,7 @@ document.addEventListener('keydown', e => {
     // Never leave a blank page: show what went wrong instead.
     console.error(e);
     S.phase = 'error';
-    console.warn('Check js/config.js matches the Firebase setup in the README.');
+    console.warn('Check js/config.js matches the Firebase project.');
     S.fatal = "The app couldn't start. Please reload the page, or try again later.";
     try { render(true); } catch (e2) {
       document.getElementById('app').innerHTML = '<main class="screen"><h1>Something went wrong</h1><p class="lead">' + esc(S.fatal) + '</p></main>';

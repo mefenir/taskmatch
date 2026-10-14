@@ -19,7 +19,7 @@ const Screens = {
   },
 
   setup() {
-    console.warn('Not connected to Firebase yet: add your project\'s web config to js/config.js (the README walks through it).');
+    console.warn('Not connected to Firebase yet: add your project\'s web config to js/config.js.');
     return `<main class="screen">
       ${houseArt}
       <h1>Almost there</h1>
