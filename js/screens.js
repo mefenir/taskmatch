@@ -12,6 +12,19 @@ const houseArt = `<div class="welcome-art" aria-hidden="true">
   </svg>
 </div>`;
 
+/** The gradient window of the opening screens. The loop plays only here; with reduced motion, the still image. */
+function openingHero() {
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const name = dark ? 'dark' : 'light';
+  return `<div class="hero" aria-hidden="true">${still ? '' : `<video class="loop" autoplay muted loop playsinline preload="auto"
+    poster="assets/gradient-${name}.jpg" src="assets/gradient-${name}-loop.mp4" tabindex="-1"></video>`}</div>`;
+}
+/** The logo: two rings that overlap, and the name. */
+function brandMark() {
+  return `<div class="brand"><svg width="26" height="18" viewBox="0 0 26 18" aria-hidden="true"><circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="17" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span>Our Household</span></div>`;
+}
+
 const Screens = {
   loading() {
     return `<main class="screen center-screen" aria-busy="true"><div class="spinner" aria-hidden="true"></div>
@@ -38,26 +51,28 @@ const Screens = {
     </main>`;
   },
 
-  /* ---------- Signed out ---------- */
+  /* ---------- Signed out: the opening screens (gradient window with the loop, glass panel) ---------- */
   welcome() {
     const invited = !!S.pendingInvite;
-    const from = S.inviteFrom ? esc(S.inviteFrom) : '';
-    return `<main class="screen welcome">
-      ${houseArt}
-      <h1>${invited ? `${from || 'Your partner'} listed your home's tasks` : 'Share the housework fairly, without arguments.'}</h1>
-      <p class="lead">${invited
-        ? "Say how you feel about each one. The app uses both your answers to make a fair plan. It takes about a minute."
-        : 'Set up your home in a few minutes, see how much work it really is, and get a fair plan for the two of you.'}</p>
-      ${invited ? '' : `<ol class="how">
-        <li>List what your home needs</li>
-        <li>Say what you like doing and what you'd rather not</li>
-        <li>Get a fair plan, then invite your partner</li>
-      </ol>
-      <p class="fine" style="text-align:left;margin-top:12px">Setting up and seeing your plan is free.</p>
-      <p class="fine" style="text-align:left;margin-top:8px">Did your partner send you a link? Open that link first, before you sign up here.</p>`}
-      <div class="bottom-bar">
-        <button class="btn primary" data-action="authMode" data-mode="signup">${invited ? 'Create account and see the plan' : 'Get started'}</button>
-        <button class="btn ghost" data-action="authMode" data-mode="signin">I already have an account</button>
+    const from = S.inviteFrom ? esc(S.inviteFrom) : 'Your partner';
+    const err = S.auth.error ? `<p class="form-error" role="alert">${esc(S.auth.error)}</p>` : '';
+    const busy = S.auth.busy ? 'disabled' : '';
+    return `<main class="screen welcome opening">
+      ${openingHero()}
+      <div class="opening-body">
+        ${brandMark()}
+        <h1 class="opening-title"><span>Make room</span><span>for <span class="us-word">us.</span></span></h1>
+        <div class="glass">
+          <p class="lead">${invited ? `${from} invited you to share your home.` : 'Share the home fairly. Get your time together back.'}</p>
+          ${err}
+          <form data-form="email" novalidate>
+            <div class="field"><label for="f-email">Email</label>
+              <input id="f-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="${esc(S.auth.values.email || '')}" data-auth-field="email"></div>
+            <button class="btn primary" type="submit" ${busy}>Continue</button>
+          </form>
+          <button class="btn google" data-action="google" ${busy}>${Icon.google} Continue with Google</button>
+          ${invited ? '' : '<button class="link-btn" data-action="inviteHelp">Got an invite? Join your partner</button>'}
+        </div>
         ${legalLine()}
       </div>
     </main>`;
@@ -65,7 +80,7 @@ const Screens = {
 
   auth() {
     const mode = S.auth.mode;
-    const titles = { signup: 'Create your account', signin: 'Welcome back', reset: 'Reset your password' };
+    const titles = { signup: 'Nice to meet you.', signin: 'Welcome back.', reset: 'Reset your password' };
     const busy = S.auth.busy ? 'disabled' : '';
     const v = S.auth.values;
     const err = S.auth.error ? `<p class="form-error" role="alert">${esc(S.auth.error)}</p>` : '';
@@ -74,11 +89,6 @@ const Screens = {
         <label for="f-${name}">${label}</label>
         <input id="f-${esc(name)}" name="${name}" type="${type}" autocomplete="${auto}" value="${esc(v[name] || '')}" data-auth-field="${name}" ${extra}>
       </div>`;
-
-    const google = mode === 'reset' ? '' : `
-      <button class="btn google" data-action="google" ${busy}>${Icon.google} Continue with Google</button>
-      <div class="divider">or with email</div>`;
-
     const fields = mode === 'reset'
       ? field('email', 'Email', 'email', 'email', 'required inputmode="email"')
       : (mode === 'signup' ? field('name', 'Your name', 'text', 'given-name', 'maxlength="40"') : '') +
@@ -86,27 +96,31 @@ const Screens = {
         field('password', 'Password', 'password', mode === 'signup' ? 'new-password' : 'current-password',
           `required minlength="${APP_CONFIG.minPasswordLength}"`) +
         (mode === 'signup' ? field('password2', 'Repeat password', 'password', 'new-password', `required minlength="${APP_CONFIG.minPasswordLength}"`) : '');
-
     const submit = { signup: 'Create account', signin: 'Sign in', reset: 'Send reset link' }[mode];
-    const links = {
-      signup: `<p class="switch-link">Already have an account? <button class="link-btn" data-action="authMode" data-mode="signin">Sign in</button></p>`,
-      signin: `<p class="switch-link"><button class="link-btn" data-action="authMode" data-mode="reset">Forgot password?</button></p>
-               <p class="switch-link">New here? <button class="link-btn" data-action="authMode" data-mode="signup">Create an account</button></p>`,
-      reset:  `<p class="switch-link"><button class="link-btn" data-action="authMode" data-mode="signin">Back to sign in</button></p>`,
-    }[mode];
-
-    return `<main class="screen">
-      ${topbar({ back: 'welcome' })}
-      <h1>${titles[mode]}</h1>
-      ${S.pendingInvite ? `<p class="lead">After this, you'll join your household.</p>` : '<p class="lead" style="margin-bottom:20px"></p>'}
-      ${err}${note}
-      ${google}
-      <form class="auth-form" data-form="auth" novalidate>
-        ${fields}
-        <button class="btn primary" type="submit" style="margin-top:20px" ${busy}>${S.auth.busy ? 'Please wait…' : submit}</button>
-      </form>
-      ${links}
-      <div style="height:calc(24px + env(safe-area-inset-bottom))"></div>
+    // New or returning: one switch instead of two separate screens.
+    const seg = mode === 'reset' ? '' : `<div class="seg" role="group" aria-label="New or returning">
+        <button type="button" data-action="authMode" data-mode="signup" aria-pressed="${mode === 'signup'}">New here</button>
+        <button type="button" data-action="authMode" data-mode="signin" aria-pressed="${mode === 'signin'}">I have an account</button></div>`;
+    const link = mode === 'signin' ? '<button class="link-btn" data-action="authMode" data-mode="reset">Forgot password?</button>'
+      : mode === 'reset' ? '<button class="link-btn" data-action="authMode" data-mode="signin">Back to sign in</button>' : '';
+    return `<main class="screen opening auth-screen">
+      ${openingHero()}
+      <div class="back-row"><button class="icon-btn" data-action="nav" data-to="welcome" aria-label="Back">${Icon.back}</button></div>
+      <div class="opening-body">
+        ${brandMark()}
+        <h1 class="opening-title">${titles[mode]}</h1>
+        <div class="glass">
+          ${seg}
+          ${S.pendingInvite ? '<p class="lead">After this, you join your household.</p>' : ''}
+          ${err}${note}
+          <form data-form="auth" novalidate>
+            ${fields}
+            <button class="btn primary" type="submit" ${busy}>${S.auth.busy ? 'Please wait…' : submit}</button>
+          </form>
+          ${link}
+        </div>
+        ${legalLine()}
+      </div>
     </main>`;
   },
 
@@ -1570,6 +1584,12 @@ function statusBanner(h) {
    SHEETS
    ========================================================= */
 const Sheets = {
+  /** Opening screen: partners join through the link they were sent. */
+  inviteHelp() {
+    Sheet.open(`<h2>Joining your partner?</h2>
+      <p>Open the link your partner sent you. It brings you straight into your shared home.</p>
+      <button class="btn primary" data-action="closeSheet">Got it</button>`, 'Joining your partner');
+  },
   /** Right after subscribing: the next step is the invite (a tap, so the share sheet can open). */
   /** Tapping "Break into parts" before subscribing: what it is, and the way to get it. */
   partsNeedSubscription() {

@@ -516,6 +516,19 @@ const Actions = {
     S.auth.mode = d.mode; S.auth.error = ''; S.auth.note = '';
     go('auth');
   },
+  /** Opening screen: the email first, then a password on the next step (new by default). */
+  continueEmail() {
+    const email = String(S.auth.values.email || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      S.auth.error = email ? 'Check your email address.' : 'Enter your email address.'; rerender();
+      const i = document.getElementById('f-email'); if (i) i.focus();
+      return;
+    }
+    S.auth.values.email = email;
+    S.auth.mode = S.auth.mode === 'signin' ? 'signin' : 'signup'; S.auth.error = ''; S.auth.note = '';
+    go('auth');
+  },
+  inviteHelp() { Sheets.inviteHelp(); },
   async google() {
     S.auth.busy = true; S.auth.error = ''; rerender();
     try { await Backend.Auth.google(); }
@@ -1439,7 +1452,10 @@ function render(routeChanged) {
   if (SHARE_FROM.includes(name) && changed) shareNewTasks();
   if (name === 'subscribe' && isOrganiser() && !hasAccess()) mark('paywall');
   const leaving = changed ? null : Needs.capture($app);
+  const loop = $app.querySelector('.hero video.loop');
   $app.innerHTML = Screens[name]();
+  const fresh = $app.querySelector('.hero video.loop');
+  if (loop && fresh && fresh.getAttribute('src') === loop.getAttribute('src')) fresh.replaceWith(loop);
   tidyText($app);
   fitButtons($app);
   applyBusy($app);
@@ -1664,6 +1680,7 @@ document.addEventListener('change', e => {
   if (el && Changes[el.dataset.change]) Changes[el.dataset.change](el.value, { ...el.dataset }, el);
 });
 document.addEventListener('submit', e => {
+  if (e.target.closest('[data-form="email"]')) { e.preventDefault(); if (!S.auth.busy) Actions.continueEmail(); return; }
   if (!e.target.closest('[data-form="auth"]')) return;
   e.preventDefault();
   if (!S.auth.busy) submitAuth();

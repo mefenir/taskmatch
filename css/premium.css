@@ -1,0 +1,143 @@
+/* =========================================================
+   PREMIUM THEME — loaded after styles.css.
+   Forest + ivory, champagne for "us", clay for "needs you", Dusk for away.
+   Reuses the app's variable names; adds --us, --link, --needs, --primary*, --glass*, --gilded, --serif, --sans.
+   Fonts are served from this site (no Google request).
+   ========================================================= */
+@font-face{font-family:"Geist";src:url("../fonts/Geist-Variable.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:"Instrument Serif";src:url("../fonts/InstrumentSerif-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"Instrument Serif";src:url("../fonts/InstrumentSerif-Italic.woff2") format("woff2");font-weight:400;font-style:italic;font-display:swap}
+
+:root{
+  --bg:#F6F2EA; --surface:#FBF8F2; --surface-2:#ECE6DA; --ink:#13201A; --muted:#5E584E; --line:#E6E0D4;
+  --accent:#1F3B2D; --accent-ink:#FBF8F2; --accent-soft:#E2ECE6;          /* forest: ticks, toggles, selected */
+  --primary:linear-gradient(180deg,#2E5A44 0%,#1F3B2D 100%); --primary-ink:#FBF8F2;
+  --primary-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 1px 2px rgba(15,26,20,.35),0 12px 26px -10px rgba(31,59,45,.6);
+  --secondary:linear-gradient(180deg,#FFFFFF 0%,#F3EEE4 100%);
+  --secondary-shadow:inset 0 0 0 1px rgba(28,27,24,.10),inset 0 1px 0 #FFFFFF,0 1px 2px rgba(28,27,24,.08);
+  --us:#7A6440; --link:#6E5A36;                                           /* champagne deep: "us", the mark, links */
+  --away:#56637A; --away-ink:#FFFFFF; --away-soft:#E4E7EE;                /* Dusk */
+  --premium:#7A6440; --premium-soft:#F1E8D4;
+  --gilded:linear-gradient(180deg,#F4E7C4 0%,#DCC28A 100%); --gilded-ink:#2A2214; --gilded-edge:#B89C62;
+  --danger:#A3412E; --needs:#C2553F;                                       /* clay */
+  --love:#7A6440; --love-soft:#F1E8D4;                                     /* "like it" is champagne, never red */
+  --glass-bg:rgba(251,248,242,.78); --glass-blur:blur(24px); --glass-edge:rgba(255,255,255,.7);
+  --glass-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 24px 48px -24px rgba(19,32,26,.35);
+  --field-bg:#FFFFFF; --field-edge:rgba(28,27,24,.12);
+  --radius:22px; --radius-sm:14px;
+  --shadow:0 1px 0 rgba(28,27,24,.04),0 18px 40px -22px rgba(28,27,24,.28);
+  --serif:"Instrument Serif",Georgia,serif; --sans:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --hero-fill:#C2D8BA; --gradient:url("../assets/gradient-light.jpg");
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0B140F; --surface:#17251D; --surface-2:#0F1A14; --ink:#EDE8DE; --muted:#ADADA4; --line:#24332A;
+  --accent:#E6D3A3; --accent-ink:#0B140F; --accent-soft:#343D30;           /* champagne: ticks, toggles, selected */
+  --primary:linear-gradient(180deg,#FBF8F2 0%,#E9E2D4 100%); --primary-ink:#13201A;   /* ivory button */
+  --primary-shadow:inset 0 1px 0 #FFFFFF,0 1px 2px rgba(0,0,0,.4),0 14px 30px -12px rgba(0,0,0,.45);
+  --secondary:rgba(255,255,255,.06);
+  --secondary-shadow:inset 0 0 0 1px rgba(255,255,255,.14),inset 0 1px 0 rgba(255,255,255,.10);
+  --us:#E6D3A3; --link:#D9CBA6;
+  --away:#AEB8CC; --away-ink:#0B140F; --away-soft:#2F3C39;
+  --premium:#E6D3A3; --premium-soft:#343D30;
+  --gilded:#D6BC84; --gilded-ink:#1E180D; --gilded-edge:#E8D3A0;
+  --danger:#E58F7A; --needs:#E58F7A;
+  --love:#E6D3A3; --love-soft:#343D30;
+  --glass-bg:rgba(23,37,29,.58); --glass-blur:blur(26px) saturate(140%); --glass-edge:rgba(255,255,255,.12);
+  --glass-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 30px 60px -30px rgba(0,0,0,.7);
+  --field-bg:rgba(11,20,15,.55); --field-edge:rgba(255,255,255,.14);
+  --shadow:inset 0 1px 0 rgba(255,255,255,.04),0 18px 40px -22px rgba(0,0,0,.6);
+  --hero-fill:#1A3626; --gradient:url("../assets/gradient-dark.jpg");
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0B140F; --surface:#17251D; --surface-2:#0F1A14; --ink:#EDE8DE; --muted:#ADADA4; --line:#24332A;
+  --accent:#E6D3A3; --accent-ink:#0B140F; --accent-soft:#343D30;
+  --primary:linear-gradient(180deg,#FBF8F2 0%,#E9E2D4 100%); --primary-ink:#13201A;
+  --primary-shadow:inset 0 1px 0 #FFFFFF,0 1px 2px rgba(0,0,0,.4),0 14px 30px -12px rgba(0,0,0,.45);
+  --secondary:rgba(255,255,255,.06);
+  --secondary-shadow:inset 0 0 0 1px rgba(255,255,255,.14),inset 0 1px 0 rgba(255,255,255,.10);
+  --us:#E6D3A3; --link:#D9CBA6;
+  --away:#AEB8CC; --away-ink:#0B140F; --away-soft:#2F3C39;
+  --premium:#E6D3A3; --premium-soft:#343D30;
+  --gilded:#D6BC84; --gilded-ink:#1E180D; --gilded-edge:#E8D3A0;
+  --danger:#E58F7A; --needs:#E58F7A;
+  --love:#E6D3A3; --love-soft:#343D30;
+  --glass-bg:rgba(23,37,29,.58); --glass-blur:blur(26px) saturate(140%); --glass-edge:rgba(255,255,255,.12);
+  --glass-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 30px 60px -30px rgba(0,0,0,.7);
+  --field-bg:rgba(11,20,15,.55); --field-edge:rgba(255,255,255,.14);
+  --shadow:inset 0 1px 0 rgba(255,255,255,.04),0 18px 40px -22px rgba(0,0,0,.6);
+  --hero-fill:#1A3626; --gradient:url("../assets/gradient-dark.jpg");
+  color-scheme:dark;
+}
+
+/* ---------- Type ---------- */
+body{font-family:var(--sans)}
+h1,.greeting .mood,.part-title,.cal-month-title{font-family:var(--serif);font-weight:400;letter-spacing:-.01em}
+h1{font-size:38px;line-height:1.05}
+.greeting .mood{font-size:38px;line-height:1.05}
+.part-title{font-size:26px;line-height:1.1}
+.welcome h1{font-size:60px;line-height:.98}
+.us-word{font-style:italic;color:var(--us)}
+.section-title{font-size:12px;letter-spacing:.14em;color:var(--link)}
+.link-btn,a{color:var(--link)}
+
+/* ---------- Buttons: lit from above ---------- */
+.btn{border-radius:16px;min-height:56px}
+.btn.primary{background:var(--primary);color:var(--primary-ink);box-shadow:var(--primary-shadow)}
+.btn.primary.is-busy{--busy-ring:rgba(127,127,127,.35);--busy-head:var(--primary-ink)}
+.btn.secondary,.btn.google{background:var(--secondary);color:var(--ink);box-shadow:var(--secondary-shadow)}
+.btn.ghost{color:var(--link)}
+.btn.premium{background:var(--gilded);color:var(--gilded-ink);box-shadow:inset 0 0 0 1px var(--gilded-edge)}
+
+/* ---------- Glass: only over a gradient ---------- */
+.glass{background:var(--glass-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  border:1px solid var(--glass-edge);border-radius:30px;box-shadow:var(--glass-shadow)}
+
+/* ---------- Toggle ---------- */
+.switch{width:50px;height:30px;background:var(--line)}
+.switch::after{background:#FFF}
+.row[aria-checked="true"] .switch{background:var(--accent)}
+.row[aria-checked="true"] .switch::after{background:var(--accent-ink);transform:translateX(20px)}
+
+/* ---------- Status ---------- */
+.nav-dot{background:var(--needs);width:8px;height:8px}               /* "needs you": never a number */
+.bottom-nav button[aria-current="page"]{color:var(--ink)}
+.bottom-nav button[aria-current="page"]::after{content:"";width:4px;height:4px;border-radius:2px;background:var(--us)}
+.check{border:1.5px solid var(--accent)}
+.done .row-title{text-decoration-color:var(--muted)}
+
+/* =========================================================
+   OPENING SCREENS — gradient window with the loop, logo, title, glass panel
+   ========================================================= */
+.screen.opening{position:relative;padding:0;overflow-x:hidden}
+.hero{position:absolute;left:0;right:0;top:0;height:600px;border-radius:0 0 40px 40px;overflow:hidden;
+  background:var(--hero-fill) var(--gradient) center top/cover no-repeat}
+.hero video.loop{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}
+@media (prefers-reduced-motion: reduce){.hero video.loop{display:none}}
+.opening-body{position:relative;flex:1;display:flex;flex-direction:column;
+  padding:max(56px,calc(env(safe-area-inset-top) + 24px)) 16px max(20px,env(safe-area-inset-bottom))}
+.brand{display:flex;align-items:center;gap:10px;padding:0 12px;color:var(--ink)}
+.brand svg{color:var(--us);flex:none}
+.brand span{font-family:var(--serif);font-size:22px;line-height:1}
+.opening-title{margin:clamp(40px,17vh,150px) 0 32px;padding:0 12px;color:var(--ink)}
+.opening-title > span{display:block}
+.welcome .opening-title{font-size:60px;line-height:.98;letter-spacing:-.015em}
+.opening .glass{margin-top:auto;padding:24px 20px 20px;display:flex;flex-direction:column;gap:12px}
+.opening .glass .lead{margin:0 4px 4px;font-size:16px;line-height:1.5;color:var(--muted)}
+.opening .glass .field{padding:0;gap:6px}
+.opening .glass .field + .field{border-top:0}
+.opening .glass .field label{margin:0 4px;font-size:13px;font-weight:500}
+.opening .glass .field input{flex:none;height:54px;box-sizing:border-box;border-radius:14px;border:1px solid var(--field-edge);
+  background:var(--field-bg);padding:0 16px;font:400 16px var(--sans);color:var(--ink);box-shadow:inset 0 1px 2px rgba(28,27,24,.06);width:100%}
+.opening .glass .field input:focus{box-shadow:0 0 0 2px var(--accent)}
+.opening .glass .field input::placeholder{color:var(--muted)}
+.opening .glass form{display:flex;flex-direction:column;gap:12px}
+.opening .glass .btn{margin-top:0}
+.opening .glass .btn + .btn{margin-top:0}
+.opening .glass .link-btn{align-self:center;font-size:15px;font-weight:500;padding:6px 8px 2px;margin:0}
+.opening .glass .seg{margin:0 0 4px}
+.opening .glass .form-error,.opening .glass .form-note{margin:0 4px}
+.opening .legal-line{margin:14px 12px 0;text-align:center}
+.opening .back-row{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;z-index:2}
+.kb-open .screen.opening{padding-bottom:calc(var(--kb, 0px) + 96px)}
