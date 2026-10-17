@@ -1833,12 +1833,12 @@ const Sheets = {
   feedback() {
     const text = S.feedbackDraft || '';
     const types = [['broken', 'Broken'], ['confusing', 'Confusing'], ['idea', 'Idea']];
-    Sheet.open(`<h2>Send feedback</h2>
-      <p style="margin-bottom:12px">What works, what doesn't, or what confused you. We read every note.</p>
-      <div class="chips even" role="group" aria-label="What kind?" style="margin-bottom:12px">${types.map(([k, l]) =>
+    Sheet.open(`<div class="sheet-intro"><h2>Send feedback</h2>
+      <p>Tell us what works and what doesn't.</p></div>
+      <div class="chips even" role="group" aria-label="What kind?">${types.map(([k, l]) =>
         `<button class="chip" data-action="feedbackType" data-key="${k}" aria-pressed="${S.feedbackType === k}">${l}</button>`).join('')}</div>
-      <div class="field"><textarea id="feedback-text" data-input="feedbackText" maxlength="1000" rows="5" placeholder="e.g. I couldn't find where to change who does a task">${esc(text)}</textarea></div>
-      <p class="fine" style="text-align:left;margin:6px 0 14px">Your name and the screen you were on are sent with it.</p>
+      <div class="field"><textarea id="feedback-text" data-input="feedbackText" maxlength="1000" rows="5" aria-label="Your feedback" placeholder="e.g. I couldn't find where to swap a task">${esc(text)}</textarea>
+        <p class="field-note">Your name and this screen are sent with it.</p></div>
       <button class="btn primary" data-action="sendFeedback">Send</button>
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Send feedback');
   },
