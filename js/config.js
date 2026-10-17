@@ -38,9 +38,9 @@ const APP_CONFIG = Object.freeze({
 
   /* Legal pages (legal.html) read these. Fill them in before charging anyone. */
   legal: Object.freeze({
-    operator: '',           // your full name or company
+    operator: 'MadMadeMe & Co.', // your full name or company
     address: '',            // street, postcode, city, country
-    email: '',              // contact email
-    vatId: '',              // optional
+    email: 'theworkautapp@gmail.com', // contact email
+    vatId: '',              // none: the VAT line is left out of the legal notice
   }),
 });
