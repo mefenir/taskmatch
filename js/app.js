@@ -1456,6 +1456,7 @@ function render(routeChanged) {
   $app.innerHTML = Screens[name]();
   const fresh = $app.querySelector('.hero video.loop');
   if (loop && fresh && fresh.getAttribute('src') === loop.getAttribute('src')) fresh.replaceWith(loop);
+  Loop.wake();
   tidyText($app);
   fitButtons($app);
   applyBusy($app);
@@ -1529,6 +1530,23 @@ function go(name) {
   if (location.hash === '#/' + name) render(true);
   else location.hash = '#/' + name;
 }
+
+/* ---------- The opening screens' background loop ----------
+ * Browsers pause a video when you leave the page (Terms, another app) and don't always restart it on return.
+ * Wake it whenever the page is shown again; if the phone refuses (Low Power Mode), the still image stays. */
+const Loop = {
+  wake() {
+    const v = document.querySelector('.hero video.loop');
+    if (!v) return;
+    v.muted = true; v.defaultMuted = true; v.playsInline = true;
+    if (!v.paused) return;
+    const p = v.play();
+    if (p && p.catch) p.catch(() => {});
+  },
+};
+window.addEventListener('pageshow', () => Loop.wake());
+window.addEventListener('focus', () => Loop.wake());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') Loop.wake(); });
 
 /* ---------- Back to the top: a round arrow, bottom right, once the page has scrolled ---------- */
 /** The "Needs you" carousel: keeps the slide you were on across re-renders and moves the dots as you swipe. */

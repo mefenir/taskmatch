@@ -18,7 +18,7 @@ function openingHero() {
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const name = dark ? 'dark' : 'light';
   return `<div class="hero" aria-hidden="true">${still ? '' : `<video class="loop" autoplay muted loop playsinline preload="auto"
-    poster="assets/gradient-${name}.jpg" src="assets/gradient-${name}-loop.mp4" tabindex="-1"></video>`}</div>`;
+    poster="assets/gradient-${name}.jpg" src="assets/gradient-${name}-loop.mp4" tabindex="-1" disablepictureinpicture disableremoteplayback></video>`}</div>`;
 }
 /** The logo: two rings that overlap, and the name. */
 function brandMark() {

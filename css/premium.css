@@ -154,3 +154,13 @@ h1{font-size:38px;line-height:1.05}
 .sheet .field-note{margin:2px 4px 0;font-size:13px;line-height:1.4;color:var(--muted)}
 .sheet .chips.even + .field{padding-top:0}
 .sheet .field + .btn{margin-top:4px}
+
+/* ---------- Calendar: the month switcher is its own pill, apart from the back arrow ---------- */
+.cal-month-head:not(.range-picker .cal-month-head){background:var(--surface);border-radius:999px;padding:4px;box-shadow:var(--shadow);margin:8px 0 16px}
+.cal-month-head:not(.range-picker .cal-month-head) .icon-btn{width:40px;height:40px;background:var(--surface-2);color:var(--ink)}
+.cal-month-head:not(.range-picker .cal-month-head) .cal-month-title{font-size:26px;line-height:1}
+
+/* The loop is decoration: never show the browser's own play button or controls on it */
+.hero video.loop::-webkit-media-controls,.hero video.loop::-webkit-media-controls-start-playback-button,
+.hero video.loop::-webkit-media-controls-overlay-play-button,.hero video.loop::-webkit-media-controls-panel{display:none!important;-webkit-appearance:none;opacity:0}
+.hero video.loop{pointer-events:none}
