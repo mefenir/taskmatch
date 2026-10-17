@@ -1433,8 +1433,18 @@ function resolveRoute() {
   return name === home || allowed.includes(name) ? name : home;
 }
 
+const LoadingGate = { since: performance.now(), timer: 0 };
 function render(routeChanged) {
   const name = resolveRoute();
+  if (currentRoute === 'loading' && name !== 'loading' || (!currentRoute && name !== 'loading')) {
+    const shownAt = LoadingGate.since + 300, now = performance.now();
+    if (now > shownAt && now < shownAt + 600) {
+      clearTimeout(LoadingGate.timer);
+      LoadingGate.timer = setTimeout(() => render(true), shownAt + 600 - now);
+      return;
+    }
+  }
+  if (name === 'loading' && currentRoute !== 'loading') LoadingGate.since = performance.now();
   const routable = name === 'auth' || name === 'welcome' || name === 'start' || HOUSEHOLD_SCREENS.includes(name);
   if (routable && location.hash !== '#/' + name) history.replaceState(null, '', '#/' + name);
   const changed = routeChanged || name !== currentRoute;

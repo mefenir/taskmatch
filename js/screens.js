@@ -27,8 +27,7 @@ function brandMark() {
 
 const Screens = {
   loading() {
-    return `<main class="screen center-screen" aria-busy="true"><div class="spinner" aria-hidden="true"></div>
-      <p class="lead" style="margin-top:16px">Loading…</p></main>`;
+    return `<main class="screen loading-screen" aria-busy="true"><div class="loading-bg" aria-hidden="true"></div><div class="loading-body"><span class="rings-loader" role="img" aria-label="Loading"></span><p>Getting your household ready</p></div></main>`;
   },
 
   setup() {
