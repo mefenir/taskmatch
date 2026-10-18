@@ -473,9 +473,16 @@ const Household = {
   },
 
   /* ---------- Times & frequency ---------- */
-  setTiming(h, respId, changes) {
+  setTiming(h, respId, changes, partId = null) {
     const r = h.responsibilities.find(x => x.id === respId);
     if (!r) return;
+    if (partId) {
+      // One part of a split task: its own rhythm and time.
+      r.parts = this.parts(r).map(p => p.id !== partId ? p : { ...p,
+        minutes: changes.minutes != null ? Number(changes.minutes) || p.minutes : p.minutes,
+        frequency: changes.frequency || p.frequency });
+      return;
+    }
     const t = Timing.of(r);
     r.minutes = changes.minutes != null ? Number(changes.minutes) : t.each;
     r.frequency = changes.frequency || t.frequency;

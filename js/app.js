@@ -1012,6 +1012,59 @@ const Actions = {
     }
   },
 
+  /* split a task from the first list (setup): a small sheet, free; the parts get their times in the next step */
+  splitOpen(d) {
+    if (!isOrganiser()) return;
+    const h = S.household;
+    const r = h.responsibilities.find(x => x.id === d.id);
+    if (!r) return;
+    // Past setup, the full parts screen (with times, and the subscription) is the way.
+    if (h.settings.onboarded) { Actions.openBreakdown({ id: r.id }); return; }
+    const current = Household.parts(r).map(p => ({ name: p.name, minutes: p.minutes, frequency: p.frequency, custom: !!p.custom, on: true }));
+    const names = new Set(current.map(p => p.name.toLowerCase()));
+    const fresh = !current.length;
+    const offered = Household.defaultParts(r).filter(p => !names.has(p.name.toLowerCase())).map(p => ({ ...p, on: fresh }));
+    S.split = { respId: r.id, parts: [...current, ...offered], newName: '', was: !fresh };
+    Sheets.splitTask();
+  },
+  splitToggle(d) { const p = S.split && S.split.parts[Number(d.key)]; if (p) { p.on = !p.on; Sheets.splitTask(); } },
+  splitAddPart() {
+    const sp = S.split;
+    if (!sp) return;
+    const name = (sp.newName || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+    if (!name) { const i = document.getElementById('split-new'); if (i) i.focus(); return; }
+    if (sp.parts.some(p => p.name.toLowerCase() === name.toLowerCase())) { toast('That part is already there.'); return; }
+    const r = S.household.responsibilities.find(x => x.id === sp.respId);
+    if (!r) return;
+    sp.parts.push({ name, minutes: 10, frequency: Timing.of(r).frequency, custom: true, on: true });
+    sp.newName = '';
+    Sheets.splitTask();
+    const i = document.getElementById('split-new'); if (i) i.focus();
+  },
+  splitSave() {
+    const h = S.household;
+    const sp = S.split;
+    const r = sp && h.responsibilities.find(x => x.id === sp.respId);
+    const parts = sp ? sp.parts.filter(p => p.on) : [];
+    if (!isOrganiser() || !r || parts.length < 2) return;
+    Household.setBreakdown(h, r.id, parts);
+    S.split = null;
+    Sheet.close();
+    saveResponsibilities();
+    toast(`${r.name} is now ${parts.length} parts. Set their times next.`);
+  },
+  splitKeep() {
+    const h = S.household;
+    const sp = S.split;
+    const r = sp && h.responsibilities.find(x => x.id === sp.respId);
+    S.split = null;
+    Sheet.close();
+    if (!r || !isOrganiser() || !Household.isSplit(r)) return;
+    Household.setBreakdown(h, r.id, []);
+    saveResponsibilities();
+    toast(`${r.name} is one task again.`);
+  },
+
   /* break a task into parts (organiser saves, partner suggests) */
   openBreakdown(d) {
     // Breaking tasks into parts comes with the subscription (the draft before it is free).
@@ -1339,8 +1392,8 @@ function markedCount(h, userId) {
 const Changes = {
   breakFreq(value, d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p && FREQUENCIES.some(f => f.id === value)) { p.frequency = value; rerender(); } },
   breakMin(value, d) { const p = S.breakdown && S.breakdown.parts[Number(d.key)]; if (p) { p.minutes = Number(value) || p.minutes; rerender(); } },
-  frequency(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { frequency: value }); commit('responsibilities'); rerender(); },
-  minutes(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { minutes: Number(value) }); commit('responsibilities'); rerender(); },
+  frequency(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { frequency: value }, d.part || null); commit('responsibilities'); rerender(); },
+  minutes(value, d) { if (!isOrganiser()) return; Household.setTiming(S.household, d.id, { minutes: Number(value) }, d.part || null); commit('responsibilities'); rerender(); },
   customCategory(value) { S.customDraft = { ...(S.customDraft || {}), category: value }; },
   calTime(value, data, el) {
     S.calDraft = { ...(S.calDraft || {}), time: value };
@@ -1351,6 +1404,7 @@ const Changes = {
 };
 
 const Inputs = {
+  splitName(value) { if (S.split) S.split.newName = String(value).slice(0, 60); },
   feedbackText(value) { S.feedbackDraft = String(value).slice(0, 1000); },
   calText(value) { S.calDraft = { ...(S.calDraft || { task: false, day: Household.dayKey(), until: '', time: '', for: 'any' }), text: value }; },
   noteText(value) { S.noteDraft = { ...(S.noteDraft || { kind: 'note' }), text: value }; },
@@ -1737,6 +1791,7 @@ document.addEventListener('keydown', e => {
   if (e.target.matches('[data-input="noteText"]')) { e.preventDefault(); Actions.postNote(); return; }
   if (e.target.matches('[data-input="customName"]')) { e.preventDefault(); Actions.saveCustomTask(); return; }
   if (e.target.matches('[data-input="breakNew"]')) { e.preventDefault(); Actions.addBreakPart(); return; }
+  if (e.target.matches('[data-input="splitName"]')) { e.preventDefault(); Actions.splitAddPart(); return; }
   // Any other one-line field: Enter closes the keyboard so the next step is visible.
   // Forms (sign-in, password) keep their own Enter-to-submit; text areas keep new lines.
   if (e.target.matches('input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="number"], input[type="tel"], input[type="url"]')

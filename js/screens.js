@@ -229,10 +229,17 @@ const Screens = {
     const sections = groups.map(({ category, items }) => {
       const n = items.filter(i => selected.has(i.id)).length;
       const all = n === items.length;
-      const rows = items.map(item => `<button class="row" data-action="toggleResp" data-id="${esc(item.id)}" aria-pressed="${selected.has(item.id)}">
+      const rows = items.map(item => {
+        const on = selected.has(item.id);
+        // A big task that can be split: a quiet link once it's ticked; its parts show underneath once split.
+        const r = on && Library.parts(item.id).length > 1 ? h.responsibilities.find(x => x.libraryId === item.id) : null;
+        const parts = r ? Household.parts(r) : [];
+        const split = r ? `<button class="row-link" data-action="splitOpen" data-id="${esc(r.id)}" aria-label="${parts.length ? `Edit the parts of ${esc(item.name)}` : `Split ${esc(item.name)} into parts`}">${parts.length ? 'Edit' : 'Split'}<span aria-hidden="true"> ›</span></button>` : '';
+        return `<div class="row-wrap"><button class="row" data-action="toggleResp" data-id="${esc(item.id)}" aria-pressed="${on}">
           <span class="check" aria-hidden="true">${Icon.check}</span>
-          <div class="row-text"><span class="row-title">${esc(item.name)}</span></div>
-        </button>`).join('');
+          <div class="row-text"><span class="row-title">${esc(item.name)}</span>${parts.length ? `<span class="row-sub">${esc(parts.map(p => p.name).join(' · '))}</span>` : ''}</div>
+        </button>${split}</div>`;
+      }).join('');
       const mine = h.responsibilities.filter(r => !r.predefined && r.category === category.id).map(customRow).join('');
       return `<section aria-labelledby="cat-${esc(category.id)}">
         <div class="section-head">
@@ -253,7 +260,7 @@ const Screens = {
     return `<main class="screen">
       ${topbar({ back: setup ? 'home' : 'settings', step: setup ? 'responsibilities' : null })}
       <h1>What needs doing in your home?</h1>
-      <p class="lead" style="margin-bottom:0">${setup ? "Tick everything that applies. You're not deciding who does it yet."
+      <p class="lead" style="margin-bottom:0">${setup ? 'Tick everything that applies. Big ones can be split.'
         : active ? "Tick anything new. You'll both say how you feel about new tasks, then the app shares them fairly."
         : 'Tick everything that applies. The plan updates straight away.'}</p>
       ${sections}
@@ -277,6 +284,17 @@ const Screens = {
     const sections = groups.map(({ category, items }) => `<section aria-labelledby="fq-${esc(category.id)}">
         <div class="section-head"><h2 class="section-title" id="fq-${esc(category.id)}">${esc(category.name)}</h2></div>
         <div class="card">${items.map(r => {
+          // A split task: each part has its own rhythm and time.
+          if (Household.isSplit(r)) return Household.parts(r).map(p => {
+            const pt = Timing.of(Household.partUnit(r, p));
+            return `<div class="timing-row">
+            <span class="row-title" id="t-${esc(p.id)}">${esc(p.name)}<span class="row-sub" style="display:block">Part of ${esc(r.name)}${roomWord(r) ? ` · time for each ${roomWord(r)}` : ''}</span></span>
+            <div class="timing-controls">
+              <select class="select" data-change="frequency" data-id="${esc(r.id)}" data-part="${esc(p.id)}" aria-label="How often: ${esc(p.name)}">${frequencyOptions(pt.frequency)}</select>
+              <select class="select minutes" data-change="minutes" data-id="${esc(r.id)}" data-part="${esc(p.id)}" aria-label="How long each time: ${esc(p.name)}">${minuteOptions(pt.each)}</select>
+            </div>
+          </div>`;
+          }).join('');
           const t = Timing.of(r);
           return `<div class="timing-row">
             <span class="row-title" id="t-${esc(r.id)}">${esc(r.name)}${roomWord(r) ? `<span class="row-sub" style="display:block">Time for each ${roomWord(r)}${t.rooms > 1 ? ` · ${formatMinutes(t.minutes)} in total` : ''}</span>` : ''}</span>
@@ -1595,6 +1613,24 @@ const Sheets = {
       <button class="btn primary" data-action="closeSheet">Got it</button>`, 'Joining your partner');
   },
   /** Right after subscribing: the next step is the invite (a tap, so the share sheet can open). */
+  /** Setup: split a big task into parts, from the first list. Times come in the next step. */
+  splitTask() {
+    const sp = S.split;
+    const r = sp && S.household.responsibilities.find(x => x.id === sp.respId);
+    if (!r) return;
+    const on = sp.parts.filter(p => p.on).length;
+    Sheet.open(`<h2>Split ${esc(r.name)} into parts?</h2>
+      <p class="sheet-line">Each part can go to a different person.</p>
+      <div class="card">${sp.parts.map((p, i) => `<button class="row" data-action="splitToggle" data-key="${i}" aria-pressed="${p.on}">
+          <span class="check" aria-hidden="true">${Icon.check}</span>
+          <div class="row-text"><span class="row-title">${esc(p.name)}</span>${p.custom ? '<span class="row-sub">Your own</span>' : ''}</div></button>`).join('')}
+        <div class="split-add"><label for="split-new" class="sr-only">Add a part</label>
+          <input id="split-new" data-input="splitName" maxlength="60" placeholder="Add a part" value="${esc(sp.newName)}" autocomplete="off" enterkeyhint="done">
+          <button class="mini" data-action="splitAddPart">Add</button></div></div>
+      <button class="btn primary" data-action="splitSave" ${on < 2 ? 'disabled' : ''}>${on < 2 ? 'Pick at least two parts' : `Split into ${on} parts`}</button>
+      <button class="btn ghost" data-action="${sp.was ? 'splitKeep' : 'closeSheet'}">${sp.was ? 'Put it back as one task' : 'Keep as one task'}</button>`, `Split ${r.name}`);
+  },
+
   /** Tapping "Break into parts" before subscribing: what it is, and the way to get it. */
   partsNeedSubscription() {
     const trial = trialOffer();
