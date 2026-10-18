@@ -1,0 +1,14 @@
+{
+  "name": "Weholm Admin",
+  "short_name": "Weholm Admin",
+  "start_url": "./admin.html",
+  "scope": "./admin.html",
+  "display": "standalone",
+  "background_color": "#E6D3A3",
+  "theme_color": "#E6D3A3",
+  "icons": [
+    { "src": "icons/admin-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/admin-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/admin-icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
