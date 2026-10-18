@@ -1766,9 +1766,10 @@ const Sheets = {
     const kind = d.away ? 'away' : d.task ? 'task' : 'note';
     const label = d.away ? "What's the reason?" : d.task ? 'What needs doing?' : 'What is happening?';
     const example = d.away ? 'e.g. Work travel' : d.task ? 'e.g. Take the car to the garage' : "e.g. Doctor's appointment, business trip";
-    Sheet.open(`<h2>Add to the calendar</h2>
-      <div class="chips" role="group" aria-label="Kind" style="margin-bottom:12px">${[['note', 'Note'], ['task', 'Task'], ...(Household.AWAY_ON ? [['away', 'Away']] : [])].map(([k, l]) =>
-        `<button class="chip${k === 'away' ? ' away' : ''}" data-action="calKind" data-key="${k}" aria-pressed="${kind === k}">${l}</button>`).join('')}</div>
+    const title = d.edit ? { note: 'Edit the note', task: 'Edit the task', away: 'Edit the absence' }[kind] : 'Add to the calendar';
+    Sheet.open(`<h2>${title}</h2>
+      ${d.edit ? '' : `<div class="chips" role="group" aria-label="Kind" style="margin-bottom:12px">${[['note', 'Note'], ['task', 'Task'], ...(Household.AWAY_ON ? [['away', 'Away']] : [])].map(([k, l]) =>
+        `<button class="chip${k === 'away' ? ' away' : ''}" data-action="calKind" data-key="${k}" aria-pressed="${kind === k}">${l}</button>`).join('')}</div>`}
       <div class="field"><label for="cal-text">${label}</label>
         <input id="cal-text" data-input="calText" maxlength="${d.away ? Household.AWAY_MAX_LENGTH : Household.NOTE_MAX_LENGTH}" placeholder="${esc(example)}" value="${esc(d.text)}" autocomplete="off" enterkeyhint="done"></div>
       <div class="field"><label for="cal-when">When?</label>
@@ -1780,8 +1781,8 @@ const Sheets = {
       <div class="field"><label>${d.away ? 'Who is away?' : d.task ? 'Who does it?' : 'Who is it for?'}</label>
         <div class="chips" role="group" aria-label="${d.task ? 'Who does it' : 'Who is it for'}">${forOpts.map(([k, l]) =>
           `<button class="chip" data-action="calFor" data-key="${esc(k)}" aria-pressed="${d.for === k}">${l}</button>`).join('')}</div></div>
-      <button class="btn primary" data-action="postCal">Add</button>
-      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Add to the calendar');
+      <button class="btn primary" data-action="postCal">${d.edit ? 'Save' : 'Add'}</button>
+      <button class="btn ghost" data-action="closeSheet">Cancel</button>`, title);
   },
 
   /** One calendar item: what, when, who, and what you can do with it. */
@@ -1799,6 +1800,7 @@ const Sheets = {
       Sheet.open(`<h2>${esc(n.text)}</h2>
         <p class="sheet-facts">${esc(awayRange(n.day, n.until))}${n.time ? ` · ${esc(n.time)}` : ''} · ${who} away · Added by ${by}</p>
         ${running ? `<button class="btn primary" data-action="endAway" data-id="${esc(n.id)}">I'm back</button>` : ''}
+        ${Household.calCanEdit(h, me, n) ? `<button class="btn secondary" data-action="editCal" data-id="${esc(n.id)}">Edit</button>` : ''}
         ${Household.calCanRemove(h, me, n) ? `<button class="btn secondary" data-action="deleteCal" data-id="${esc(n.id)}">Remove</button>` : ''}
         <button class="btn ghost" data-action="closeSheet">Close</button>`, n.text);
       return;
@@ -1813,6 +1815,7 @@ const Sheets = {
     Sheet.open(`<h2>${esc(n.text)}</h2>
       <p class="sheet-facts">${facts.join(' · ')}</p>
       ${actions.join('')}
+      ${Household.calCanEdit(h, me, n) ? `<button class="btn secondary" data-action="editCal" data-id="${esc(n.id)}">Edit</button>` : ''}
       ${Household.calCanRemove(h, me, n) ? `<button class="btn secondary" data-action="deleteCal" data-id="${esc(n.id)}">Remove</button>` : ''}
       <button class="btn ghost" data-action="closeSheet">Close</button>`, n.text);
   },

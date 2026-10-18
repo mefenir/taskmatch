@@ -273,6 +273,36 @@ const Household = {
     return userId === n.for || (!n.away && userId === n.by);
   },
 
+  /** Who may edit: only whoever added it, while it's still ahead or open; an absence only before it starts. */
+  calCanEdit(h, userId, n, now = Date.now()) {
+    if (!n || n.kind !== 'cal' || n.by !== userId || !h.memberIds.includes(userId)) return false;
+    if (this.calPast(n, now)) return false;
+    return !(n.away && n.day <= this.dayKey(now));
+  },
+  /** Change what, when and who. The kind stays. A new day or person starts the card over; a new person frees the task. */
+  editCal(h, userId, id, { text, day, until, time, for: who }, now = Date.now()) {
+    const n = this.notes(h).find(x => x.id === id && x.kind === 'cal');
+    if (!this.calCanEdit(h, userId, n, now)) return 'gone';
+    const clean = String(text || '').trim().replace(/\s+/g, ' ').slice(0, n.away ? this.AWAY_MAX_LENGTH : this.NOTE_MAX_LENGTH);
+    if (!clean) return 'text';
+    const today = this.dayKey(now);
+    // An overdue task may keep its day; anything new is today or later.
+    if (typeof day !== 'string' || !DAY_RE.test(day) || (day < today && day !== n.day)) return 'day';
+    if (!n.task && until && (!DAY_RE.test(until) || until < day)) return 'until';
+    const forWho = n.away ? (who === userId ? userId : 'any') : who && who !== 'any' && h.memberIds.includes(who) ? who : 'any';
+    const end = !n.task && until && until > day ? until : null;
+    if (n.away && this.awayOverlaps(h, forWho, day, end || day, now, id)) return 'overlap';
+    const movedWho = forWho !== n.for;
+    const moved = movedWho || day !== n.day || end !== (n.until || null);
+    const next = { ...n, text: clean, day, until: end, time: TIME_RE.test(time || '') ? time : null, for: forWho,
+      claimedBy: movedWho ? null : n.claimedBy,
+      // An absence: the other person hears about the change. Otherwise a new day or person shows the card again.
+      seenBy: n.away ? [userId] : moved ? (day <= today ? [userId] : []) : n.seenBy,
+      editedAt: now };
+    h.notes = this.liveNotes(h, now).map(x => (x.id === id ? next : x));
+    return next;
+  },
+
   /* ---------- Away ---------- */
   awayList: (h, now = Date.now()) => Household.calAll(h, now).filter(n => n.away),
   /** The absence covering this person today, if any. */
@@ -281,8 +311,8 @@ const Household = {
     return this.awayList(h, now).find(n => (n.for === 'any' || n.for === userId) && this.calOn(n, today)) || null;
   },
   /** Would a new absence for this person (or both: 'any') share a day with one already there? */
-  awayOverlaps(h, forWho, day, until, now = Date.now()) {
-    return this.awayList(h, now).some(n => (forWho === 'any' || n.for === 'any' || n.for === forWho)
+  awayOverlaps(h, forWho, day, until, now = Date.now(), except = null) {
+    return this.awayList(h, now).some(n => n.id !== except && (forWho === 'any' || n.for === 'any' || n.for === forWho)
       && n.day <= until && day <= (n.until || n.day));
   },
   /** "I'm back": ends this person's running absence today. For both of you, it stays the other person's from today. */

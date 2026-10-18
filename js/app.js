@@ -1153,6 +1153,7 @@ const Actions = {
   addCal(d = {}) { S.calDraft = d.key ? { task: false, text: '', day: d.key, until: '', time: '', for: 'any' } : null; Sheets.addCal(); },
   calKind(d) {
     const was = S.calDraft || {};
+    if (was.edit) return;   // the kind stays when editing
     const away = d.key === 'away';
     if (away === !!was.away && (d.key === 'task') === !!was.task) return;
     // Away is only for me or both of us, and opens its month straight away.
@@ -1182,10 +1183,19 @@ const Actions = {
     Sheets.addCal();
   },
   calFor(d) { S.calDraft = { ...(S.calDraft || {}), for: d.key }; Sheets.addCal(); },
+  /** Whoever added it: the same sheet, filled in. */
+  editCal(d) {
+    const n = Household.calAll(S.household).find(x => x.id === d.id);
+    if (!n || !Household.calCanEdit(S.household, S.user.uid, n)) { Sheet.close(); toast("This can't be changed any more."); rerender(); return; }
+    S.calDraft = { edit: n.id, task: !!n.task, away: !!n.away, text: n.text, day: n.day, until: n.until || '', time: n.time || '', for: n.for, pickOpen: false, pickMonth: '' };
+    Sheets.addCal();
+  },
   postCal() {
     const h = S.household;
     const d = S.calDraft || {};
-    const res = Household.addCal(h, S.user.uid, d);
+    const editing = !!d.edit;
+    const res = editing ? Household.editCal(h, S.user.uid, d.edit, d) : Household.addCal(h, S.user.uid, d);
+    if (res === 'gone') { S.calDraft = null; Sheet.close(); toast("This can't be changed any more."); rerender(); return; }
     if (res === 'text') { toast('Write what it is first.'); const i = document.getElementById('cal-text'); if (i) i.focus(); return; }
     if (res === 'day') { toast('Pick today or a day after.'); return; }
     if (res === 'until') { toast('"Until" needs to be on or after the first day.'); return; }
@@ -1195,6 +1205,7 @@ const Actions = {
     S.calDraft = null;
     Sheet.close();
     rerender();
+    if (editing) { toast('Saved.'); return; }
     const day = calDayLabel(res.day);
     const when = (/^(Today|Tomorrow)$/.test(day) ? day.toLowerCase() : day) + (res.time ? ` at ${res.time}` : '');
     const o = Household.calOwner(res);
