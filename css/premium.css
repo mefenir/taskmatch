@@ -166,29 +166,28 @@ h1{font-size:38px;line-height:1.05}
 .hero video.loop{pointer-events:none}
 
 /* =========================================================
-   LOADING — "Turning together": the two rings turn half a circle, rest, then turn home (4 s).
-   Replaces every spinner. Shows only after 300 ms of waiting; reduced motion: the still mark.
+   LOADING — the foundation spinner: a thin ring with a coloured head.
+   Screens 26 px / 0.8 s; buttons 18 px / 0.7 s. Shows only after 300 ms of waiting.
    ========================================================= */
-@keyframes ring-turn{0%{transform:rotate(0)}40%,50%{transform:rotate(180deg)}90%,100%{transform:rotate(360deg)}}
+:root{--spin-track:#DDD6C8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--spin-track:rgba(255,255,255,.16)}}
+:root[data-theme="dark"]{--spin-track:rgba(255,255,255,.16)}
 @keyframes ring-appear{from{opacity:0}to{opacity:1}}
-.rings-loader,.spinner{display:block;flex:none;width:104px;height:104px;border:0;border-radius:0;background:var(--us);
-  -webkit-mask:url("../icons/rings.svg") center/contain no-repeat;mask:url("../icons/rings.svg") center/contain no-repeat;
-  animation:ring-turn 4s cubic-bezier(.65,0,.35,1) infinite}
-.spinner{width:48px;height:48px;animation:ring-turn 4s cubic-bezier(.65,0,.35,1) infinite,ring-appear .2s ease .3s both}
-.spinner.small{width:28px;height:28px;border-width:0;margin-bottom:8px;
-  -webkit-mask-image:url("../icons/rings-small.svg");mask-image:url("../icons/rings-small.svg")}
+.rings-loader,.spinner{display:block;flex:none;box-sizing:border-box;width:26px;height:26px;border-radius:50%;
+  border:2.5px solid var(--spin-track);border-top-color:var(--accent);background:none;animation:spin .8s linear infinite}
+.spinner{animation:spin .8s linear infinite,ring-appear .2s ease .3s both}
+.spinner.small{width:20px;height:20px;border-width:2.5px;margin-bottom:8px}
 .loading-screen{position:relative;padding:0;align-items:center;justify-content:center;overflow:hidden}
 .loading-bg{position:fixed;inset:0;background:linear-gradient(180deg,rgba(246,242,234,.35),rgba(246,242,234,.75)),var(--hero-fill) var(--gradient) 50% 30%/cover no-repeat}
-.loading-body{position:relative;display:flex;flex-direction:column;align-items:center;gap:26px;animation:ring-appear .2s ease .3s both}
+.loading-body{position:relative;display:flex;flex-direction:column;align-items:center;gap:18px;animation:ring-appear .2s ease .3s both}
 .loading-body p{margin:0;font-size:14px;color:var(--muted)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .loading-bg{background:linear-gradient(180deg,rgba(11,20,15,.15),rgba(11,20,15,.55)),var(--hero-fill) var(--gradient) 50% 40%/cover no-repeat}}
 :root[data-theme="dark"] .loading-bg{background:linear-gradient(180deg,rgba(11,20,15,.15),rgba(11,20,15,.55)),var(--hero-fill) var(--gradient) 50% 40%/cover no-repeat}
-/* A busy button keeps its size and colour; the label gives way to the rings in the button's text colour */
-.btn.is-busy::after,.mini.is-busy::after{width:30px;height:30px;margin:-15px 0 0 -15px;border:0;border-radius:0;
-  background:var(--busy-head,currentColor);-webkit-mask:url("../icons/rings-small.svg") center/contain no-repeat;mask:url("../icons/rings-small.svg") center/contain no-repeat;
-  animation:ring-turn 4s cubic-bezier(.65,0,.35,1) infinite}
-.mini.is-busy::after{width:20px;height:20px;margin:-10px 0 0 -10px;-webkit-mask-image:url("../icons/rings-tiny.svg");mask-image:url("../icons/rings-tiny.svg")}
-.btn.secondary.is-busy,.btn.google.is-busy{--busy-head:var(--ink)}
-.btn.ghost.is-busy,.mini.is-busy{--busy-head:var(--link)}
-.btn.premium.is-busy{--busy-head:var(--gilded-ink)}
+/* A busy button keeps its size and colour; the label gives way to the spinner in the button's text colour */
+.btn.is-busy::after,.mini.is-busy::after{box-sizing:border-box;width:18px;height:18px;margin:-9px 0 0 -9px;border-width:2.5px;animation:spin .7s linear infinite}
+.btn.primary.is-busy{--busy-ring:rgba(251,248,242,.35);--busy-head:#FBF8F2}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.primary.is-busy{--busy-ring:rgba(19,32,26,.25);--busy-head:#13201A}}
+:root[data-theme="dark"] .btn.primary.is-busy{--busy-ring:rgba(19,32,26,.25);--busy-head:#13201A}
+.btn.secondary.is-busy,.btn.google.is-busy,.btn.ghost.is-busy,.mini.is-busy{--busy-ring:var(--spin-track);--busy-head:var(--accent)}
+.btn.premium.is-busy{--busy-ring:rgba(42,34,20,.25);--busy-head:var(--gilded-ink)}
 @media (prefers-reduced-motion: reduce){.rings-loader,.spinner,.btn.is-busy::after,.mini.is-busy::after{animation:none}.spinner,.loading-body{opacity:1}}
