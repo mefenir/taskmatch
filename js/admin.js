@@ -304,22 +304,37 @@ function errorGroups() {
   const groups = new Map();
   A.errors.forEach(e => {
     const key = `${e.message || ''}|${e.where || ''}`;
-    const g = groups.get(key) || { key, message: e.message || 'Unknown error', where: e.where || '', ids: [], people: new Set(), names: new Set(), screens: new Set(), versions: new Set(), last: 0, sample: e };
+    const g = groups.get(key) || { key, message: e.message || 'Unknown error', where: e.where || '', ids: [], people: new Set(), names: new Set(), screens: new Set(), versions: new Set(), devices: new Set(), first: Infinity, last: 0, sample: e };
     g.ids.push(e.id); g.people.add(e.uid); if (e.name) g.names.add(e.name);
     if (e.screen) g.screens.add(e.screen); if (e.version) g.versions.add(e.version);
-    const t = millis(e.at) || 0; if (t >= g.last) { g.last = t; g.sample = e; }
+    if (e.device) g.devices.add(e.device);
+    const t = millis(e.at) || 0; if (t >= g.last) { g.last = t; g.sample = e; } if (t && t < g.first) g.first = t;
     groups.set(key, g);
   });
   return [...groups.values()].sort((a, b) => b.people.size - a.people.size || b.last - a.last);
+}
+/** The latest report of a group: device, the moment, the last taps, the error type and the raw stack. */
+function errorDetails(g) {
+  const e = g.sample;
+  const line = (label, value) => value ? `<dt>${label}</dt><dd>${esc(value)}</dd>` : '';
+  const others = [...g.devices].filter(d => d !== e.device);
+  return `<details class="stack"><summary>Details</summary><dl class="err-facts">
+      ${line('Device', e.device || e.ua || 'Not recorded')}
+      ${line('Also on', others.join(', '))}
+      ${line('Moment', e.moment)}
+      ${line('Last taps', e.trail)}
+      ${line('Type', e.kind)}
+      ${line('From', e.where)}
+    </dl>${e.stack ? `<pre>${esc(e.stack)}</pre>` : ''}${e.device && e.ua ? `<p class="meta">${esc(e.ua)}</p>` : ''}</details>`;
 }
 function errorList() {
   const groups = errorGroups();
   return `<p class="lead" style="margin:12px 0">Crashes on people's phones, grouped. Fix anything seen by 2 or more people first, then clear it.</p>
     <div class="card">${groups.length ? groups.map(g => `<div class="req">
         <div class="top"><span class="who">${esc(g.message)}</span><span class="status ${g.people.size > 1 ? 'denied' : 'pending'}">${g.ids.length}×</span></div>
-        <div class="meta">${g.people.size} ${g.people.size === 1 ? 'person' : 'people'}${g.names.size ? ` (${esc([...g.names].join(', '))})` : ''} · last ${when(g.last)}<br>
+        <div class="meta">${g.people.size} ${g.people.size === 1 ? 'person' : 'people'}${g.names.size ? ` (${esc([...g.names].join(', '))})` : ''} · ${g.ids.length > 1 && g.first < g.last ? `first ${when(g.first)} · ` : ''}last ${when(g.last)}<br>
           ${g.where ? `at ${esc(g.where)} · ` : ''}${g.screens.size ? `on ${esc([...g.screens].join(', '))}` : ''}${g.versions.size ? ` · v${esc([...g.versions].join(', v'))}` : ''}</div>
-        ${g.sample.stack ? `<details class="stack"><summary>Details</summary><pre>${esc(g.sample.stack)}</pre><p class="meta">${esc(g.sample.ua || '')}</p></details>` : ''}
+        ${errorDetails(g)}
         <div class="btns"><button class="btn secondary" data-action="clearErrors" data-key="${esc(g.key)}" ${A.busy === g.key ? 'disabled' : ''}>Clear</button></div>
       </div>`).join('') : `<div class="note" style="border:0">No errors reported.</div>`}</div>`;
 }

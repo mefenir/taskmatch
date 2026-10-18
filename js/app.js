@@ -1683,6 +1683,7 @@ document.addEventListener('click', e => {
   // Counters (+ / −) are meant to be tapped quickly several times; everything else ignores a double tap.
   if (action !== 'step' && now - (lastTap.get(tapKey) || 0) < 350) return;
   lastTap.set(tapKey, now);
+  ErrorLog.step(action);
   el.classList.remove('pressed'); void el.offsetWidth; el.classList.add('pressed');
   let result;
   try { result = fn({ ...el.dataset }, el); }
@@ -1708,9 +1709,10 @@ document.addEventListener('change', e => {
   if (el && Changes[el.dataset.change]) Changes[el.dataset.change](el.value, { ...el.dataset }, el);
 });
 document.addEventListener('submit', e => {
-  if (e.target.closest('[data-form="email"]')) { e.preventDefault(); if (!S.auth.busy) Actions.continueEmail(); return; }
+  if (e.target.closest('[data-form="email"]')) { e.preventDefault(); ErrorLog.step('continueEmail'); if (!S.auth.busy) Actions.continueEmail(); return; }
   if (!e.target.closest('[data-form="auth"]')) return;
   e.preventDefault();
+  ErrorLog.step('submitAuth');
   if (!S.auth.busy) submitAuth();
 });
 document.addEventListener('focusout', e => {

@@ -100,6 +100,38 @@ function glueLastWord(el) {
    Errors before sign-in wait in a short queue. */
 const ErrorLog = (() => {
   const MAX = 5;
+  /* Safari (mostly iPhone) can drop the app's link to its offline storage while the app sits in
+     the background; after that, syncing can quietly stop. When we see it, the app reloads itself
+     once, where the person was. Never twice within 2 minutes, so it can't loop. The report waits
+     in sessionStorage and is sent after the reload, marked "recovered". */
+  const STORAGE_LOST = /Indexed ?Database server|database connection is closing/i;
+  const RELOADED_AT = 'recover-reloaded-at', PENDING = 'recover-report', GAP = 2 * 60 * 1000;
+  const session = {
+    get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); return true; } catch (e) { return false; } },
+    drop(k) { try { sessionStorage.removeItem(k); } catch (e) { /* nothing to drop */ } },
+  };
+  let recovering = false;
+  function recover(entry) {
+    if (recovering) return true;
+    if (Date.now() - (Number(session.get(RELOADED_AT)) || 0) < GAP) return false;   // just reloaded: don't loop
+    entry.where = cut(`${entry.where} · recovered`, 60);
+    if (!session.set(RELOADED_AT, String(Date.now())) || !session.set(PENDING, JSON.stringify(entry))) return false;   // can't guard the loop: don't reload
+    recovering = true;
+    const reload = () => location.reload();
+    if (!document.hidden) { reload(); return true; }
+    document.addEventListener('visibilitychange', function back() {
+      if (document.hidden) return;
+      document.removeEventListener('visibilitychange', back);
+      reload();
+    });
+    return true;
+  }
+  function pending() {
+    const raw = session.get(PENDING);
+    session.drop(PENDING);
+    try { const e = raw && JSON.parse(raw); return e && typeof e.message === 'string' ? e : null; } catch (e) { return null; }
+  }
   const seen = new Set();
   const queue = [];
   let sender = null;
@@ -110,12 +142,47 @@ const ErrorLog = (() => {
     return m ? m[1] : '';
   };
   const send = entry => { try { Promise.resolve(sender(entry)).catch(() => {}); } catch (e) { /* never throw from here */ } };
+  /* Context for a report — technical facts only, never anything a person typed. */
+  const openedAt = Date.now();
+  let shownAt = openedAt, hiddenFor = 0, hiddenAt = document.hidden ? openedAt : 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (hiddenAt) { hiddenFor = Date.now() - hiddenAt; hiddenAt = 0; }
+    shownAt = Date.now();
+  });
+  const steps = [];   // the last 5 taps: action name and screen
+  const ago = ms => { const s = Math.max(0, Math.round(ms / 1000)); return s < 90 ? `${s}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${Math.round(s / 3600)}h`; };
+  const screenNow = () => location.hash.replace(/^#\/?/, '').split('?')[0] || 'start';
+  function device() {
+    const ua = navigator.userAgent || '';
+    const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    const v = (re) => { const m = re.exec(ua); return m ? m[1].replace(/_/g, '.') : ''; };
+    const os = ios ? `${/iPad/.test(ua) || /Macintosh/.test(ua) ? 'iPad' : 'iPhone'} · iOS ${v(/OS (\d+(?:_\d+)?)/)}`.trim()
+      : /Android/.test(ua) ? `Android ${v(/Android (\d+(?:\.\d+)?)/)}`.trim()
+      : /Windows/.test(ua) ? 'Windows' : /Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'Other';
+    const browser = /CriOS|Chrome\//.test(ua) && !/Edg/.test(ua) ? (/SamsungBrowser/.test(ua) ? 'Samsung Internet' : 'Chrome')
+      : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /EdgiOS|Edg\//.test(ua) ? 'Edge' : /Safari\//.test(ua) ? 'Safari' : 'Other browser';
+    let installed = false;
+    try { installed = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches; } catch (e) { /* old browser */ }
+    return `${os} · ${installed ? 'home-screen app' : `${browser} tab`}`;
+  }
+  function moment() {
+    const now = Date.now();
+    const parts = [navigator.onLine === false ? 'offline' : 'online', `open ${ago(now - openedAt)}`];
+    if (document.hidden) parts.push('in background');
+    else if (hiddenFor) parts.push(`back ${ago(now - shownAt)} ago (away ${ago(hiddenFor)})`);
+    return parts.join(' · ');
+  }
+  function trail() {
+    const now = Date.now();
+    return steps.map(x => `${x.screen}: ${x.action} ${ago(now - x.at)}`).join(' → ');
+  }
   function report(err, where) {
     const message = cut((err && err.message) || err, 300) || 'Unknown error';
     if (/^Script error\.?$/.test(message)) return;   // another site's script: nothing useful to report
     const key = `${message}|${where || ''}`;
-    if (seen.has(key) || seen.size >= MAX) return;
-    seen.add(key);
+    const lost = STORAGE_LOST.test(message);
+    if (!lost && (seen.has(key) || seen.size >= MAX)) return;
     const entry = {
       message,
       stack: cut(err && err.stack, 2000),
@@ -123,7 +190,14 @@ const ErrorLog = (() => {
       screen: cut(location.hash.replace(/^#\/?/, '').split('?')[0], 40),
       version: cut(version(), 20),
       ua: cut(navigator.userAgent, 200),
+      kind: cut(err && err.name, 40),
+      device: cut(device(), 80),
+      moment: cut(moment(), 120),
+      trail: cut(trail(), 300),
     };
+    if (lost && recover(entry)) return;   // sent after the reload
+    if (seen.has(key) || seen.size >= MAX) return;
+    seen.add(key);
     if (sender) send(entry); else if (queue.length < MAX) queue.push(entry);
   }
   window.addEventListener('error', e => {
@@ -135,8 +209,18 @@ const ErrorLog = (() => {
   return {
     report,
     version,
+    /** Remember a tap (action name only) for the next report. */
+    step(action) {
+      steps.push({ action: cut(action, 30), screen: cut(screenNow(), 20), at: Date.now() });
+      if (steps.length > 5) steps.shift();
+    },
     /** Start sending (after sign-in); anything queued goes first. */
-    connect(fn) { sender = fn; queue.splice(0).forEach(send); },
+    connect(fn) {
+      sender = fn;
+      const before = pending();
+      if (before) send(before);
+      queue.splice(0).forEach(send);
+    },
     disconnect() { sender = null; },
   };
 })();

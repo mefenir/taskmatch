@@ -249,12 +249,19 @@ const Backend = (() => {
     at: now(),
     status: 'new',
   });
-  Repo.reportError = (user, entry) => errorReports().add({
-    uid: user.uid,
-    name: String(user.displayName || '').slice(0, 60),
-    message: entry.message, stack: entry.stack, where: entry.where, screen: entry.screen, version: entry.version, ua: entry.ua,
-    at: now(),
-  });
+  /* The context fields (kind, device, moment, trail) need the rules from 18 Oct; until those are
+     published a report with them is refused, so it goes again without them. */
+  Repo.reportError = (user, entry) => {
+    const base = {
+      uid: user.uid,
+      name: String(user.displayName || '').slice(0, 60),
+      message: entry.message, stack: entry.stack, where: entry.where, screen: entry.screen, version: entry.version, ua: entry.ua,
+    };
+    const extra = {};
+    ['kind', 'device', 'moment', 'trail'].forEach(k => { if (typeof entry[k] === 'string') extra[k] = entry[k]; });
+    return errorReports().add({ ...base, ...extra, at: now() })
+      .catch(e => (e && e.code === 'permission-denied' && Object.keys(extra).length ? errorReports().add({ ...base, at: now() }) : Promise.reject(e)));
+  };
   /** Someone deleting their account: their feedback and crash reports go too. */
   Repo.forgetReports = async userId => {
     for (const col of [feedback(), errorReports()]) {
