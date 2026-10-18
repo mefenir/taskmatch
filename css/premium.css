@@ -140,6 +140,8 @@ h1{font-size:38px;line-height:1.05}
 .opening .glass .form-error,.opening .glass .form-note{margin:0 4px}
 .opening .legal-line{margin:14px 12px 0;text-align:center}
 .opening .back-row{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;z-index:2}
+.start-screen .opening-title{font-size:48px;line-height:1;letter-spacing:-.015em}
+.start-screen .back-row .link-btn{margin:0;padding:10px 8px;font-size:15px;font-weight:500;color:var(--ink)}
 .kb-open .screen.opening{padding-bottom:calc(var(--kb, 0px) + 96px)}
 
 /* ---------- Sheets: the Time-away sheet's recipe ---------- */

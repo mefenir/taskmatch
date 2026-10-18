@@ -126,14 +126,16 @@ const Screens = {
   /* ---------- Signed in, no household ---------- */
   start() {
     const first = S.user && S.user.displayName ? ' ' + esc(S.user.displayName.split(' ')[0]) : '';
-    return `<main class="screen welcome">
-      <div class="topbar"><span class="spacer"></span>
-        <button class="link-btn" data-action="signOut" style="margin:0">Sign out</button></div>
-      ${houseArt}
-      <h1>Hi${first}. Let's set up your home.</h1>
-      <p class="lead">It takes a few minutes. Then you get a fair plan to share with your partner.</p>
-      <div class="bottom-bar">
-        <button class="btn primary" data-action="createHousehold">Set up our home</button>
+    return `<main class="screen opening start-screen">
+      ${openingHero()}
+      <div class="back-row"><button class="link-btn" data-action="signOut">Sign out</button></div>
+      <div class="opening-body">
+        ${brandMark()}
+        <h1 class="opening-title"><span>Hi${first}.</span><span>Let's set up</span><span>your home.</span></h1>
+        <div class="glass">
+          <p class="lead">A few minutes, then a fair plan for you both.</p>
+          <button class="btn primary" data-action="createHousehold">Set up our home</button>
+        </div>
       </div>
     </main>`;
   },
