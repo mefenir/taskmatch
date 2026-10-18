@@ -22,7 +22,7 @@ function openingHero() {
 }
 /** The logo: two rings that overlap, and the name. */
 function brandMark() {
-  return `<div class="brand"><svg width="26" height="18" viewBox="0 0 26 18" aria-hidden="true"><circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="17" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span>Our Household</span></div>`;
+  return `<div class="brand"><svg width="26" height="18" viewBox="0 0 26 18" aria-hidden="true"><circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="17" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span>Weholm</span></div>`;
 }
 
 const Screens = {

@@ -1,6 +1,6 @@
 {
-  "name": "Our Household",
-  "short_name": "Household",
+  "name": "Weholm",
+  "short_name": "Weholm",
   "description": "See all the work your home needs, and share it fairly.",
   "start_url": "./",
   "scope": "./",
