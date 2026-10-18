@@ -50,7 +50,8 @@ const AUTH_ERRORS = {
   'auth/invalid-credential': 'Email or password is incorrect.',
   'auth/invalid-login-credentials': 'Email or password is incorrect.',
   'auth/email-already-in-use': "There's already an account with this email. Try signing in instead.",
-  'auth/weak-password': `Use at least ${APP_CONFIG.minPasswordLength} characters for your password.`,
+  'auth/weak-password': `Your password needs more. ${Password.sentence()}`,
+  'auth/password-does-not-meet-requirements': `Your password needs more. ${Password.sentence()}`,
   'auth/too-many-requests': 'Too many attempts. Wait a moment and try again.',
   'auth/network-request-failed': 'No connection. Check your internet and try again.',
   'auth/popup-blocked': 'Your browser blocked the Google window. Allow pop-ups for this site and try again.',
@@ -66,6 +67,7 @@ const AUTH_DEV_HINTS = {
 };
 const authMessage = e => {
   if (e && AUTH_DEV_HINTS[e.code]) console.warn(AUTH_DEV_HINTS[e.code]);
+  if (Password.isPolicyError(e)) return AUTH_ERRORS['auth/password-does-not-meet-requirements'];
   return AUTH_ERRORS[e && e.code] || 'Something went wrong. Please try again.';
 };
 
@@ -463,11 +465,9 @@ async function submitAuth() {
   const { mode, values: v } = S.auth;
   const email = (v.email || '').trim();
   const password = v.password || '';
-  const min = APP_CONFIG.minPasswordLength;
   let error = '';
   if (!email) error = 'Enter your email address.';
-  else if (mode === 'signup' && password.length < min) error = `Use at least ${min} characters for your password.`;
-  else if (mode === 'signup' && password !== (v.password2 || '')) error = "The passwords don't match. Type the same password twice.";
+  else if (mode === 'signup' && !Password.valid(password)) error = `Your password needs ${Password.missing(password)}.`;
   else if (mode === 'signin' && !password) error = 'Enter your password.';
   if (error) { S.auth.error = error; S.auth.note = ''; rerender(); return; }
 
@@ -904,7 +904,7 @@ const Actions = {
     const cur = (document.getElementById('pw-current') || {}).value || '';
     const next = (document.getElementById('pw-new') || {}).value || '';
     if (!cur) { toast('Type your current password.'); return; }
-    if (next.length < 8) { toast('The new password needs at least 8 characters.'); return; }
+    if (!Password.valid(next)) { toast(`The new password needs ${Password.missing(next)}.`); return; }
     if (next === cur) { toast('The new password is the same as your current one.'); return; }
     if (next !== ((document.getElementById('pw-new2') || {}).value || '')) { toast("The new passwords don't match."); return; }
     try {
@@ -914,7 +914,7 @@ const Actions = {
     } catch (e) {
       const c = e && e.code;
       toast(['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(c) ? 'Your current password is wrong.'
-        : c === 'auth/weak-password' ? 'Pick a stronger password.'
+        : c === 'auth/weak-password' || Password.isPolicyError(e) ? `The new password needs more. ${Password.sentence()}`
         : c === 'auth/too-many-requests' ? 'Too many tries. Wait a moment and try again.'
         : "Couldn't change it. Check your connection and try again.");
     }

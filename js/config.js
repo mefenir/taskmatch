@@ -18,7 +18,9 @@ const FIREBASE_CONFIG = {
 };
 const APP_CONFIG = Object.freeze({
   inviteValidDays: 14,
-  minPasswordLength: 8,
+  /* Password rules: keep these the SAME as Firebase → Authentication → Settings → Password policy.
+     The app shows them as a checklist and checks them before sending; Firebase is the final check. */
+  passwordRules: Object.freeze({ minLength: 8, uppercase: true, lowercase: false, number: true, symbol: false }),
 
   /* Subscription billing through Stripe (Firebase extension "Run Payments with Stripe").
      Paste the two price IDs from the Stripe dashboard (Products → Our Household → prices),

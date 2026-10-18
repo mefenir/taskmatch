@@ -84,17 +84,20 @@ const Screens = {
     const v = S.auth.values;
     const err = S.auth.error ? `<p class="form-error" role="alert">${esc(S.auth.error)}</p>` : '';
     const note = S.auth.note ? `<p class="form-note" role="status">${esc(S.auth.note)}</p>` : '';
-    const field = (name, label, type, auto, extra = '') => `<div class="field">
+    const field = (name, label, type, auto, extra = '', after = '') => {
+      const input = `<input id="f-${esc(name)}" name="${name}" type="${type}" autocomplete="${auto}" value="${esc(v[name] || '')}" data-auth-field="${name}" ${extra}>`;
+      return `<div class="field">
         <label for="f-${name}">${label}</label>
-        <input id="f-${esc(name)}" name="${name}" type="${type}" autocomplete="${auto}" value="${esc(v[name] || '')}" data-auth-field="${name}" ${extra}>
+        ${type === 'password' ? Password.wrap(input) : input}${after}
       </div>`;
+    };
     const fields = mode === 'reset'
       ? field('email', 'Email', 'email', 'email', 'required inputmode="email"')
       : (mode === 'signup' ? field('name', 'Your name', 'text', 'given-name', 'maxlength="40"') : '') +
         field('email', 'Email', 'email', 'email', 'required inputmode="email"') +
         field('password', 'Password', 'password', mode === 'signup' ? 'new-password' : 'current-password',
-          `required minlength="${APP_CONFIG.minPasswordLength}"`) +
-        (mode === 'signup' ? field('password2', 'Repeat password', 'password', 'new-password', `required minlength="${APP_CONFIG.minPasswordLength}"`) : '');
+          mode === 'signup' ? `required minlength="${APP_CONFIG.passwordRules.minLength}" aria-describedby="f-pw-rules"` : 'required',
+          mode === 'signup' ? Password.checklist(v.password).replace('<ul ', '<ul id="f-pw-rules" ') : '');
     const submit = { signup: 'Create account', signin: 'Sign in', reset: 'Send reset link' }[mode];
     // New or returning: one switch instead of two separate screens.
     const seg = mode === 'reset' ? '' : `<div class="seg" role="group" aria-label="New or returning">
@@ -1710,12 +1713,12 @@ const Sheets = {
       <form class="card" data-form="password" autocomplete="on">
         <input type="email" name="username" autocomplete="username" value="${esc(S.user.email || '')}" hidden>
         <div class="field"><label for="pw-current">Current password</label>
-          <input id="pw-current" type="password" autocomplete="current-password" required></div>
+          ${Password.wrap('<input id="pw-current" type="password" autocomplete="current-password" required>')}</div>
         <div class="field"><label for="pw-new">New password</label>
-          <input id="pw-new" type="password" autocomplete="new-password" minlength="8" required></div>
+          ${Password.wrap(`<input id="pw-new" type="password" autocomplete="new-password" minlength="${APP_CONFIG.passwordRules.minLength}" required aria-describedby="pw-rules">`)}
+          ${Password.checklist().replace('<ul ', '<ul id="pw-rules" ')}</div>
         <div class="field"><label for="pw-new2">Repeat new password</label>
-          <input id="pw-new2" type="password" autocomplete="new-password" minlength="8" required></div>
-        <p class="fine" style="text-align:left;margin:0;padding:0 16px 12px">At least 8 characters.</p>
+          ${Password.wrap(`<input id="pw-new2" type="password" autocomplete="new-password" minlength="${APP_CONFIG.passwordRules.minLength}" required>`)}</div>
       </form>
       <button class="btn primary" data-action="savePassword">Save new password</button>
       <button class="btn ghost" data-action="closeSheet">Cancel</button>`, 'Change password');

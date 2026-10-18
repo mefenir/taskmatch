@@ -11,6 +11,70 @@ const uid = () => { try { if (crypto && crypto.randomUUID) return crypto.randomU
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
 
+/* ---------- Passwords: the rules as a checklist, and the eye that shows what you typed ---------- */
+const Password = (() => {
+  const R = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.passwordRules) || { minLength: 8 };
+  // The same character classes Firebase counts (plain A–Z, a–z, 0–9 and its list of symbols).
+  const SYMBOLS = '^$*.[]{}()?"!@#%&/\\,><\':;|_~`=+-';
+  const rules = [
+    { key: 'length', label: `${R.minLength} characters or more`, need: `${R.minLength} characters`, test: p => p.length >= R.minLength },
+    R.uppercase && { key: 'upper', label: 'A capital letter', need: 'a capital letter', test: p => /[A-Z]/.test(p) },
+    R.lowercase && { key: 'lower', label: 'A small letter', need: 'a small letter', test: p => /[a-z]/.test(p) },
+    R.number && { key: 'number', label: 'A number', need: 'a number', test: p => /[0-9]/.test(p) },
+    R.symbol && { key: 'symbol', label: 'A symbol, like ! ? # or @', need: 'a symbol', test: p => [...p].some(c => SYMBOLS.includes(c)) },
+  ].filter(Boolean);
+  const check = p => rules.map(r => ({ key: r.key, label: r.label, need: r.need, ok: r.test(String(p || '')) }));
+  const list = items => items.map(x => x.need);
+  const join = a => (a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
+  const tick = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const eyeOpen = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const eyeShut = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.5 17.5 0 0 1-2.9 3.9M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+  const api = {
+    rules,
+    /** What's still missing, as words ("a capital letter and a number"); '' when the password is fine. */
+    missing: p => join(list(check(p).filter(x => !x.ok))),
+    valid: p => check(p).every(x => x.ok),
+    /** "Use 8 characters, a capital letter and a number." */
+    sentence: () => `Use ${join(rules.map(r => r.need))}.`,
+    /** The checklist under a new-password field. */
+    checklist: (p = '') => `<ul class="pw-rules" aria-label="Your password needs">${check(p).map(x =>
+      `<li class="${x.ok ? 'ok' : ''}"><span class="pw-dot" aria-hidden="true">${tick}</span><span>${x.label}</span><span class="sr-only">${x.ok ? ', done' : ''}</span></li>`).join('')}</ul>`,
+    /** A password input with the eye button next to it. */
+    eye: () => `<button type="button" class="pw-eye" data-pw-eye aria-label="Show password" aria-pressed="false">${eyeOpen}</button>`,
+    wrap: input => `<span class="pw-wrap">${input}${api.eye()}</span>`,
+    /** Did Firebase refuse the password because of the policy? (Older SDKs report it as an internal error.) */
+    isPolicyError: e => !!e && (e.code === 'auth/password-does-not-meet-requirements'
+      || /PASSWORD_DOES_NOT_MEET_REQUIREMENTS/.test(String(e.message || '') + String((e.customData && e.customData._serverResponse) || ''))),
+  };
+  // Tick the checklist as you type.
+  document.addEventListener('input', e => {
+    const el = e.target;
+    const field = el && el.closest && el.closest('.field');
+    const ul = field && field.querySelector('.pw-rules');
+    if (!ul || !el.matches('input')) return;
+    check(el.value).forEach((x, i) => {
+      const li = ul.children[i]; if (!li) return;
+      li.classList.toggle('ok', x.ok);
+      li.lastElementChild.textContent = x.ok ? ', done' : '';
+    });
+  });
+  // The eye: show or hide what you typed, without taking the focus (the keyboard stays up).
+  document.addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('[data-pw-eye]')) e.preventDefault(); });
+  document.addEventListener('click', e => {
+    const btn = e.target.closest && e.target.closest('[data-pw-eye]');
+    if (!btn) return;
+    e.preventDefault();
+    const input = btn.parentElement.querySelector('input');
+    if (!input) return;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.setAttribute('aria-pressed', String(show));
+    btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    btn.innerHTML = show ? eyeShut : eyeOpen;
+  });
+  return api;
+})();
+
 /** Unguessable invite code (no ambiguous characters). */
 function randomCode(length = 16) {
   const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';

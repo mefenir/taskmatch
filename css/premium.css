@@ -193,3 +193,21 @@ h1{font-size:38px;line-height:1.05}
 .btn.secondary.is-busy,.btn.google.is-busy,.btn.ghost.is-busy,.mini.is-busy{--busy-ring:var(--spin-track);--busy-head:var(--accent)}
 .btn.premium.is-busy{--busy-ring:rgba(42,34,20,.25);--busy-head:var(--gilded-ink)}
 @media (prefers-reduced-motion: reduce){.rings-loader,.spinner,.btn.is-busy::after,.mini.is-busy::after{animation:none}.spinner,.loading-body{opacity:1}}
+
+/* =========================================================
+   PASSWORDS — the eye that shows what you typed, and the rules as a checklist
+   ========================================================= */
+.pw-wrap{position:relative;display:block}
+.pw-wrap input{width:100%;box-sizing:border-box;padding-right:52px}
+.pw-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:44px;height:44px;display:grid;place-items:center;
+  border:0;border-radius:12px;background:transparent;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pw-eye:active{background:var(--surface-2)}
+.pw-eye[aria-pressed="true"]{color:var(--ink)}
+.pw-eye:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.pw-rules{list-style:none;margin:8px 4px 0;padding:0;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;line-height:1.3;color:var(--muted)}
+.pw-rules li{display:flex;align-items:center;gap:6px}
+.pw-dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;box-sizing:border-box;flex:none;color:transparent;transition:background-color .15s,border-color .15s,color .15s}
+.pw-rules li.ok{color:var(--ink)}
+.pw-rules li.ok .pw-dot{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+@media (prefers-reduced-motion: reduce){.pw-dot{transition:none}}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

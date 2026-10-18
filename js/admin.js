@@ -83,7 +83,7 @@ function view() {
       <div class="field"><label for="a-email">Username (email)</label>
         <input id="a-email" type="email" autocomplete="username" value="${esc(A.values.email || '')}" data-field="email"></div>
       <div class="field"><label for="a-pw">Password</label>
-        <input id="a-pw" type="password" autocomplete="current-password" data-field="password"></div>
+        ${Password.wrap('<input id="a-pw" type="password" autocomplete="current-password" data-field="password">')}</div>
       <button class="btn primary" type="submit" style="margin-top:20px" ${A.busy ? 'disabled' : ''}>${A.busy ? 'Signing in…' : 'Sign in'}</button>
     </form>
   </main>`;
@@ -309,9 +309,10 @@ function settings() {
   const auto = A.config.autoApprove === true;
   const pw = A.pwOpen ? `<div class="pw-form">
       <div class="field"><label for="a-pw-cur">Current password</label>
-        <input id="a-pw-cur" type="password" autocomplete="current-password" value="${esc(A.values.pwCur || '')}" data-field="pwCur"></div>
-      <div class="field"><label for="a-pw-new">New password (at least 8 characters)</label>
-        <input id="a-pw-new" type="password" autocomplete="new-password" value="${esc(A.values.pwNew || '')}" data-field="pwNew"></div>
+        ${Password.wrap(`<input id="a-pw-cur" type="password" autocomplete="current-password" value="${esc(A.values.pwCur || '')}" data-field="pwCur">`)}</div>
+      <div class="field"><label for="a-pw-new">New password</label>
+        ${Password.wrap(`<input id="a-pw-new" type="password" autocomplete="new-password" value="${esc(A.values.pwNew || '')}" data-field="pwNew">`)}
+        ${Password.checklist(A.values.pwNew || '')}</div>
       ${A.pwError ? `<p class="form-error" role="alert">${esc(A.pwError)}</p>` : ''}
       <div class="btns"><button class="btn primary" data-action="savePassword" ${A.busy === 'pw' ? 'disabled' : ''}>${A.busy === 'pw' ? 'Saving…' : 'Save'}</button>
         <button class="btn secondary" data-action="togglePassword">Cancel</button></div></div>` : '';
@@ -409,7 +410,7 @@ const Actions = {
     if (A.busy) return;
     const cur = A.values.pwCur || '', next = A.values.pwNew || '';
     if (!cur) { A.pwError = 'Type the current password.'; render(); return; }
-    if (next.length < 8) { A.pwError = 'The new password needs at least 8 characters.'; render(); return; }
+    if (!Password.valid(next)) { A.pwError = `The new password needs ${Password.missing(next)}.`; render(); return; }
     A.busy = 'pw'; A.pwError = ''; render();
     try {
       await Backend.Auth.changePassword(cur, next);
@@ -418,7 +419,8 @@ const Actions = {
     } catch (e) {
       const c = e && e.code;
       A.pwError = ['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(c) ? 'The current password is not right.'
-        : c === 'auth/too-many-requests' ? 'Too many tries. Wait a moment.' : `Couldn't change it (${c || 'error'}).`;
+        : c === 'auth/too-many-requests' ? 'Too many tries. Wait a moment.'
+        : c === 'auth/weak-password' || Password.isPolicyError(e) ? `The new password needs more. ${Password.sentence()}` : `Couldn't change it (${c || 'error'}).`;
     }
     A.busy = null; render();
   },
