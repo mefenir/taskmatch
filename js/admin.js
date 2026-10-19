@@ -95,7 +95,9 @@ function view() {
     <p class="lead">${esc(A.user.email || 'This account')} isn't an admin account${A.adminCheck ? ` (${esc(A.adminCheck)})` : ''}.</p>
     <div class="card"><div class="row static col"><div class="row-text"><span class="row-title">To make it one</span>
       <span class="row-sub">In Firebase → Firestore → admins, add a document with this ID:</span></div>
-      <code class="uid-box">${esc(A.user.uid)}</code></div></div>
+      <code class="uid-box">${esc(A.user.uid)}</code>
+      <span class="row-sub">Project ${esc(FIREBASE_CONFIG.projectId)}, database "(default)".</span></div></div>
+    <button class="btn primary" data-action="recheckAdmin" ${A.busy === 'recheck' ? 'disabled' : ''}>${A.busy === 'recheck' ? 'Checking…' : 'Check again'}</button>
     <button class="btn secondary" data-action="signOut">Sign out</button></main>`;
 
   const title = { inbox: 'Inbox', couples: 'Couples', settings: 'Settings' }[A.tab];
@@ -415,6 +417,16 @@ async function act(kind, userId) {
 
 const Actions = {
   signOut() { Backend.Auth.signOut(); },
+  /** After adding the admins document: look again without signing out. */
+  async recheckAdmin() {
+    if (A.busy || !A.user) return;
+    A.busy = 'recheck'; render();
+    let ok = false;
+    try { A.adminCheck = ''; ok = await Backend.Admin.isAdmin(A.user.uid); } catch (e) { A.adminCheck = (e && e.code) || 'check failed'; }
+    A.busy = null;
+    if (ok) { location.reload(); return; }
+    render(); toast(A.adminCheck ? `Still not an admin (${A.adminCheck}).` : 'Still no admins document with this ID.');
+  },
   filter(d) { A.filter = d.key; render(); },
   tab(d) {
     const next = TABS.includes(d.key) ? d.key : 'inbox';

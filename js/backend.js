@@ -370,7 +370,8 @@ const Backend = (() => {
 
   /* ---------- Admin panel ---------- */
   const Admin = {
-    isAdmin: async userId => (await db.collection('admins').doc(userId).get()).exists,
+    // Asks the server, never the offline copy: a document added a moment ago counts straight away.
+    isAdmin: async userId => (await db.collection('admins').doc(userId).get({ source: 'server' })).exists,
     watchRequests: (onData, onError) =>
       premiumRequests().orderBy('requestedAt', 'desc').onSnapshot(q => onData(q.docs.map(d => ({ id: d.id, ...d.data() }))), onError),
     async unlock(userId, adminId) {
