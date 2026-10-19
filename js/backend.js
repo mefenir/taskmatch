@@ -383,6 +383,14 @@ const Backend = (() => {
       db.collection('config').doc('beta').onSnapshot(s => onData(s.exists ? s.data() : {}), onError),
     setAutoApprove: (on, adminId) =>
       db.collection('config').doc('beta').set({ autoApprove: !!on, changedAt: now(), changedBy: adminId }),
+    /** Test accounts (kept out of the numbers): emails containing `contains`, plus people marked by hand. */
+    watchTesting: (onData, onError) =>
+      db.collection('config').doc('testing').onSnapshot(s => {
+        const d = s.exists ? s.data() : {};
+        onData({ contains: typeof d.contains === 'string' ? d.contains : '+test', uids: Array.isArray(d.uids) ? d.uids : [] });
+      }, onError),
+    setTesting: ({ contains, uids }) =>
+      db.collection('config').doc('testing').set({ contains: String(contains || '').trim().toLowerCase().slice(0, 40), uids: [...new Set(uids || [])].slice(0, 200) }),
     watchStats: (onData, onError) =>
       db.collection('config').doc('stats').onSnapshot(s => {
         const d = s.exists ? s.data() : {};

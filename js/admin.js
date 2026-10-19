@@ -17,6 +17,8 @@ const A = {
   feedback: [],
   errors: [],
   config: {},           // config/beta: { autoApprove }
+  testing: { contains: '+test', uids: [] },   // config/testing: test accounts, kept out of the numbers
+  showTests: (() => { try { return localStorage.getItem('adm-show-tests') === '1'; } catch (e) { return false; } })(),
   openCouple: null,     // couples: the couple that is opened
   tab: 'inbox',         // inbox | couples | settings
   inboxView: '',        // '' | access | feedback (the history pages under Inbox)
@@ -33,6 +35,7 @@ let unwatchFeedback = null;
 let unwatchErrors = null;
 let unwatchConfig = null;
 let unwatchStats = null;
+let unwatchTesting = null;
 const TABS = ['inbox', 'couples', 'settings'];
 // In the order a household goes through them. signedUp and requested are worked out from other data.
 const STEP_LABEL = {
@@ -97,10 +100,30 @@ function view() {
   return `<main class="screen has-nav">${body.startsWith('<!--sub-->') ? '' : `<h1 class="adm-title">${title}</h1>`}${body}</main>${nav()}`;
 }
 
+/* ---------- Test accounts: plus-addresses (you+test1@…) and people marked by hand ---------- */
+const Test = {
+  email: e => { const c = String(A.testing.contains || '').toLowerCase(); return !!c && String(e || '').toLowerCase().includes(c); },
+  byEmail: uid => { const u = A.users.find(x => x.id === uid); return !!u && Test.email(u.email); },
+  uid: uid => !!uid && ((A.testing.uids || []).includes(uid) || Test.byEmail(uid)),
+  request: r => Test.uid(r.id) || Test.email(r.email),
+  household: hid => A.users.some(u => u.householdId === hid && Test.uid(u.id)) || A.requests.some(r => r.householdId === hid && Test.request(r)),
+  /** Hidden unless "Show test accounts" is on. */
+  hidden: yes => !!yes && !A.showTests,
+  tag: '<span class="tag test-tag">Test</span>',
+};
+/** A person in a list, with "Mark as test" (or the reason they already are one). */
+function personLine(u, extra = '') {
+  const byEmail = Test.email(u.email);
+  const marked = (A.testing.uids || []).includes(u.id);
+  const btn = byEmail ? '' : `<button class="link-btn test-btn" data-action="toggleTest" data-id="${esc(u.id)}">${marked ? 'Not a test' : 'Mark as test'}</button>`;
+  return `<div class="who-item"><div><span class="who">${esc(u.name || 'No name')}</span> <span class="meta">· ${esc(u.email)}</span>${byEmail || marked ? ` ${Test.tag}` : ''}</div>
+    ${extra || btn ? `<div class="meta who-foot">${extra}${btn}</div>` : ''}</div>`;
+}
+
 /* ---------- Navigation: three sections, a dot on Inbox when something waits ---------- */
 const ico = d => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 function waitingCount() {
-  return A.requests.filter(r => r.status === 'pending').length + A.feedback.filter(f => f.status !== 'done').length + errorGroups().length;
+  return A.requests.filter(r => r.status === 'pending' && !Test.hidden(Test.request(r))).length + A.feedback.filter(f => f.status !== 'done').length + errorGroups().length;
 }
 function nav() {
   const item = (key, label, icon, dot) => `<button data-action="tab" data-key="${key}" ${A.tab === key ? 'aria-current="page"' : ''}${dot ? ` aria-label="${label}, needs your attention"` : ''}>
@@ -121,7 +144,7 @@ function requestCard(r) {
     ? `<button class="btn primary" data-action="unlock" data-id="${esc(r.id)}" ${dis}>Unlock</button><button class="btn secondary" data-action="deny" data-id="${esc(r.id)}" ${dis}>Deny</button>`
     : r.status === 'approved' ? `<button class="btn secondary" data-action="revoke" data-id="${esc(r.id)}" ${dis}>Revoke</button>`
     : `<button class="btn primary" data-action="unlock" data-id="${esc(r.id)}" ${dis}>Unlock</button>`;
-  const status = r.status === 'pending' ? '' : `<span class="status ${esc(r.status)}">${r.status === 'approved' && r.decidedBy === 'auto' ? 'Unlocked automatically' : STATUS_LABEL[r.status] || esc(r.status)}</span>`;
+  const status = (Test.request(r) ? Test.tag : '') + (r.status === 'pending' ? '' : `<span class="status ${esc(r.status)}">${r.status === 'approved' && r.decidedBy === 'auto' ? 'Unlocked automatically' : STATUS_LABEL[r.status] || esc(r.status)}</span>`);
   return `<div class="req">
     <div class="top"><span class="who">${esc(r.name || 'No name')}</span>${status}</div>
     <div class="meta">${esc(r.email || '')}<br>${esc(Number(r.members) || 1)} in household · asked ${when(r.requestedAt)}${r.decidedAt ? ` · changed ${when(r.decidedAt)}` : ''}</div>
@@ -130,14 +153,14 @@ function requestCard(r) {
 function feedbackCard(f) {
   const done = f.status === 'done';
   return `<div class="req">
-    <div class="top"><span class="who">${esc(f.name || 'No name')}</span>${FEEDBACK_TYPES[f.type] ? `<span class="tag">${FEEDBACK_TYPES[f.type]}</span>` : ''}</div>
+    <div class="top"><span class="who">${esc(f.name || 'No name')}</span><span class="tags">${Test.uid(f.uid) ? Test.tag : ''}${FEEDBACK_TYPES[f.type] ? `<span class="tag">${FEEDBACK_TYPES[f.type]}</span>` : ''}</span></div>
     ${f.text ? `<p class="feedback-text">${esc(f.text)}</p>` : ''}
     <div class="meta">${when(f.at)}${f.screen ? ` · on ${esc(f.screen)}` : ''}${f.version ? ` · v${esc(f.version)}` : ''}</div>
     <div class="btns"><button class="btn secondary" data-action="markFeedback" data-id="${esc(f.id)}" data-key="${done ? 'new' : 'done'}" ${A.busy === f.id ? 'disabled' : ''}>${done ? 'Mark as new' : 'Mark as done'}</button></div></div>`;
 }
 function errorCard(g) {
   return `<div class="req">
-    <div class="top"><span class="who">${esc(g.message)}</span><span class="status ${g.people.size > 1 ? 'denied' : 'pending'}">${g.ids.length}×</span></div>
+    <div class="top"><span class="who">${esc(g.message)}</span><span class="tags">${[...g.people].every(Test.uid) ? Test.tag : ''}<span class="status ${g.people.size > 1 ? 'denied' : 'pending'}">${g.ids.length}×</span></span></div>
     <div class="meta">${g.people.size} ${g.people.size === 1 ? 'person' : 'people'}${g.names.size ? ` (${esc([...g.names].join(', '))})` : ''} · last ${when(g.last)}${g.versions.size ? ` · v${esc([...g.versions].join(', v'))}` : ''}</div>
     ${errorDetails(g)}
     <div class="btns"><button class="btn secondary" data-action="clearErrors" data-key="${esc(g.key)}" ${A.busy === g.key ? 'disabled' : ''}>Clear</button></div></div>`;
@@ -145,14 +168,14 @@ function errorCard(g) {
 function inbox() {
   if (A.inboxView === 'access') return accessHistory();
   if (A.inboxView === 'feedback') return doneFeedback();
-  const waiting = A.requests.filter(r => r.status === 'pending');
+  const waiting = A.requests.filter(r => r.status === 'pending' && !Test.hidden(Test.request(r)));
   const fresh = A.feedback.filter(f => f.status !== 'done');
   const groups = errorGroups();
   const parts = [];
   if (waiting.length) parts.push(`${sectionHead('Waiting for access', waiting.length)}<div class="card">${waiting.map(requestCard).join('')}</div>`);
   if (fresh.length) parts.push(`${sectionHead('Feedback', fresh.length)}<div class="card">${fresh.map(feedbackCard).join('')}</div>`);
   if (groups.length) parts.push(`${sectionHead('Errors', groups.length, 'Fix what 2 or more people hit first.')}<div class="card">${groups.map(errorCard).join('')}</div>`);
-  const decided = A.requests.length - waiting.length, done = A.feedback.length - fresh.length;
+  const decided = A.requests.filter(r => r.status !== 'pending' && !Test.hidden(Test.request(r))).length, done = A.feedback.length - fresh.length;
   const more = `<div class="card adm-more">
       <button class="row" data-action="inboxView" data-key="access"><div class="row-text"><span class="row-title">Access history</span></div><span class="adm-n">${decided}</span><span class="chev" aria-hidden="true">›</span></button>
       <button class="row" data-action="inboxView" data-key="feedback"><div class="row-text"><span class="row-title">Done feedback</span></div><span class="adm-n">${done}</span><span class="chev" aria-hidden="true">›</span></button></div>`;
@@ -162,7 +185,7 @@ function inbox() {
 function accessHistory() {
   const filters = [['approved', 'Unlocked'], ['closed', 'Closed'], ['all', 'All']];
   const f = filters.some(([k]) => k === A.filter) ? A.filter : 'approved';
-  const matches = (r, k) => r.status !== 'pending' && (k === 'all' || r.status === k || (k === 'closed' && CLOSED.includes(r.status)));
+  const matches = (r, k) => r.status !== 'pending' && !Test.hidden(Test.request(r)) && (k === 'all' || r.status === k || (k === 'closed' && CLOSED.includes(r.status)));
   const list = A.requests.filter(r => matches(r, f));
   return `<!--sub-->${backTo('Inbox')}<h1 class="adm-title">Access history</h1>
     <div class="seg" role="group" aria-label="Filter">${filters.map(([k, l]) =>
@@ -180,8 +203,8 @@ function doneFeedback() {
 function funnelData() {
   // Counting starts at the chosen period or the last reset, whichever is later.
   const since = Math.max(A.range ? Date.now() - A.range * 864e5 : 0, A.statsResetAt || 0);
-  const rows = A.metrics.filter(m => (millis(m.created) || 0) >= since);
-  const signups = A.users.filter(u => !u.viaInvite && (u.createdAt || 0) >= since);
+  const rows = A.metrics.filter(m => (millis(m.created) || 0) >= since && !Test.hidden(Test.household(m.id)));
+  const signups = A.users.filter(u => !u.viaInvite && (u.createdAt || 0) >= since && !Test.hidden(Test.uid(u.id)));
   const reqByHid = new Map(A.requests.filter(r => r.householdId).map(r => [r.householdId, r]));
   return { since, rows, signups, reqByHid };
 }
@@ -238,7 +261,7 @@ function couples() {
     const last = lastKey(m);
     const segs = PATH.slice(1).map((k, j) => `<i class="${j + 1 <= idx ? 'on' : ''}"></i>`).join('');
     return `<button class="row step-row couple" data-action="openCouple" data-id="${esc(m.id)}" aria-expanded="${open}"><div class="row-text">
-        <span class="row-title">${esc(coupleName(m))}</span>
+        <span class="row-title">${esc(coupleName(m))}${Test.household(m.id) ? ` ${Test.tag}` : ''}</span>
         <span class="jsegs" aria-hidden="true">${segs}</span>
         <span class="row-sub">${idx >= 0 ? (PATH[idx] === 'subscribed' && !payments() ? 'Got access' : STAGE[PATH[idx]]) : 'Setting up'} · ${last ? `last active ${esc(last === todayKey ? 'today' : last)}` : 'not active yet'}</span></div></button>
       ${open ? coupleDetail(m, todayKey) : ''}`;
@@ -252,7 +275,7 @@ function couples() {
 /** One couple opened: who they are and their first 21 days. */
 function coupleDetail(m, todayKey) {
   const people = A.users.filter(u => u.householdId === m.id);
-  const names = people.length ? people.map(u => `<div class="who-item"><div><span class="who">${esc(u.name || 'No name')}</span> <span class="meta">· ${esc(u.email)}</span></div></div>`).join('')
+  const names = people.length ? people.map(u => personLine(u)).join('')
     : '<p class="meta">Nobody in this household any more.</p>';
   const cell = 12, gap = 3;
   const start = new Date(millis(m.created)); start.setHours(0, 0, 0, 0);
@@ -276,9 +299,8 @@ function coupleDetail(m, todayKey) {
 function whoSignedUp(signups, rows) {
   if (!signups.length) return '<div class="who-list"><p class="meta">Nobody yet.</p></div>';
   const started = new Set(rows.map(m => m.id));
-  return `<div class="who-list">${[...signups].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map(u => `<div class="who-item">
-      <div><span class="who">${esc(u.name || 'No name')}</span> <span class="meta">· ${esc(u.email)}</span></div>
-      <div class="meta">${when(u.createdAt)}${u.householdId && started.has(u.householdId) ? '' : ' <span class="status">stopped here</span>'}</div></div>`).join('')}</div>`;
+  return `<div class="who-list">${[...signups].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map(u =>
+      personLine(u, `<span>${when(u.createdAt)}${u.householdId && started.has(u.householdId) ? '' : ' <span class="status">stopped here</span>'}</span>`)).join('')}</div>`;
 }
 
 /** The people in each household that reached a step, newest first; "stopped here" when it's their furthest step. */
@@ -321,6 +343,14 @@ function settings() {
       <div class="row-text"><span class="row-title">Approve requests automatically</span>
       <span class="row-sub">${auto ? 'On: anyone who asks gets in at once.' : 'Off: you approve each request.'}</span></div><span class="switch"></span></button></div>
     <p class="adm-note adm-under">Unlocking gives a household free access, for gifts and tests.</p>
+    ${sectionHead('Testing')}
+    <div class="card"><button class="row" role="switch" aria-checked="${!!A.showTests}" data-action="toggleShowTests">
+        <div class="row-text"><span class="row-title">Show test accounts</span>
+        <span class="row-sub">${A.showTests ? 'On: tests are counted, with a Test tag.' : 'Off: tests are left out of the numbers.'}</span></div><span class="switch"></span></button>
+      <div class="field test-field"><label for="a-test">Test emails contain</label>
+        <div class="test-row"><input id="a-test" data-field="testContains" value="${esc(A.values.testContains != null ? A.values.testContains : A.testing.contains)}" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="40">
+        <button class="btn secondary" data-action="saveTestPattern" ${A.busy === 'test' ? 'disabled' : ''}>Save</button></div>
+        <span class="adm-note">Sign up as you+test1@gmail.com. It still reaches your inbox.</span></div></div>
     ${sectionHead('Account')}
     <div class="card"><div class="row static"><div class="row-text"><span class="row-title">Signed in as</span><span class="row-sub">${esc(A.user.email || '')}</span></div></div>
       <button class="row" data-action="togglePassword" aria-expanded="${!!A.pwOpen}"><div class="row-text"><span class="row-title">Change password</span></div><span class="chev" aria-hidden="true">${A.pwOpen ? '⌄' : '›'}</span></button>${pw}</div>
@@ -424,6 +454,31 @@ const Actions = {
     }
     A.busy = null; render();
   },
+  toggleShowTests() {
+    A.showTests = !A.showTests;
+    try { localStorage.setItem('adm-show-tests', A.showTests ? '1' : '0'); } catch (e) { /* this browser only */ }
+    A.openStep = null; render();
+  },
+  async saveTestPattern() {
+    if (A.busy) return;
+    const contains = String(A.values.testContains != null ? A.values.testContains : A.testing.contains).trim().toLowerCase();
+    A.busy = 'test'; render();
+    try { await Backend.Admin.setTesting({ contains, uids: A.testing.uids || [] }); A.values.testContains = null; toast(contains ? `Emails with "${contains}" count as tests.` : 'Only people you mark count as tests.'); }
+    catch (e) { console.error(e); toast(`Couldn't save (${e.code || 'error'}). Check the rules are published.`); }
+    A.busy = null; render();
+  },
+  async toggleTest(d) {
+    if (A.busy || !d.id) return;
+    const uids = new Set(A.testing.uids || []);
+    const was = uids.has(d.id);
+    if (was) uids.delete(d.id); else uids.add(d.id);
+    A.busy = 'test'; render();
+    try {
+      await Backend.Admin.setTesting({ contains: A.testing.contains, uids: [...uids] });
+      toast(was ? 'Counted again.' : A.showTests ? 'Marked as test.' : 'Marked as test. It\'s left out of the numbers now.');
+    } catch (e) { console.error(e); toast(`Couldn't save (${e.code || 'error'}). Check the rules are published.`); }
+    A.busy = null; render();
+  },
   openCouple(d) { A.openCouple = A.openCouple === d.id ? null : d.id; render(); },
   async toggleAuto() {
     if (A.busy) return;
@@ -480,6 +535,7 @@ document.addEventListener('submit', async e => {
     if (unwatchErrors) { unwatchErrors(); unwatchErrors = null; }
     if (unwatchConfig) { unwatchConfig(); unwatchConfig = null; }
     if (unwatchStats) { unwatchStats(); unwatchStats = null; }
+    if (unwatchTesting) { unwatchTesting(); unwatchTesting = null; }
     A.feedback = []; A.errors = [];
     A.user = user; A.busy = null; A.requests = [];
     if (!user) { A.phase = 'signedOut'; render(); return; }
@@ -495,6 +551,8 @@ document.addEventListener('submit', async e => {
     unwatchUsers = Backend.Admin.watchUsers(list => { A.users = list; render(); }, e => console.error(e));
     unwatchFeedback = Backend.Admin.watchFeedback(list => { A.feedback = list; render(); }, e => console.error(e));
     unwatchConfig = Backend.Admin.watchConfig(c => { A.config = c || {}; render(); }, e => console.error(e));
+    // Until the rules with config/testing are published this read is refused: then only the default pattern applies.
+    unwatchTesting = Backend.Admin.watchTesting(t => { A.testing = t; render(); }, e => console.warn('Test accounts: using the default (+test).', e && e.code));
     unwatchStats = Backend.Admin.watchStats(st => { A.statsResetAt = (st && st.resetAt) || 0; render(); }, e => console.error(e));
     unwatchErrors = Backend.Admin.watchErrors(list => { A.errors = list; render(); }, e => console.error(e));
   });
