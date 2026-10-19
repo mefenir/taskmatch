@@ -92,7 +92,10 @@ function view() {
   </main>`;
 
   if (A.phase === 'notAdmin') return `<main class="screen"><h1>Admin</h1>
-    <p class="lead">${esc(A.user.email || 'This account')} isn't an admin account.</p>
+    <p class="lead">${esc(A.user.email || 'This account')} isn't an admin account${A.adminCheck ? ` (${esc(A.adminCheck)})` : ''}.</p>
+    <div class="card"><div class="row static col"><div class="row-text"><span class="row-title">To make it one</span>
+      <span class="row-sub">In Firebase → Firestore → admins, add a document with this ID:</span></div>
+      <code class="uid-box">${esc(A.user.uid)}</code></div></div>
     <button class="btn secondary" data-action="signOut">Sign out</button></main>`;
 
   const title = { inbox: 'Inbox', couples: 'Couples', settings: 'Settings' }[A.tab];
@@ -541,8 +544,9 @@ document.addEventListener('submit', async e => {
     if (!user) { A.phase = 'signedOut'; render(); return; }
     A.phase = 'loading'; render();
     try {
+      A.adminCheck = '';
       if (!(await Backend.Admin.isAdmin(user.uid))) { A.phase = 'notAdmin'; render(); return; }
-    } catch (e) { A.phase = 'notAdmin'; render(); return; }
+    } catch (e) { A.adminCheck = (e && e.code) || 'check failed'; A.phase = 'notAdmin'; render(); return; }
     A.phase = 'ready'; render();
     unwatch = Backend.Admin.watchRequests(list => { A.requests = list; render(); }, e => {
       console.error(e); A.phase = 'error'; A.error = `Couldn't load requests (${e.code || 'error'}). Publish the latest firestore.rules.`; render();
