@@ -341,7 +341,7 @@ const Backend = (() => {
         // Stripe's shortest allowed lifetime: an abandoned checkout page can't be paid later.
         expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
       };
-      if (trial && plan === 'yearly') session.trial_period_days = cfg.trialDays;
+      if (trial) session.trial_period_days = cfg.trialDays;
       return Billing.customers().doc(userId).collection('checkout_sessions').add(session).then(ref => new Promise((resolve, reject) => {
         const timer = setTimeout(() => { off(); reject(Object.assign(new Error('Checkout timed out'), { code: 'billing/timeout' })); }, 30000);
         const off = ref.onSnapshot(snap => {

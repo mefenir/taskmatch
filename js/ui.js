@@ -47,15 +47,6 @@ function applyBusy(scope = document) {
   });
 }
 
-/* ---------- What a subscription gives the two of you (the plans screen) ---------- */
-const BENEFITS = Object.freeze([
-  { title: 'A fair plan you both agree to', body: 'Your partner says what they would rather not do. The app adjusts the plan, and you both agree.' },
-  { title: 'Daily lists for each of you', body: 'Today, this week, anytime. Tick things off, and swap when you are busy.' },
-  { title: 'See that it stays fair', body: 'How much time each of you spends every week. Shared by time, not by number of tasks.' },
-  { title: 'Stop reminding each other', body: 'A shared board for notes, things running low and last-minute tasks, sent to the right person.' },
-  { title: 'Every small task has a person', body: 'Split big tasks into parts, add your own, and let your partner suggest changes.' },
-]);
-
 /** Prices as the app shows them (the amounts Stripe charges are set in Stripe). */
 function money(amount) {
   const d = APP_CONFIG.billing.display;

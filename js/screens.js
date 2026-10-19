@@ -429,10 +429,9 @@ const Screens = {
     const date = ms => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
     const price = APP_CONFIG.billing.display;
     const billing = Backend.Billing.enabled();
-    let head, lead, action, showBenefits = true;
+    let head, lead, action, planCard = '';
 
     if (on) {
-      showBenefits = false;
       head = 'Your subscription';
       lead = isOrg ? 'It covers both of you.' : `You're covered by ${orgName}'s subscription.`;
       let status;
@@ -462,19 +461,28 @@ const Screens = {
         ${facts.length ? `<div class="card" style="margin-bottom:16px">${facts.join('')}</div>` : ''}
         ${isOrg && sub.source === 'stripe' ? `<button class="btn secondary" data-action="openPortal">Manage or cancel subscription</button>` : ''}`;
     } else if (!isOrg) {
-      showBenefits = false;
       head = everSubscribed() ? `${orgName}'s subscription has ended` : `${orgName} needs to start the subscription`;
       lead = `Your plan, tasks and everything you've ticked off are saved. Once ${orgName} ${everSubscribed() ? 'restarts' : 'starts'} it, you're back where you left off.`;
       action = '';
     } else {
       const ended = !draft && everSubscribed();
-      head = ended ? 'Your subscription has ended' : 'Start your plan together';
-      lead = draft ? `One subscription covers you and ${partnerName}. Your draft plan is saved and ready to send.`
-        : ended ? `Your plan, tasks and history are all saved. Restart to pick up where you left off with ${partnerName}.`
-        : `One subscription covers you and ${partnerName}. Everything you've set up is saved.`;
+      const trial = trialOffer();
+      const days = APP_CONFIG.billing.trialDays;
+      head = trial ? `Try it together, free for ${days} days` : ended ? 'Your subscription has ended' : 'Start your plan together';
+      // Mid-sentence, an invitee without a name reads "your partner", not "Your partner".
+      const partnerInText = partnerName === 'Your partner' ? 'your partner' : partnerName;
+      lead = ended ? `Your plan, tasks and history are all saved. Restart to pick up where you left off with ${partnerInText}.`
+        : `One subscription covers you and ${partnerInText}.`;
+      // What they've already built: their own plan, saved.
+      const units = Household.units(h).length;
+      if (units && !ended) {
+        planCard = `<div class="card sub-plan"><div class="row static"><div class="row-text">
+            <span class="row-title">Your plan is saved</span>
+            <span class="row-sub">${plural(units, 'task')}, about ${formatMinutes(Household.weeklyTotal(h))} a week.${draft ? ` Ready for ${partnerInText}.` : ''}</span></div></div></div>`;
+      }
       if (S.checkoutReturn === 'success') {
         action = `<div class="result-card" role="status"><div class="spinner small" aria-hidden="true"></div>
-          <p class="joke">Unlocking your home…</p><p class="plain" style="margin:0">This usually takes a few seconds.</p></div>`;
+          <p class="joke">Starting your plan…</p><p class="plain" style="margin:0">This usually takes a few seconds.</p></div>`;
       } else if (billing && (!watchers.subLoaded || !Array.isArray(S.stripeSubs))) {
         action = !watchers.subLoaded
           ? `<div class="result-card" role="status"><div class="spinner small" aria-hidden="true"></div><p class="plain" style="margin:0">Checking your subscription…</p></div>`
@@ -486,26 +494,32 @@ const Screens = {
             <p class="plain" style="margin:0">Your bank said no, or the payment needs your OK. Fix it in your subscription settings. You don't need to buy again.</p></div>
           <button class="btn premium" data-action="openPortal">Fix payment</button>`;
       } else if (billing) {
-        const choice = S.planChoice || 'yearly';
-        const trial = !Entitlements.hadSubscription(S.stripeSubs);
-        const days = APP_CONFIG.billing.trialDays;
+        const choice = S.planChoice === 'monthly' ? 'monthly' : 'yearly';
+        const yearly = choice === 'yearly';
         const saving = Math.round((1 - price.yearly / (price.monthly * 12)) * 100);
         const trialEnd = Date.now() + days * 864e5;
+        const short = ms => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
+        const charge = yearly ? `${money(price.yearly)} a year` : `${money(price.monthly)} a month`;
         const card = (key, name, big, small, line, tag) => `<button class="plan-card" role="radio" aria-checked="${choice === key}" data-action="choosePlan" data-key="${esc(key)}">
             ${tag ? `<span class="plan-tag">${tag}</span>` : ''}
             <span class="plan-name">${name}</span>
             <span class="plan-price">${big}<small>${small}</small></span>
             <span class="plan-sub">${line}</span></button>`;
-        const cta = choice === 'yearly' ? (trial ? `Start ${days}-day free trial` : 'Subscribe yearly') : 'Subscribe monthly';
-        const fine = choice === 'yearly'
-          ? (trial
-            ? `Free until ${date(trialEnd)}, then ${money(price.yearly)} a year, billed yearly. We'll remind you before the trial ends. Cancel any time before then and you won't be charged.`
-            : `${money(price.yearly)} a year, billed yearly. Renews automatically until you cancel.`)
-          : `${money(price.monthly)} a month, billed monthly from today. Renews automatically until you cancel.`;
+        const step = (when, what) => `<li><span class="ts-dot" aria-hidden="true"></span><span class="row-title">${when}</span><span class="row-sub">${what}</span></li>`;
+        const steps = trial ? `<ol class="card trial-steps" aria-label="How the free trial works">
+            ${step('Today', draft ? `Invite ${partnerInText}. You both get the full app.` : 'You both get the full app.')}
+            ${step(`Before day ${days}`, "We remind you, so nothing comes as a surprise.")}
+            ${step(`Day ${days} · ${short(trialEnd)}`, `First payment, ${charge}. Cancel before and you pay nothing.`)}
+          </ol>` : '';
+        const cta = trial ? `Start ${days} days free` : yearly ? 'Subscribe yearly' : 'Subscribe monthly';
+        const fine = trial
+          ? `Free until ${date(trialEnd)}, then ${charge}. Renews automatically until you cancel.`
+          : `${charge}, charged today. Renews automatically until you cancel.`;
         action = `${S.checkoutReturn === 'cancel' ? '<p class="form-note" role="status">No worries, nothing was charged.</p>' : ''}
+          ${steps}
           <div class="plans" role="radiogroup" aria-label="Choose how to pay">
-            ${card('yearly', 'Yearly', money(price.yearly / 12), '/month', `${money(price.yearly)} billed yearly · save ${saving}%`, trial ? `${days} days free` : `Save ${saving}%`)}
-            ${card('monthly', 'Monthly', money(price.monthly), '/month', 'Billed monthly, no trial', '')}
+            ${card('yearly', 'Yearly', money(price.yearly / 12), '/month', `${money(price.yearly)} billed yearly`, `Save ${saving}%`)}
+            ${card('monthly', 'Monthly', money(price.monthly), '/month', 'Billed monthly', '')}
           </div>
           <button class="btn premium" data-action="startCheckout">${cta}</button>
           <p class="fine">${fine} Payment is handled securely by Stripe.</p>
@@ -528,9 +542,7 @@ const Screens = {
       <div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
       <h1 style="margin-top:0">${head}</h1>
       <p class="lead">${lead}</p>
-      ${showBenefits ? `<div class="card">${BENEFITS.map(b => `<div class="row static">
-          <span class="chev" style="color:var(--premium)">${Icon.check}</span>
-          <div class="row-text"><span class="row-title">${b.title}</span><span class="row-sub">${b.body}</span></div></div>`).join('')}</div>` : ''}
+      ${planCard}
       <div style="margin-top:8px">${action}</div>
       <div style="height:calc(32px + env(safe-area-inset-bottom))"></div>
     </main>`;
@@ -1542,7 +1554,7 @@ function minuteOptions(sel) {
 function everSubscribed() {
   return !!S.grant || !Array.isArray(S.stripeSubs) || S.stripeSubs.length > 0;
 }
-/** Will a yearly checkout start with the free trial? (Unknown counts as no, so we never promise it wrongly.) */
+/** Will a checkout start with the free trial? (Unknown counts as no, so we never promise it wrongly.) */
 function trialOffer() {
   return Backend.Billing.enabled() && watchers.subLoaded && !Entitlements.hadSubscription(S.stripeSubs);
 }

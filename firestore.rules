@@ -252,8 +252,8 @@ service cloud.firestore {
 
     // ---------------------------------------------------------------
     // customers/{uid} — the Stripe extension's data. People start a checkout
-    // for themselves only, with the real prices; the trial only comes with
-    // the yearly price and only for the configured number of days.
+    // for themselves only, with the real prices; the trial comes with
+    // either price, only for the configured number of days.
     // Everything else here is written by the extension (admin access).
     // Replace the two price IDs below with the ones in js/config.js.
     // ---------------------------------------------------------------
@@ -295,7 +295,7 @@ service cloud.firestore {
         && d.success_url is string && d.success_url.matches(appUrl())
         && d.cancel_url is string && d.cancel_url.matches(appUrl())
         && d.client_reference_id == request.auth.uid
-        && (!('trial_period_days' in d) || (d.price == yearlyPrice() && d.trial_period_days == trialDays()));
+        && (!('trial_period_days' in d) || d.trial_period_days == trialDays());
     }
 
     function organiserOfMyHousehold(ownerUid) {

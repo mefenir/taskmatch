@@ -229,3 +229,12 @@ h1{font-size:38px;line-height:1.05}
 .split-add input::placeholder{color:var(--muted)}
 .split-add .mini{border:0;background:var(--surface-2);border-radius:999px;padding:0 16px;min-height:44px;font:inherit;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;flex:none}
 .row-wrap .row-sub{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* Plans screen: their own plan, and how the free trial works */
+.sub-plan{margin-bottom:12px}
+.trial-steps{list-style:none;margin:0 0 16px;padding:16px 16px 4px 16px;position:relative}
+.trial-steps li{position:relative;display:flex;flex-direction:column;gap:2px;padding:0 0 14px 26px}
+.trial-steps li::before{content:"";position:absolute;left:5px;top:16px;bottom:-2px;width:2px;background:var(--line)}
+.trial-steps li:last-child::before{display:none}
+.trial-steps .ts-dot{position:absolute;left:0;top:4px;width:12px;height:12px;border-radius:50%;background:var(--surface);border:2px solid var(--premium)}
+.trial-steps li:first-child .ts-dot{background:var(--premium)}

@@ -33,7 +33,7 @@ const APP_CONFIG = Object.freeze({
       yearly: '',           // e.g. 'price_1Q…' — €39.99 per year
     }),
     display: Object.freeze({ currency: 'EUR', locale: 'en-IE', monthly: 4.99, yearly: 39.99 }),
-    trialDays: 21,          // free trial, yearly plan only (must match firestore.rules)
+    trialDays: 21,          // free trial on both plans, first subscription only (must match firestore.rules)
     functionsRegion: 'us-central1', // the region you installed the extension in
     customersCollection: 'customers',
   }),
