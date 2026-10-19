@@ -432,10 +432,13 @@ const Screens = {
     let head, lead, action, planCard = '';
 
     if (on) {
-      head = 'Your subscription';
-      lead = isOrg ? 'It covers both of you.' : `You're covered by ${orgName}'s subscription.`;
+      const forLife = sub.source === 'grant' && !sub.expires;   // beta testers: free, for life
+      head = forLife && !billing ? "You're in the beta" : 'Your subscription';
+      lead = forLife && isOrg ? 'Thanks for testing Weholm.' : isOrg ? 'It covers both of you.' : forLife ? `You're in through ${orgName}.` : `You're covered by ${orgName}'s subscription.`;
       let status;
-      if (sub.source === 'stripe' && sub.status === 'trialing' && sub.trialEnd) {
+      if (forLife) {
+        status = `<p class="joke">Free for life 🎉</p><p class="plain" style="margin:0">For both of you, now and after the beta.</p>`;
+      } else if (sub.source === 'stripe' && sub.status === 'trialing' && sub.trialEnd) {
         status = `<p class="joke">Free trial until ${date(sub.trialEnd)}</p>
           <p class="plain" style="margin:0">${sub.cancelAtPeriodEnd ? "You've cancelled, so you won't be charged." : `Then ${money(sub.interval === 'month' ? price.monthly : price.yearly)} a ${sub.interval || 'year'}. Cancel any time before ${date(sub.trialEnd)} and you won't be charged.`}</p>`;
       } else if (sub.source === 'stripe' && sub.periodEnd) {
@@ -450,7 +453,7 @@ const Screens = {
       // When it started and what happens next, in plain rows.
       const fact = (title, value) => `<div class="row static"><div class="row-text"><span class="row-title">${title}</span><span class="row-sub">${value}</span></div></div>`;
       const facts = [];
-      if (sub.since) facts.push(fact('Active since', date(sub.since)));
+      if (sub.since) facts.push(fact(forLife ? 'Joined' : 'Active since', date(sub.since)));
       if (sub.source === 'stripe' && sub.periodEnd) {
         const label = sub.cancelAtPeriodEnd ? 'Ends on' : sub.status === 'trialing' ? 'First payment' : 'Next renewal';
         facts.push(fact(label, date(sub.status === 'trialing' && sub.trialEnd ? sub.trialEnd : sub.periodEnd)));
@@ -461,18 +464,18 @@ const Screens = {
         ${facts.length ? `<div class="card" style="margin-bottom:16px">${facts.join('')}</div>` : ''}
         ${isOrg && sub.source === 'stripe' ? `<button class="btn secondary" data-action="openPortal">Manage or cancel subscription</button>` : ''}`;
     } else if (!isOrg) {
-      head = everSubscribed() ? `${orgName}'s subscription has ended` : `${orgName} needs to start the subscription`;
+      head = everSubscribed() ? `${orgName}'s subscription has ended` : billing ? `${orgName} needs to start the subscription` : `${orgName} needs to join the beta`;
       lead = `Your plan, tasks and everything you've ticked off are saved. Once ${orgName} ${everSubscribed() ? 'restarts' : 'starts'} it, you're back where you left off.`;
       action = '';
     } else {
       const ended = !draft && everSubscribed();
       const trial = trialOffer();
       const days = APP_CONFIG.billing.trialDays;
-      head = trial ? `Try it together, free for ${days} days` : ended ? 'Your subscription has ended' : 'Start your plan together';
+      head = trial ? `Try it together, free for ${days} days` : ended ? 'Your subscription has ended' : billing ? 'Start your plan together' : 'Welcome to the beta';
       // Mid-sentence, an invitee without a name reads "your partner", not "Your partner".
       const partnerInText = partnerName === 'Your partner' ? 'your partner' : partnerName;
       lead = ended ? `Your plan, tasks and history are all saved. Restart to pick up where you left off with ${partnerInText}.`
-        : `One subscription covers you and ${partnerInText}.`;
+        : billing ? `One subscription covers you and ${partnerInText}.` : 'Weholm is free while we test it, and stays free for you after.';
       // What they've already built: their own plan, saved.
       const units = Household.units(h).length;
       if (units && !ended) {
@@ -505,12 +508,11 @@ const Screens = {
             <span class="plan-name">${name}</span>
             <span class="plan-price">${big}<small>${small}</small></span>
             <span class="plan-sub">${line}</span></button>`;
-        const step = (when, what) => `<li><span class="ts-dot" aria-hidden="true"></span><span class="row-title">${when}</span><span class="row-sub">${what}</span></li>`;
-        const steps = trial ? `<ol class="card trial-steps" aria-label="How the free trial works">
-            ${step('Today', draft ? `Invite ${partnerInText}. You both get the full app.` : 'You both get the full app.')}
-            ${step(`Before day ${days}`, "We remind you, so nothing comes as a surprise.")}
-            ${step(`Day ${days} · ${short(trialEnd)}`, `First payment, ${charge}. Cancel before and you pay nothing.`)}
-          </ol>` : '';
+        const steps = trial ? stepsCard('How the free trial works', [
+            ['Today', draft ? `Invite ${partnerInText}. You both get the full app.` : 'You both get the full app.'],
+            [`Before day ${days}`, 'We remind you, so nothing comes as a surprise.'],
+            [`Day ${days} · ${short(trialEnd)}`, `First payment, ${charge}. Cancel before and you pay nothing.`],
+          ]) : '';
         const cta = trial ? `Start ${days} days free` : yearly ? 'Subscribe yearly' : 'Subscribe monthly';
         const fine = trial
           ? `Free until ${date(trialEnd)}, then ${charge}. Renews automatically until you cancel.`
@@ -525,13 +527,19 @@ const Screens = {
           <p class="fine">${fine} Payment is handled securely by Stripe.</p>
           ${legalLine()}`;
       } else {
+        // The beta: free now, and free for life for everyone who tests it.
         const req = S.premiumRequest;
-        const note = req && req.status === 'denied' ? "We can't unlock your home just yet. You can ask again any time." : '';
-        action = (note ? `<p class="form-note">${note}</p>` : '') + (req && req.status === 'pending'
+        const note = req && req.status === 'denied' ? "We can't let you in just yet. You can ask again any time." : '';
+        const steps = ended ? '' : stepsCard('How the beta works', [
+          ['Today', draft ? `Invite ${partnerInText}. You both get the full app.` : 'You both get the full app.'],
+          ['During the beta', "Tell us what works and what doesn't. Feedback is in Settings."],
+          ['After the beta', 'Still free, for life. Our thank-you for testing.'],
+        ]);
+        action = (note ? `<p class="form-note">${note}</p>` : '') + steps + (req && req.status === 'pending'
           ? `<div class="result-card"><p class="joke">Thanks, you're on the list! 🙌</p>
-              <p class="plain" style="margin:0">We'll let you know as soon as your home is unlocked.</p></div>`
-          : `<button class="btn premium" data-action="requestPremium">Request access</button>
-             <p class="fine">Payments aren't open yet. Ask for access and we'll unlock your home.</p>`);
+              <p class="plain" style="margin:0">We'll let you know as soon as you're in.</p></div>`
+          : `<button class="btn premium" data-action="requestPremium">Join the beta</button>
+             <p class="fine">Free for beta testers, for life.</p>`);
       }
     }
 
@@ -615,10 +623,13 @@ const Screens = {
         ? `${invited ? `<p class="count">${partnerName} hasn't joined yet</p>` : ''}
            <button class="btn primary" data-action="invite">${invited ? 'Send the link again' : `Invite ${partnerName} to see the plan`}</button>`
         : (!Backend.Billing.enabled() && S.premiumRequest && S.premiumRequest.status === 'pending')
-          ? `<p class="count">We'll unlock your home once it's approved</p>
+          ? `<p class="count">We'll let you in once it's approved</p>
              <button class="btn premium" disabled>Waiting for approval</button>`
-          : `<p class="count">${trialOffer() ? `${APP_CONFIG.billing.trialDays} days free, then ${money(APP_CONFIG.billing.display.yearly)}/year` : 'One subscription covers you both'}</p>
-           <button class="btn premium" data-action="nav" data-to="subscribe">${trialOffer() ? 'Start free and invite ' + partnerName : 'Unlock and invite ' + partnerName}</button>`}
+          : !Backend.Billing.enabled()
+            ? `<p class="count">Free for beta testers, for life</p>
+               <button class="btn premium" data-action="nav" data-to="subscribe">Join the beta and invite ${partnerName}</button>`
+            : `<p class="count">${trialOffer() ? `${APP_CONFIG.billing.trialDays} days free, then ${money(APP_CONFIG.billing.display.yearly)}/year` : 'One subscription covers you both'}</p>
+               <button class="btn premium" data-action="nav" data-to="subscribe">${trialOffer() ? 'Start free and invite ' + partnerName : 'Unlock and invite ' + partnerName}</button>`}
       </div>`;
     } else if (stage === 'review') {
       head = 'Your plan';
@@ -774,14 +785,18 @@ const Screens = {
 
     const sub = S.subscription;
     const date = ms => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    const beta = !Backend.Billing.enabled();
     let subStatus;
-    if (!on) subStatus = stage === 'draft' || !everSubscribed() ? 'Not started' : 'Ended';
+    if (!on) subStatus = beta && S.premiumRequest && S.premiumRequest.status === 'pending' ? 'Waiting for approval'
+      : stage === 'draft' || !everSubscribed() ? (beta ? 'Not joined yet' : 'Not started') : 'Ended';
     else if (!isOrg) subStatus = `Covered by ${esc(orgName)}`;
+    else if (sub.source === 'grant' && !sub.expires) subStatus = 'Free for life';
     else if (sub.source === 'stripe' && sub.status === 'trialing' && sub.trialEnd) subStatus = `Free trial until ${date(sub.trialEnd)}`;
     else if (sub.source === 'stripe' && sub.status === 'past_due') subStatus = "Payment didn't go through";
     else if (sub.source === 'stripe' && sub.periodEnd) subStatus = `${sub.interval === 'month' ? 'Monthly' : 'Yearly'} · ${sub.cancelAtPeriodEnd ? 'ends' : 'renews'} ${date(sub.periodEnd)}`;
     else subStatus = 'Active';
 
+    const subTitle = beta ? 'Beta access' : 'Your subscription';
     // You: name, how you sign in (plain text, never a link), your answers before the plan runs, the subscription.
     const myName = Household.memberName(Household.member(h, me));
     const marked = Household.marked(h, me);
@@ -789,7 +804,7 @@ const Screens = {
       usable ? row('data-action="editName"', 'Your name', esc(myName)) : info('Your name', esc(myName)),
       `<div class="row static"><div class="row-text"><span class="row-title">Signed in as</span><span class="row-sub plain-text">${esc(S.user.email || '')}</span></div></div>`,
       usable && stage !== 'active' ? row(go('rate'), 'Your answers', marked ? `${plural(marked, 'task')} marked` : 'Nothing marked') : '',
-      (isOrg || on) && stage !== 'setup' ? row(go('subscribe'), 'Your subscription', subStatus) : info('Your subscription', subStatus),
+      (isOrg || on) && stage !== 'setup' ? row(go('subscribe'), subTitle, subStatus) : info(subTitle, subStatus),
     ]);
 
     const people = Household.people(h).map(m => esc(Household.memberName(m))).join(' & ');
@@ -803,7 +818,7 @@ const Screens = {
     if (roomsOf('vehicle')) homeBits.push(plural(roomsOf('vehicle'), 'vehicle'));
     const ours = group('Our home', [
       isOrg && usable ? row(go('members'), 'People', alone ? `${esc(people)} · ${invited ? 'invite sent' : 'not joined yet'}` : esc(people)) : info('People', esc(people)),
-      isOrg && alone && h.settings.onboarded ? row('data-action="invite"', `Invite ${esc(partnerName)}`, hasAccess() ? (invited ? 'Send the link again' : 'Send the invite link') : 'Starts with your subscription') : '',
+      isOrg && alone && h.settings.onboarded ? row('data-action="invite"', `Invite ${esc(partnerName)}`, hasAccess() ? (invited ? 'Send the link again' : 'Send the invite link') : (beta ? 'Starts when you join the beta' : 'Starts with your subscription')) : '',
       isOrg && usable ? row(go('home'), 'Your home', esc(homeBits.join(' · '))) : '',
       isOrg && usable ? row(go('responsibilities'), 'Tasks', plural(h.responsibilities.length, 'task')) : '',
       isOrg && usable ? row(go('frequency'), 'Times', `about ${formatMinutes(Household.weeklyTotal(h))} a week`) : '',
@@ -1558,6 +1573,11 @@ function everSubscribed() {
 function trialOffer() {
   return Backend.Billing.enabled() && watchers.subLoaded && !Entitlements.hadSubscription(S.stripeSubs);
 }
+/** A short timeline: what happens today, next, and later (free trial, beta). */
+function stepsCard(label, items) {
+  return `<ol class="card trial-steps" aria-label="${label}">${items.map(([when, what]) =>
+    `<li><span class="ts-dot" aria-hidden="true"></span><span class="row-title">${when}</span><span class="row-sub">${what}</span></li>`).join('')}</ol>`;
+}
 function legalLine() {
   return `<p class="fine legal-line">By continuing you agree to the <a href="legal.html#terms" target="_blank" rel="noopener">Terms</a> and <a href="legal.html#privacy" target="_blank" rel="noopener">Privacy policy</a>.</p>`;
 }
@@ -1648,8 +1668,8 @@ const Sheets = {
     const trial = trialOffer();
     Sheet.open(`<div class="premium-mark" aria-hidden="true">${Icon.spark}</div>
       <h2>Split tasks into parts</h2>
-      <p>Split big tasks, like "Clean bathroom", into smaller parts. Each part has its own time, and the app shares them fairly. It comes with your subscription.</p>
-      <button class="btn premium" data-action="sheetNav" data-to="subscribe">${trial ? `Start free for ${APP_CONFIG.billing.trialDays} days` : 'See prices'}</button>
+      <p>Split big tasks, like "Clean bathroom", into smaller parts. Each part has its own time, and the app shares them fairly. ${Backend.Billing.enabled() ? 'It comes with your subscription.' : 'It comes with the beta, free for you.'}</p>
+      <button class="btn premium" data-action="sheetNav" data-to="subscribe">${!Backend.Billing.enabled() ? 'Join the beta' : trial ? `Start free for ${APP_CONFIG.billing.trialDays} days` : 'See prices'}</button>
       <button class="btn ghost" data-action="closeSheet">Not now</button>`, 'Split tasks into parts');
   },
 
