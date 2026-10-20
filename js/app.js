@@ -176,6 +176,15 @@ function saveResponsibilities() {
   rerender();
 }
 const isOrganiser = () => !!S.household && Household.isOwner(S.household, S.user.uid);
+/**
+ * A waiting request while "approve automatically" is on (asked before the switch was on, or the
+ * first try failed): try once more, once per sign-in. The rules decide; a refusal is reported.
+ */
+function retryAutoApprove(req) {
+  if (!req || req.status !== 'pending' || watchers.autoTried || !S.user || Backend.Billing.enabled()) return;
+  watchers.autoTried = true;
+  Backend.Repo.autoApprove(S.user).catch(e => ErrorLog.report(e, 'autoApprove'));
+}
 /** The household's subscription is on (setting up and the draft plan don't need it). */
 const hasAccess = () => Entitlements.active(S.subscription);
 
@@ -201,7 +210,7 @@ function markActiveDay() {
 /* ---------- live data ---------- */
 function stop(key) { if (watchers[key]) { watchers[key](); watchers[key] = null; } }
 function teardown() {
-  stop('user'); stop('household'); stop('sub'); stop('stripe'); clearTimeout(watchers.subRetry); stop('request'); S.premiumRequest = null; clearTimeout(watchers.retryTimer);
+  stop('user'); stop('household'); stop('sub'); stop('stripe'); clearTimeout(watchers.subRetry); stop('request'); S.premiumRequest = null; watchers.autoTried = false; clearTimeout(watchers.retryTimer);
   watchers.householdId = undefined; watchers.ownerId = null; watchers.lastOwner = null; watchers.lastNames = null;
 }
 
@@ -221,7 +230,11 @@ async function onAuth(user) {
   } catch (e) { fail(e); return; }
   S.phase = 'ready';
   watchers.user = Backend.Repo.watchUser(user.uid, onProfile, fail);
-  watchers.request = Backend.Repo.watchPremiumRequest(user.uid, req => { S.premiumRequest = req; if (currentRoute === 'subscribe' || currentRoute === 'household') rerender(); });
+  watchers.request = Backend.Repo.watchPremiumRequest(user.uid, req => {
+    S.premiumRequest = req;
+    retryAutoApprove(req);
+    if (currentRoute === 'subscribe' || currentRoute === 'household') rerender();
+  });
 }
 
 function onProfile(profile) {
@@ -999,7 +1012,9 @@ const Actions = {
         members: h.memberIds.length,
       });
       let instant = false;
-      try { instant = await Backend.Repo.autoApprove(S.user); } catch (e) { /* stays pending */ }
+      watchers.autoTried = true;   // tried right here; the watcher doesn't need to try again
+      try { instant = await Backend.Repo.autoApprove(S.user); }
+      catch (e) { ErrorLog.report(e, 'autoApprove'); /* stays pending; the admin sees why */ }
       // Instant: the invite opens by itself and says "You're in", so no message on top of it.
       if (!instant) toast("Thanks! You're on the list.");
       // Instant: back to the plan, where the invite opens as soon as the access arrives.
