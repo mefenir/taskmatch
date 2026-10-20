@@ -533,3 +533,5 @@ input.select[type=date],input.select[type=time]{background-image:none;padding-ri
 .sheet .card .field + .field{border-top:1px solid var(--line)}
 /* Me: 28px between sections (16 under a card + 12 above a title) */
 .me .section-head{margin-top:12px}
+/* Room under the last item for the "back to the top" arrow, which floats just above the bottom bar */
+.screen > :has(+ .bottom-bar){margin-bottom:64px}
