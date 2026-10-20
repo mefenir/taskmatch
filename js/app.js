@@ -1005,6 +1005,9 @@ const Actions = {
   },
   async requestPremium() {
     const h = S.household;
+    // Set before the request is written: the app sees its own new request at once (before the
+    // server confirms), and the watcher must not start a second approval alongside this one.
+    watchers.autoTried = true;
     try {
       await Backend.Repo.requestPremium(S.user, {
         name: Household.memberName(Household.member(h, S.user.uid)),
@@ -1012,7 +1015,6 @@ const Actions = {
         members: h.memberIds.length,
       });
       let instant = false;
-      watchers.autoTried = true;   // tried right here; the watcher doesn't need to try again
       try { instant = await Backend.Repo.autoApprove(S.user); }
       catch (e) { ErrorLog.report(e, 'autoApprove'); /* stays pending; the admin sees why */ }
       // Instant: the invite opens by itself and says "You're in", so no message on top of it.

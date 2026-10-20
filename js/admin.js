@@ -168,7 +168,39 @@ function errorCard(g) {
     <div class="top"><span class="who">${esc(g.message)}</span><span class="tags">${[...g.people].every(Test.uid) ? Test.tag : ''}<span class="status ${g.people.size > 1 ? 'denied' : 'pending'}">${g.ids.length}×</span></span></div>
     <div class="meta">${g.people.size} ${g.people.size === 1 ? 'person' : 'people'}${g.names.size ? ` (${esc([...g.names].join(', '))})` : ''} · last ${when(g.last)}${g.versions.size ? ` · v${esc([...g.versions].join(', v'))}` : ''}</div>
     ${errorDetails(g)}
-    <div class="btns"><button class="btn secondary" data-action="clearErrors" data-key="${esc(g.key)}" ${A.busy === g.key ? 'disabled' : ''}>Clear</button></div></div>`;
+    <div class="btns"><button class="btn secondary" data-action="copyError" data-key="${esc(g.key)}">Copy report</button>
+      <button class="btn secondary" data-action="clearErrors" data-key="${esc(g.key)}" ${A.busy === g.key ? 'disabled' : ''}>Clear</button></div></div>`;
+}
+/** The whole report as plain text, to paste into a chat: everything the card shows, nothing cut off. */
+function errorText(g) {
+  const e = g.sample;
+  const others = [...g.devices].filter(d => d !== e.device);
+  return [
+    `Error: ${g.message}`,
+    `Count: ${g.ids.length}× · ${g.people.size} ${g.people.size === 1 ? 'person' : 'people'}${g.names.size ? ` (${[...g.names].join(', ')})` : ''}`,
+    `Last: ${when(g.last)}${g.ids.length > 1 && g.first < g.last ? ` · first ${when(g.first)}` : ''}`,
+    g.versions.size ? `Version: v${[...g.versions].join(', v')}` : '',
+    `Device: ${e.device || e.ua || 'Not recorded'}`,
+    others.length ? `Also on: ${others.join(', ')}` : '',
+    e.moment ? `Moment: ${e.moment}` : '',
+    e.trail ? `Last taps: ${e.trail}` : '',
+    g.screens.size ? `Screen: ${[...g.screens].join(', ')}` : '',
+    e.kind ? `Type: ${e.kind}` : '',
+    e.where ? `From: ${e.where}` : '',
+    e.ua ? `Browser: ${e.ua}` : '',
+    e.stack ? `Stack:\n${e.stack}` : '',
+  ].filter(Boolean).join('\n');
+}
+/** Copy text; older browsers without the clipboard API get a hidden text box instead. */
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall back below */ }
+  const box = document.createElement('textarea');
+  box.value = text; box.setAttribute('readonly', ''); box.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(box); box.select(); box.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  box.remove();
+  return ok;
 }
 function inbox() {
   if (A.inboxView === 'access') return accessHistory();
@@ -440,6 +472,11 @@ const Actions = {
     try { await Backend.Admin.markFeedback(d.id, d.key === 'new' ? 'new' : 'done'); }
     catch (e) { console.error(e); toast(`Couldn't do that (${e.code || 'error'}). Check the rules are published.`); }
     A.busy = null; render();
+  },
+  async copyError(d) {
+    const g = errorGroups().find(x => x.key === d.key);
+    if (!g) return;
+    toast(await copyText(errorText(g)) ? 'Copied. Paste it in the chat.' : "Couldn't copy. Open Details and select the text.");
   },
   async clearErrors(d) {
     if (A.busy) return;
